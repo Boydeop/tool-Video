@@ -21,7 +21,7 @@ class Service:
             if remaining<=0: break
             recent=self.store.recent_prompts(50)
             try:
-                provider,rows=fallback(topic,level,remaining+min(remaining,4),
+                provider,rows=fallback(topic,level,min(30,remaining+min(remaining,4)),
                                        recent,fmt,providers)
             except Exception as exc:
                 errors.append(str(exc))
