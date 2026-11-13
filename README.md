@@ -302,3 +302,45 @@ upload failures are marked \`needs_review\` and never blindly retried.
   never send credentials to the browser. Existing locally saved question and
   video history is preserved.
 
+
+
+## v1.0.0 Final Production Suite
+
+**Báo cáo audit:** xem AUDIT_FINAL.md ngay tại thư mục gốc repository, gồm risk register, kiến trúc, release gates và giới hạn thực tế.
+
+### Autopilot (không chọn từng câu)
+- Mở mục **Sản xuất tự động**. Chọn 1–12 MP4/lượt, 1–6 câu/video, dải TOPIK, format, template, giọng đọc và profile.
+- Engine chọn topic ít sử dụng và **không trùng topic trong cùng một lượt**, tạo câu mới qua AI, kiểm tra đủ nghĩa/phiên âm của A/B/C/D và chống trùng đáp án. Các câu đạt kiểm tra cấu trúc nhận trạng thái *auto_approved* riêng; nội dung chưa đủ nằm lại trong ngân hàng để duyệt. Machine check không chứng minh ngữ nghĩa tiếng Hàn đúng.
+- Từng video xuất xong được ghi vào SQLite. Lượt sản xuất được ghi ở production_runs. Khi app khởi động lại sau crash, run chưa kết thúc được đánh dấu *interrupted*; video đã thành công không bị xóa.
+
+### Video Shorts & Reels
+- Mặc định đối với cấu hình mới: **1080×1920, 30 FPS**, H.264 yuv420p, AAC 48kHz. Cấu hình *Vùng an toàn Shorts/Reels* thu nhỏ vùng chữ để tránh các vùng overlay trên/dưới/bên phải.
+- Logo kéo trên preview sử dụng cùng layout khi xuất MP4. Metadata title/artist/copyright/comment được gắn tự động trong bước render.
+- Kể cả khi tắt TTS và SFX, video vẫn có một track AAC silent chuẩn thay vì không có audio.
+- Tên MP4: THSE_YYYYMMDD_NNNNNN_topic_TOPIKn_1080x1920.mp4. Số thứ tự atomic trong SQLite, ngày theo giờ Việt Nam (+07:00).
+
+### Cache
+- Mục **Dọn cache & nhật ký** hiển thị tổng dung lượng của MP3 đã tạo, mẫu đọc và video preview. Có thể xóa toàn bộ hoặc chỉ những file cũ hơn 1/7/30 ngày.
+- Chỉ xóa các file được đặt tên theo quy ước Studio. Không đụng tới database, MP4 đã xuất, logo, API keys hay thông tin Page. Không xóa khi một export đang chạy.
+
+### Multi-platform publishing
+| Nền tảng | Kết nối và xuất bản | Yêu cầu |
+| --- | --- | --- |
+| Facebook Page | Page Reels API như cũ | Page ID, Page Access Token, các quyền phù hợp |
+| YouTube Shorts | OAuth Desktop client JSON, Google youtube.upload, resumable videos.insert | Google Cloud project & consent, quota; mặc định Private |
+| Instagram Reels | Graph API Professional, xử lý container rồi media_publish | IG User ID/token và URL MP4 HTTPS công khai có thể tải từ Meta |
+| TikTok | Sẵn MP4 và sao chép caption để đăng thủ công | Direct Post public yêu cầu audit và user consent; bản cá nhân không bypass |
+
+Để thiết lập YouTube: tạo Google Cloud OAuth client kiểu Desktop, tải client JSON, nhập vào mục Đăng đa nền tảng, bấm kết nối và xác nhận trong trình duyệt. App lưu OAuth token bằng DPAPI trên Windows và chỉ yêu cầu quyền upload.
+
+Instagram yêu cầu MP4 đã nằm trên URL HTTPS public (ví dụ ở CDN tự quản lý). Studio không tự host MP4 hoặc upload đến Instagram từ đường dẫn C:\\.
+
+Lịch đăng trên từng nền tảng được lưu độc lập trong SQLite, chống đăng trùng MP4 cùng nền tảng. Các upload mạng có kết quả không chắc chắn nhận trạng thái *needs_review*, không tự đăng lại. Bạn phải giữ Studio/worker hoạt động khi tới giờ hẹn.
+
+### Bảo mật và giới hạn
+- Pool API keys cũ được migrate từ JSON plaintext sang DPAPI per-user Windows. Dữ liệu trên Linux sử dụng chmod 0600.
+- Không lưu password Meta/Google trong app, không bỏ qua API app review/quota.
+- **Metadata video không phải DRM hay chứng cứ pháp lý sở hữu.**
+- Nếu chưa có kiểm chứng về dịch Hàn-Việt, hãy xem lại mẫu ngẫu nhiên trước khi đăng công khai hàng loạt.
+- Các bài test CI dùng mock Google/Meta; việc upload thật vẫn phải kiểm thử với tài khoản cá nhân đã được cấp quyền.
+
