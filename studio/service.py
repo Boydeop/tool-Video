@@ -9,6 +9,8 @@ from .renderer import render
 class Service:
     def __init__(self,root="data"):
         self.root=Path(root).resolve()
+        import os
+        os.environ["THSE_KEYS_FILE"]=str(self.root/"keys.local.json")
         self.root.mkdir(parents=True,exist_ok=True)
         self.store=Store(self.root/"studio.sqlite3")
 
@@ -48,14 +50,14 @@ class Service:
             self.store.daily_record(today.isoformat(),plan["topic"],outcome)
         return {"plan":plan,**outcome}
 
-    def render_approved(self,ids,theme="hanji",filename=None,width=540):
+    def render_approved(self,ids,theme="hanji",filename=None,width=540,with_voice=False):
         questions=self.store.get_questions(ids,status="approved")
         if not questions: raise ValueError("No approved questions")
         name=filename or "video_"+__import__("uuid").uuid4().hex[:12]+".mp4"
         if Path(name).name != name or not name.endswith(".mp4"):
             raise ValueError("Invalid filename")
         target=self.root/"videos"/name
-        return render(questions,target,theme,width)
+        return render(questions,target,theme,width,with_voice=with_voice)
 
     def schedule(self,video_path,caption,at):
         # Do not schedule video outside this application's output folder.

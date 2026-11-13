@@ -5,6 +5,8 @@ import shutil
 import subprocess
 from PIL import Image,ImageDraw,ImageFont
 from .quiz import Quiz
+from .fftools import binary
+from .voice import prepare_events, mux_narration
 
 THEMES={
  "hanji": ("#FDFBF7","#191612","#1E5BBB"),
@@ -28,6 +30,9 @@ def fit(draw,string,width,size):
     return font(size,True)
 
 def draw_frame(quiz,idx,total,theme,elapsed,think=4,width=540):
+    if width!=540:
+        base=draw_frame(quiz,idx,total,theme,elapsed,think,width=540)
+        return base.resize((width,width*16//9),Image.Resampling.LANCZOS)
     bg,fg,accent=THEMES[theme]
     h=width*16//9
     image=Image.new("RGB",(width,h),bg)
@@ -64,18 +69,20 @@ def draw_frame(quiz,idx,total,theme,elapsed,think=4,width=540):
     return image
 
 def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=15,
-           think=4,reveal=1.5):
+           think=4,reveal=1.5,with_voice=False,voice_cache=None):
     if theme not in THEMES or width not in (540,720,1080) or not questions:
         raise ValueError("Unsupported theme, resolution or empty questions")
-    if not shutil.which("ffmpeg"): raise RuntimeError("FFmpeg not installed")
+    binary("ffmpeg")
     for q in questions: q.validate()
     target=Path(destination).resolve()
     target.parent.mkdir(parents=True,exist_ok=True)
+    events=prepare_events(questions,voice_cache or target.parent/".voice_cache",think,reveal) if with_voice else []
+    silent_target=target.with_name(target.stem+".silenttmp.mp4") if with_voice else target
     proc=subprocess.Popen([
-      "ffmpeg","-hide_banner","-loglevel","error","-y",
+      binary("ffmpeg"),"-hide_banner","-loglevel","error","-y",
       "-f","rawvideo","-pix_fmt","rgb24","-s",f"{width}x{width*16//9}",
       "-r",str(fps),"-i","-","-an","-c:v","libx264",
-      "-preset","ultrafast","-pix_fmt","yuv420p",str(target)
+      "-preset","ultrafast","-pix_fmt","yuv420p",str(silent_target)
     ],stdin=subprocess.PIPE,stderr=subprocess.PIPE)
     try:
         frames=max(1,round((think+reveal)*fps))
@@ -89,8 +96,14 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=15,
         if proc.stdin and not proc.stdin.closed: proc.stdin.close()
         proc.kill()
         proc.wait()
+        silent_target.unlink(missing_ok=True)
         target.unlink(missing_ok=True)
         raise
     finally:
         proc.stderr.close()
+    if with_voice:
+        try:
+            mux_narration(silent_target,events,target,len(questions)*(think+reveal))
+        finally:
+            silent_target.unlink(missing_ok=True)
     return str(target)

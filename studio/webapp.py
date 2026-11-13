@@ -23,9 +23,15 @@ pre{white-space:pre-wrap;background:#f0f5fb;padding:12px}
 <section><h2>2. Ngân hàng câu hỏi</h2>
 <button onclick="refresh()">Làm mới</button><button onclick="approve()">Duyệt câu đã chọn</button>
 <select id="theme"><option>hanji</option><option>blue</option><option>sejong</option></select>
-<button onclick="render()">Dựng MP4</button>
+<label><input id="voice" type="checkbox" checked> Giọng đọc tiếng Việt và Hàn (cần mạng)</label>
+<button onclick="render()">Dựng MP4 có tiếng</button>
 <div style="overflow:auto"><table><thead><tr><th>Chọn</th><th>Trạng thái</th><th>Chủ đề</th><th>Câu hỏi</th><th>Đáp án đúng</th><th>Giải thích</th></tr></thead><tbody id="questions"></tbody></table></div></section>
-<section><h2>3. Lịch đăng Facebook Page</h2>
+<section><h2>3. API Key Pool (chỉ lưu trên máy)</h2>
+<p>Nhập nhiều key cùng dịch vụ, ngăn cách bởi dấu phẩy. Không chia sẻ key với người khác.</p>
+<select id="provider"><option>gemini</option><option>groq</option><option>openrouter</option></select>
+<input id="keys" type="password" size="55" placeholder="Nhập danh sách key mới (ghi đè key đã lưu)">
+<button onclick="saveKeys()">Lưu keys</button><p id="keySummary">Chưa kiểm tra</p></section>
+<section><h2>4. Lịch đăng Facebook Page</h2>
 <p>Đường dẫn MP4</p><input id="video" size="60">
 <p>Ngày giờ Việt Nam</p><input id="at" type="datetime-local">
 <p>Chú thích</p><textarea id="caption" rows="2" cols="55">Học tiếng Hàn cùng Tiếng Hàn So Easy! #tienghansoeasy</textarea>
@@ -43,12 +49,13 @@ function ids(){return Array.from(document.querySelectorAll('[name=qid]:checked')
 function generate(){run(()=>api('/api/generate',{topic:$('topic').value,level:$('level').value,count:Number($('count').value)}))}
 function daily(){run(()=>api('/api/daily',{count:Number($('count').value)}))}
 function approve(){run(()=>api('/api/approve',{ids:ids()}))}
-function render(){run(()=>api('/api/render',{ids:ids(),theme:$('theme').value}))}
+function render(){run(()=>api('/api/render',{ids:ids(),theme:$('theme').value,with_voice:$('voice').checked}))}
+function saveKeys(){run(()=>api('/api/keys',{provider:$('provider').value,keys:$('keys').value})) ;$('keys').value=''}
 function schedule(){const time=$('at').value;if(!time){show('Chọn ngày giờ');return}
 run(()=>api('/api/schedule',{video_path:$('video').value,caption:$('caption').value,scheduled_at:new Date(time).toISOString()}))}
 function cell(tr,val){const td=document.createElement('td');td.textContent=val||'';tr.appendChild(td)}
 async function refresh(){
-try{const d=await api('/api/status');$('questions').replaceChildren();$('jobs').replaceChildren();
+try{const d=await api('/api/status');$('keySummary').textContent='TTS: '+(d.tts_ready?'Đã cài giọng đọc (cần Internet)':'Chưa cài giọng đọc')+' | '+Object.entries(d.providers).map(([k,v])=>k+': '+v.keys+' key').join(' · ');$('questions').replaceChildren();$('jobs').replaceChildren();
 for(const q of d.questions){const tr=document.createElement('tr'),td=document.createElement('td'),input=document.createElement('input');
 input.type='checkbox';input.name='qid';input.value=q.id;td.appendChild(input);tr.appendChild(td);
 for(const val of [q.status,q.topic,q.question,q.correct,q.explanation])cell(tr,val);$('questions').appendChild(tr)}
@@ -68,10 +75,15 @@ def serve(service,host="127.0.0.1",port=8765):
             if self.path=="/":self.send(200,HTML,"text/html")
             elif self.path=="/api/status":
                 self.send(200,{"questions":service.store.list_questions(limit=300),
-                               "jobs":service.store.list_jobs()})
+                               "jobs":service.store.list_jobs(),
+                               "providers":__import__("studio.keys",fromlist=["readiness"]).readiness(),
+                               "tts_ready":__import__("studio.voice",fromlist=["available"]).available()})
             else:self.send(404,{"error":"Not found"})
         def do_POST(self):
-            if self.path not in ("/api/generate","/api/daily","/api/approve","/api/render","/api/schedule"):
+            origin=self.headers.get("Origin","")
+            if origin and origin not in ("http://127.0.0.1:8765","http://localhost:8765"):
+                self.send(403,{"error":"Forbidden origin"});return
+            if self.path not in ("/api/generate","/api/daily","/api/approve","/api/render","/api/schedule","/api/keys"):
                 self.send(404,{"error":"Not found"});return
             try:
                 length=int(self.headers.get("Content-Length","0"))
@@ -90,7 +102,12 @@ def serve(service,host="127.0.0.1",port=8765):
                 elif self.path=="/api/render":
                     ids=raw.get("ids",[])
                     if not isinstance(ids,list):raise ValueError("Invalid IDs")
-                    result={"video":service.render_approved(ids,str(raw.get("theme","hanji")))}
+                    result={"video":service.render_approved(ids,str(raw.get("theme","hanji")),
+                        with_voice=raw.get("with_voice") is True)}
+                elif self.path=="/api/keys":
+                    from .keys import write_keys
+                    result={"saved_key_count":write_keys(str(raw.get("provider","")),
+                        str(raw.get("keys","")))}
                 else:
                     result={"job_id":service.schedule(str(raw.get("video_path","")),
                         str(raw.get("caption","")),str(raw.get("scheduled_at","")))}

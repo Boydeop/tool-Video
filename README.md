@@ -99,10 +99,28 @@ Run tests:
 
 ## Known MVP limitations
 
-- No built-in Korean TTS/BGM yet, unlike earlier standalone prototype.
+- Online Vietnamese and Korean voice synthesis via edge-tts is available when selecting Voice; music is not included.
 - No cloud hosting or unattended publishing when laptop/server is off.
 - No production OAuth consent, token renewal, permission verification, or Meta publish status polling.
 - No rigorous semantic validation: human editorial review is mandatory.
 - No embeddings-based dedupe at high volume.
-- Theme renderer is optimized for 540x960; higher widths need proportional layout improvements.
+- The renderer uses a 540x960 base canvas and upscales for larger resolutions; native 1080p typography is a future improvement.
 - Daily batch needs external cron/Windows Task Scheduler trigger.
+
+## Windows one-click EXE (v0.2.0)
+
+A Windows GitHub Actions workflow creates a standalone desktop EXE containing Python runtime, Pillow, edge-tts, FFmpeg and FFprobe. Download from the repository Releases (or the Build Windows EXE Actions artifact if release publishing is restricted). Double-click TiengHanSoEasyStudio.exe to start the local dashboard. Data is stored in the user's LOCALAPPDATA/TiengHanSoEasyStudio directory. The EXE does not require installing Python or FFmpeg separately.
+
+## Multiple API keys
+
+The local dashboard has a key pool section. Enter multiple keys separated by commas for Gemini, Groq or OpenRouter, and save. Keys are stored in a LOCAL keys.local.json file, excluded from Git. The file is plaintext on the user's computer; use Windows account/file permissions and do not expose the dashboard publicly. Alternatively configure GEMINI_API_KEYS, GROQ_API_KEYS, OPENROUTER_API_KEYS or the single-key env vars. Requests rotate keys round-robin within a provider. HTTP 429 activates a provider-wide cooldown rather than using another key to bypass the rate limit. Provider fallback remains available.
+
+## Vietnamese and Korean voice
+
+The dashboard now enables narration by default (checkbox). It requests online Vietnamese speech for each question and Korean speech for the correct answer, caches generated MP3 clips, and mixes them into the MP4 with FFmpeg. Audio output must pass an FFprobe stream check. If speech synthesis is unavailable the program raises an error rather than silently producing a mute MP4. The CLI can explicitly request voice with the --voice flag. edge-tts requires Internet and its availability/service conditions can change.
+
+### Validation status
+
+- Offline FFmpeg audio mux is covered by automated tests using generated tone audio without network.
+- Online edge-tts and the actual Meta API require separate tests with Internet and user credentials.
+- Windows EXE build is performed and published by GitHub Actions on the main branch.

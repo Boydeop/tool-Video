@@ -18,6 +18,7 @@ def main():
     r=sub.add_parser("render");r.add_argument("ids",nargs="+")
     r.add_argument("--theme",choices=["hanji","blue","sejong"],default="hanji")
     r.add_argument("--width",type=int,choices=[540,720,1080],default=540)
+    r.add_argument("--voice",action="store_true",help="Online Vietnamese and Korean narration")
     s=sub.add_parser("schedule")
     s.add_argument("--video",required=True);s.add_argument("--caption",required=True)
     s.add_argument("--at",required=True)
@@ -32,7 +33,7 @@ def main():
     elif args.command=="approve":
         service.store.approve(args.ids);result={"approved":args.ids}
     elif args.command=="render":
-        result={"video":service.render_approved(args.ids,args.theme,width=args.width)}
+        result={"video":service.render_approved(args.ids,args.theme,width=args.width,with_voice=args.voice)}
     elif args.command=="schedule":
         result={"job_id":service.schedule(args.video,args.caption,args.at)}
     elif args.command=="questions": result=service.store.list_questions()
