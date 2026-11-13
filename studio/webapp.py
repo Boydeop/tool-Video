@@ -9,13 +9,14 @@ import sys
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from .keys import import_txt, readiness, write_keys
+from .models import list_models, selected_models, set_model, test_model
 from .quiz import TOPICS
 from .scheduler import Scheduler
 from .voice import available
 
 LOGGER = logging.getLogger("tienghansoeasy.http")
 MAX_REQUEST = 80_000
-APP_VERSION = "v0.3.0"
+APP_VERSION = "v0.3.1"
 
 
 def _ui_path() -> Path:
@@ -90,6 +91,9 @@ def create_server(service, host="127.0.0.1", port=8765):
                     params = parse_qs(url.query)
                     exclude = params.get("exclude", [None])[0]
                     self.respond(200, service.suggest_topic(exclude=exclude))
+                elif url.path == "/api/models":
+                    params = parse_qs(url.query)
+                    self.respond(200, list_models(params.get("provider", [""])[0]))
                 elif url.path == "/api/status":
                     self.respond(200, {
                         "version": APP_VERSION,
@@ -98,6 +102,7 @@ def create_server(service, host="127.0.0.1", port=8765):
                         "jobs": service.store.list_jobs(limit=100),
                         "videos": service.list_videos(),
                         "providers": readiness(),
+                        "models": selected_models(),
                         "tts_ready": available()
                     })
                 elif url.path.startswith("/api/videos/"):
@@ -117,7 +122,8 @@ def create_server(service, host="127.0.0.1", port=8765):
                 return
             route = urlsplit(self.path).path
             routes = ("/api/generate", "/api/daily", "/api/approve", "/api/render",
-                      "/api/schedule", "/api/keys", "/api/keys/import")
+                      "/api/schedule", "/api/keys", "/api/keys/import",
+                      "/api/models/select", "/api/models/test")
             if route not in routes:
                 self.respond(404, {"error": "Không tìm thấy chức năng."})
                 return
@@ -155,6 +161,12 @@ def create_server(service, host="127.0.0.1", port=8765):
                     result = {"video": service.render_approved(
                         ids, str(raw.get("theme", "hanji")),
                         with_voice=raw.get("with_voice") is True)}
+                elif route == "/api/models/select":
+                    result = set_model(str(raw.get("provider", "")),
+                                       str(raw.get("model", "")))
+                elif route == "/api/models/test":
+                    result = test_model(str(raw.get("provider", "")),
+                                        str(raw.get("model", "")), raw.get("key_position", 1))
                 elif route == "/api/keys":
                     # Keep the older endpoint for backwards compatibility.
                     result = {"saved_key_count": write_keys(

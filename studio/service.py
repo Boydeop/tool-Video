@@ -11,6 +11,7 @@ class Service:
         self.root=Path(root).resolve()
         import os
         os.environ["THSE_KEYS_FILE"]=str(self.root/"keys.local.json")
+        os.environ["THSE_MODELS_FILE"]=str(self.root/"models.local.json")
         self.root.mkdir(parents=True,exist_ok=True)
         self.store=Store(self.root/"studio.sqlite3")
 

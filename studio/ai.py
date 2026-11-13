@@ -6,6 +6,7 @@ import urllib.error
 import urllib.request
 from .quiz import Quiz
 from .keys import next_key, rate_limited
+from .models import get_model
 
 class ProviderError(RuntimeError): pass
 
@@ -20,6 +21,8 @@ def post(provider,url,payload,headers):
         if exc.code==429:
             rate_limited(provider,120)
             raise ProviderError(provider+" is rate-limited; provider-level cooldown active") from exc
+        if exc.code==404:
+            raise ProviderError(provider+" HTTP 404: model không khả dụng với key này. Vào API Key TXT → Chọn model để thay đổi.") from exc
         if exc.code in (401,403):
             raise ProviderError(provider+" rejected API credentials or permissions") from exc
         raise ProviderError(provider+" HTTP "+str(exc.code)+"; check model and service status") from exc
@@ -36,7 +39,7 @@ def generate(provider,topic,level,count,recent,fmt="từ vựng"):
     if provider=="gemini":
         try:key=next_key(provider)
         except RuntimeError as exc:raise ProviderError(str(exc)) from exc
-        model=os.getenv("GEMINI_MODEL","gemini-2.5-flash-lite")
+        model=get_model("gemini")
         if not re.fullmatch(r"[\w.-]+",model):raise ProviderError("Invalid Gemini model")
         data=post(provider,"https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent",
             {"contents":[{"parts":[{"text":prompt}]}],
@@ -57,7 +60,7 @@ def generate(provider,topic,level,count,recent,fmt="từ vựng"):
         else:
             try:key=next_key(provider)
             except RuntimeError as exc:raise ProviderError(str(exc)) from exc
-        data=post(provider,url,{"model":os.getenv(model_env,default),"temperature":0.85,
+        data=post(provider,url,{"model":get_model(provider) if provider!="ollama" else os.getenv(model_env,default),"temperature":0.85,
               "messages":[{"role":"user","content":prompt}]},{"Authorization":"Bearer "+key})
         try:content=data["choices"][0]["message"]["content"]
         except (KeyError,IndexError,TypeError) as exc:raise ProviderError("Empty provider response") from exc
