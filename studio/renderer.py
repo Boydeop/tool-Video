@@ -13,6 +13,8 @@ from PIL import Image,ImageDraw,ImageFont
 from .fftools import binary
 from .quiz import Quiz
 from .sfx import build_sfx
+from .timeline import build_scenes, duration as timeline_duration
+from .romanization import approximate_romanization
 from .voice import prepare_events,mux_narration
 
 THEMES={
@@ -142,64 +144,105 @@ def draw_intro(theme,width=540,logo_path=None,logo_position="top-right",logo_sca
 
 def draw_frame(quiz:Quiz,idx,total,theme,elapsed,think=5.5,width=540,
                reveal=2.8,transition=.8,logo_path=None,
-               logo_position="top-right",logo_scale=.15):
-    if theme not in THEMES:raise ValueError("Unknown video template.")
+               logo_position="top-right",logo_scale=.15,
+               prompt_duration=1.35,answer_duration=None):
+    """Render a frame with three explicit stages: speaking, thinking, reveal."""
+    if theme not in THEMES:
+        raise ValueError("Unknown video theme")
     if width!=540:
-        image=draw_frame(quiz,idx,total,theme,elapsed,think,540,
-                         reveal,transition,logo_path,logo_position,logo_scale)
-        return image.resize((width,width*16//9),Image.Resampling.LANCZOS)
+        frame=draw_frame(quiz,idx,total,theme,elapsed,think,540,
+                         reveal,transition,logo_path,logo_position,logo_scale,
+                         prompt_duration,answer_duration)
+        return frame.resize((width,width*16//9),Image.Resampling.LANCZOS)
+
     bg,fg,accent=THEMES[theme]
-    im=Image.new("RGB",(540,960),bg);d=ImageDraw.Draw(im)
-    # Brand bar with existing CSS palette; leave margin for logos.
-    d.rounded_rectangle((28,41,512,101),radius=18,fill=accent)
-    _label(d,270,61,"TIẾNG HÀN SO EASY",430,1,26,"#FFFFFF",22)
-    _label(d,270,135,"PHẢN XẠ TIẾNG HÀN · 한국어 퀴즈",455,1,22,fg,19)
-    _label(d,270,181,f"CÂU {idx:02d} / {total:02d} · {quiz.level}",460,1,20,fg,18)
-    d.rounded_rectangle((27,224,513,398),radius=20,fill="#FFFFFF")
-    _label(d,270,238,"Từ/câu này tiếng Hàn là gì?",432,1,22,"#1E5BBB",19)
-    font_size,lines=_fitted(d,quiz.question,442,3,35,23)
-    line_height=font_size+10
-    start=310-max(0,len(lines)-1)*line_height/2
-    for line_num,line in enumerate(lines):
-        _write_center(d,270,start+line_num*line_height,line,font_size,"#191612")
-    shown=elapsed>=think
-    remaining=max(0,math.ceil(think-elapsed))
-    _label(d,270,411,"ĐÁP ÁN SAU: "+str(remaining)+"s" if not shown else "ĐÁP ÁN CHÍNH XÁC ✓",
-           465,1,19,"#1E5BBB" if not shown else "#167B46",17)
-    progress=max(.001,min(1,elapsed/think))
-    d.rounded_rectangle((34,446,506,458),radius=7,fill="#C3D3DD")
-    d.rounded_rectangle((34,446,34+int(472*progress),458),radius=7,
-                         fill="#2FA968" if shown else "#E84A36")
-    opts=[quiz.correct,quiz.wrong1,quiz.wrong2,quiz.wrong3]
-    random.Random(idx*719+sum(map(ord,quiz.question))).shuffle(opts)
-    for i,answer in enumerate(opts):
-        top=478+i*91
-        correct=shown and answer==quiz.correct
-        d.rounded_rectangle((28,top,512,top+77),radius=15,
-             fill="#209C65" if correct else "#FFFFFF",
-             outline="#147F52" if correct else "#CFDAE1",width=2)
-        d.ellipse((43,top+17,86,top+60),fill="#12744A" if correct else "#E9F1F5")
-        _write_center(d,65,top+25,"ABCD"[i],20,"#FFFFFF" if correct else "#0F4C81")
-        _label(d,285,top+20,answer,395,2,31,"#FFFFFF" if correct else "#191612",22,4)
+    im=Image.new("RGB",(540,960),bg)
+    d=ImageDraw.Draw(im)
+    answer_start=prompt_duration+think
+    show_answer=elapsed>=answer_start
+    countdown=prompt_duration<=elapsed<answer_start
+    seconds_remaining=max(0,math.ceil(think-(elapsed-prompt_duration)))
+    answer_duration=answer_duration if answer_duration is not None else reveal
+
+    d.rounded_rectangle((28,35,512,96),radius=18,fill=accent)
+    _label(d,270,54,"TIẾNG HÀN SO EASY",425,1,26,"#FFFFFF",22)
+    _label(d,270,119,"TỪ VỰNG TIẾNG HÀN · 한국어 퀴즈",455,1,22,fg,19)
+    _label(d,270,164,f"CÂU {idx:02d} / {total:02d} · {quiz.level}",460,1,20,fg,18)
+
+    # Very short prompt, including for legacy questions.
+    d.rounded_rectangle((27,207,513,382),radius=21,fill="#FFFFFF")
+    _label(d,270,222,"TIẾNG HÀN LÀ GÌ?",430,1,22,accent,19)
+    clue=quiz.short_clue
+    size,lines=_fitted(d,clue,438,3,45,24)
+    height=size+9
+    start=288-(len(lines)-1)*height*.48
+    for i,line in enumerate(lines):
+        _write_center(d,270,start+i*height,line,size,"#191612")
+
+    if elapsed<prompt_duration:
+        hint="ĐANG NGHE CÂU HỎI"
+        timer_color=accent
+        progress=0.0
+    elif countdown:
+        hint=f"CHỌN ĐÁP ÁN · {seconds_remaining}s"
+        timer_color="#D13624"
+        progress=min(1,max(0,(elapsed-prompt_duration)/think))
+    else:
+        hint="ĐÁP ÁN ĐÚNG"
+        timer_color="#178451"
+        progress=1.0
+    _label(d,270,400,hint,470,1,21,timer_color,18)
+    d.rounded_rectangle((35,439,505,451),radius=6,fill="#CDD7DF")
+    if progress>.001:
+        d.rounded_rectangle((35,439,35+int(470*progress),451),
+                            radius=6,fill=timer_color)
+
+    choices=[quiz.correct,quiz.wrong1,quiz.wrong2,quiz.wrong3]
+    random.Random(idx*719+sum(ord(c) for c in quiz.question)).shuffle(choices)
+    for n,option in enumerate(choices):
+        top=466+n*87
+        correct=show_answer and option==quiz.correct
+        d.rounded_rectangle((28,top,512,top+75),radius=14,
+            fill="#179662" if correct else "#FFFFFF",
+            outline="#0F7F51" if correct else "#D0DADF",width=2)
+        d.ellipse((42,top+16,84,top+59),fill="#11744D" if correct else "#E7EFF3")
+        _write_center(d,63,top+24,"ABCD"[n],19,"#FFFFFF" if correct else "#0F4C81")
+        _label(d,285,top+17,option,388,1,34,
+               "#FFFFFF" if correct else "#191612",22)
         if correct:
-            # A short answer emphasis pulse, no flashing.
-            intensity=int(3+3*max(0,1-abs((elapsed-think)-.4)))
-            d.rounded_rectangle((29,top+1,511,top+76),radius=15,outline="#A9F2CF",width=intensity)
-    _label(d,270,870,"TIẾNG HÀN KHÓ CÓ TUI LO !!!",481,1,22,fg,19)
-    _label(d,270,911,"tienghansoeasy.io.vn",440,1,19,accent,18)
+            romanization=quiz.romanization.strip() or approximate_romanization(quiz.correct)
+            if romanization:
+                _label(d,286,top+51,romanization,383,1,17,"#E5FFF0",14)
+            d.rounded_rectangle((29,top+1,511,top+74),radius=14,
+                                outline="#A7EFCC",width=3)
+
+    # Explanation appears only AFTER the timer, never while choosing an answer.
+    if show_answer:
+        d.rounded_rectangle((28,824,512,913),radius=14,
+                            fill="#E9F8EF" if theme!="blue" else "#F2FAFF")
+        meaning=quiz.vietnamese_meaning
+        _label(d,270,834,"NGHĨA TIẾNG VIỆT",450,1,16,"#1E5BBB",15)
+        _label(d,270,860,meaning if meaning else "Chưa có nghĩa được kiểm chứng",
+               441,2,25,"#191612",18,3)
+        if not quiz.romanization.strip() and approximate_romanization(quiz.correct):
+            _label(d,270,896,"Phiên âm trên là gợi ý, cần kiểm tra lại",455,1,13,
+                   "#617582",12)
+    else:
+        _label(d,270,860,"NGHE XONG, CHỌN ĐÁP ÁN",463,1,19,fg,16)
+
+    _label(d,270,929,"tienghansoeasy.io.vn",470,1,17,accent,15)
     im=_logo_overlay(im,logo_path,logo_position,logo_scale)
-    # Smooth 0.6s fade/slide into each new question, and fade out at transition.
-    fade_in=min(1,max(0,elapsed/.65))
-    end=think+reveal
+
+    # Soft transition; no hard flashes or blurred Hangul.
+    fade_in=min(1,max(0,elapsed/.5))
+    end=prompt_duration+think+answer_duration
     fade_out=min(1,max(0,(end+transition-elapsed)/transition))
     alpha=max(0,min(fade_in,fade_out))
     if alpha<1:
-        under=Image.new("RGB",im.size,bg)
-        shift=int(20*(1-fade_in))
-        if shift>0:
-            moved=under.copy();moved.paste(im,(0,shift));im=moved
-        im=Image.blend(under,im,alpha)
+        underlying=Image.new("RGB",im.size,bg)
+        im=Image.blend(underlying,im,alpha)
     return im
+
 
 def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
            think=5.5,reveal=2.8,with_voice=False,voice_cache=None,
@@ -210,19 +253,29 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
     if not 4<=think<=12 or not 1.5<=reveal<=7 or not .3<=transition<=2 or not .5<=intro<=4:
         raise ValueError("Video timing outside allowed limits.")
     binary("ffmpeg")
-    for quiz in questions:quiz.validate()
+    for quiz in questions:
+        quiz.validate()
     target=Path(destination).resolve()
     target.parent.mkdir(parents=True,exist_ok=True)
-    cycle=think+reveal+transition
-    duration=intro+len(questions)*cycle
     cache=Path(voice_cache or target.parent/".voice_cache")
     cache.mkdir(parents=True,exist_ok=True)
-    events=(prepare_events(questions,cache,think,reveal,engine=voice_engine,
-                            intro=intro,transition=transition) if with_voice else [])
+
+    # Only TTS input tells us real speech length. A silent preview uses a
+    # brief fixed 'reading' stage followed by the same full countdown.
+    if with_voice:
+        voice_events,scenes=prepare_events(
+            questions,cache,think,reveal,engine=voice_engine,
+            intro=intro,transition=transition,fps=fps,return_scenes=True)
+    else:
+        scenes=build_scenes(len(questions),think,reveal,transition,intro,fps)
+        voice_events=[]
+    duration=timeline_duration(scenes)
     with tempfile.TemporaryDirectory(prefix="thse_render_") as td:
         folder=Path(td)
+        events=list(voice_events)
         if sfx:
-            track=build_sfx(folder/"sfx.wav",len(questions),think,reveal,transition,intro,sfx_volume)
+            track=build_sfx(folder/"sfx.wav",len(questions),think,reveal,
+                            transition,intro,sfx_volume,scenes=scenes)
             events.append((track,0,"sfx"))
         silent=folder/"silent.mp4"
         proc=subprocess.Popen([
@@ -232,23 +285,28 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
             "-pix_fmt","yuv420p","-movflags","+faststart",str(silent)
         ],stdin=subprocess.PIPE,stderr=subprocess.PIPE)
         try:
-            for tick in range(int(round(intro*fps))):
+            for tick in range(int(round(scenes[0].start*fps))):
                 im=draw_intro(theme,width,logo_path,logo_position,logo_scale)
                 proc.stdin.write(im.tobytes())
-            total_frames=int(round(cycle*fps))
-            for i,q in enumerate(questions,1):
-                for tick in range(total_frames):
-                    im=draw_frame(q,i,len(questions),theme,tick/fps,think,width,reveal,
-                                  transition,logo_path,logo_position,logo_scale)
+            for i,(q,scene) in enumerate(zip(questions,scenes),1):
+                frames=int(round(scene.duration*fps))
+                for tick in range(frames):
+                    im=draw_frame(q,i,len(questions),theme,tick/fps,think,width,
+                                  reveal,transition,logo_path,logo_position,logo_scale,
+                                  prompt_duration=scene.prompt_duration,
+                                  answer_duration=scene.answer_duration)
                     proc.stdin.write(im.tobytes())
             proc.stdin.close()
             stderr=proc.stderr.read().decode("utf-8","replace")
-            if proc.wait()!=0:raise RuntimeError("FFmpeg render failed: "+stderr[-1400:])
+            if proc.wait()!=0:
+                raise RuntimeError("FFmpeg render failed: "+stderr[-1400:])
         except BaseException:
-            if proc.stdin and not proc.stdin.closed:proc.stdin.close()
+            if proc.stdin and not proc.stdin.closed:
+                proc.stdin.close()
             proc.kill();proc.wait()
             raise
-        finally:proc.stderr.close()
+        finally:
+            proc.stderr.close()
         if events:
             mux_narration(silent,events,target,duration)
         else:

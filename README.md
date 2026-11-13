@@ -233,3 +233,31 @@ uncertain Meta job is already recorded. After Meta accepts the Reels finish call
 a job is marked \`submitted\` rather than publicly \`published\`. Confirm its
 public appearance and moderation status on Meta Business Suite. Unexpected
 upload failures are marked \`needs_review\` and never blindly retried.
+
+
+## v0.4.1: Audio-first short quiz and romanized correct answers
+
+- Newly AI-generated quiz items must include short Vietnamese \`clue\` (1–6 words),
+  Hangul correct answer, its **Revised Romanization** \`romanization\`,
+  and verified Vietnamese \`meaning\`. The full explanation is no longer read aloud.
+- Existing 0.4.x SQLite questions are preserved. Common verbose prompts are
+  shortened for on-screen display and speech without modifying the original
+  question text in the database.
+- **Narration before countdown:** actual Vietnamese TTS MP3 duration is measured
+  with bundled FFprobe. The full countdown starts only after the clip completes,
+  with a short pause. Countdown ticks and answer chime follow scene timestamps.
+- Correct-answer screen shows highlighted Hangul, romanization and Vietnamese
+  meaning. When a legacy quiz has no romanization, an approximate orthographic
+  fallback is displayed with an explicit check-me note. This is NOT a fully
+  accurate phonological pronunciation engine for irregular sound changes.
+- The Korean TTS runs after the answer reveal. If the Korean clip takes
+  longer than the configured reveal time, that scene extends automatically.
+- Preview with voice enabled generates a one-question sample using actual online
+  speech and the exact same audio-first timing as production MP4. Preview with
+  voice disabled uses a short fixed prompt stage.
+- The question bank displays short clue and the available meaning/romanization
+  so reviewers can catch mistakes before approving.
+- TTS requests still require Internet and provider availability. Model output
+  is not a dictionary: people should verify translations and romanization
+  before bulk publishing.
+

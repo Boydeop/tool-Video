@@ -111,16 +111,47 @@ def test_speech(language,engine,cache_dir):
     path=synthesize(phrase,VOICES[language][0],cache_dir,engine)
     return path
 
-def prepare_events(questions,cache_dir,think,reveal,engine="auto",intro=0,transition=0):
+def audio_duration(path):
+    """Length of a real MP3/WAV measured by bundled ffprobe, in seconds."""
+    proc=subprocess.run([binary("ffprobe"),"-v","error",
+          "-show_entries","format=duration","-of","default=nk=1:nw=1",
+          str(path)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+          text=True,timeout=30,check=False)
+    if proc.returncode:
+        raise SpeechError("Không xác định được độ dài giọng đọc.")
+    try:
+        length=float(proc.stdout.strip())
+        if not 0.1<length<90:
+            raise ValueError("Invalid TTS length")
+        return length
+    except ValueError as exc:
+        raise SpeechError("File giọng đọc không có thời lượng hợp lệ.") from exc
+
+def prepare_events(questions,cache_dir,think,reveal,engine="auto",
+                   intro=0,transition=0,fps=24,return_scenes=False):
+    """Compute narration timeline using each TTS clip's measured duration.
+
+    For compatibility, returns events only unless return_scenes=True.
+    """
+    from .timeline import build_scenes
+    clips=[]
+    for question in questions:
+        # Speak the short Vietnamese clue, never a verbose grammar template.
+        vi=synthesize(question.short_clue,VI_VOICE,cache_dir,engine)
+        ko=synthesize(question.correct,KO_VOICE,cache_dir,engine)
+        clips.append((vi,ko,audio_duration(vi),audio_duration(ko)))
+    scenes=build_scenes(len(questions),think,reveal,transition,intro,fps,
+             [row[2] for row in clips],[row[3] for row in clips])
     events=[]
-    cycle=think+reveal+transition
-    for index,q in enumerate(questions):
-        offset=round((intro+index*cycle)*1000)
-        vi=synthesize(q.question,VI_VOICE,cache_dir,engine)
-        ko=synthesize(q.correct,KO_VOICE,cache_dir,engine)
-        events.append((vi,offset,"voice"))
-        events.append((ko,offset+round(think*1000),"voice"))
-    return events
+    for (vi,ko,vi_length,ko_length),scene in zip(clips,scenes):
+        question_start=scene.start+.18
+        answer_start=scene.answer_start+.18
+        # Countdown starts only after the Vietnamese TTS has finished.
+        if question_start+vi_length > scene.countdown_start-.15:
+            raise SpeechError("Giọng đọc câu hỏi vượt quá thời gian dành cho phần giới thiệu.")
+        events.append((vi,round(question_start*1000),"voice"))
+        events.append((ko,round(answer_start*1000),"voice"))
+    return (events,scenes) if return_scenes else events
 
 def audio_streams(path):
     proc=subprocess.run([binary("ffprobe"),"-v","error","-select_streams","a",

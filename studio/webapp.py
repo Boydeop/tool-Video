@@ -17,7 +17,7 @@ from .voice import available, readiness as tts_readiness, test_speech, ENGINES
 
 LOGGER = logging.getLogger("tienghansoeasy.http")
 MAX_REQUEST = 4_000_000
-APP_VERSION = "v0.4.0"
+APP_VERSION = "v0.4.1"
 
 
 def _ui_path() -> Path:
@@ -235,7 +235,9 @@ def create_server(service, host="127.0.0.1", port=8765):
                 elif route == "/api/seo":
                     result=service.seo_video(str(raw.get("video_name","")))
                 elif route == "/api/preview/clip":
-                    name=service.preview_motion(str(raw.get("id","")),str(raw.get("theme","hanji")))
+                    name=service.preview_motion(str(raw.get("id","")),str(raw.get("theme","hanji")),
+                        with_voice=raw.get("with_voice") is True,
+                        voice_engine=str(raw.get("voice_engine","auto")))
                     result={"preview_url":"/api/preview/clip/"+name.name}
                 elif route == "/api/render/batch":
                     result=service.render_many(raw.get("ids",[]),

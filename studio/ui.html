@@ -51,7 +51,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 <body>
 <div class="app">
 <aside class="sidebar">
- <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v0.4.0</small></div>
+ <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v0.4.1</small></div>
  <nav class="nav" aria-label="Điều hướng">
   <button data-nav="create" class="active"><span class="num">1</span> Tạo câu hỏi</button>
   <button data-nav="questions"><span class="num">2</span> Duyệt & sản xuất</button>
@@ -61,7 +61,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
  <div class="sidehelp"><b>Gợi ý bắt đầu</b><p>Đầu tiên nhập API key ở mục 3. Sau đó quay lại mục 1, bấm tạo câu hỏi ngẫu nhiên và duyệt nội dung trước khi xuất MP4.</p></div>
 </aside>
 <main class="content">
- <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Chọn ngẫu nhiên → kiểm duyệt → xuất MP4 có giọng đọc → đặt lịch Facebook.</p></div><span class="version">Bản v0.4.0</span></header>
+ <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Chọn ngẫu nhiên → kiểm duyệt → xuất MP4 có giọng đọc → đặt lịch Facebook.</p></div><span class="version">Bản v0.4.1</span></header>
  <div class="metrics">
   <div class="metric"><span class="name">Câu hỏi đã lưu</span><strong id="statQuestions">0</strong></div>
   <div class="metric"><span class="name">Câu đã duyệt</span><strong id="statApproved">0</strong></div>
@@ -121,11 +121,12 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
    </div>
    <audio controls id="voicePreview" style="display:none;width:100%;max-width:560px;margin:10px 0"></audio>
    <p class="note" id="voiceStatus">Nếu Edge TTS gặp lỗi NoAudioReceived, chế độ Tự động sẽ thử giọng khác rồi dùng Google TTS. Cần kết nối Internet.</p>
+   <p class="note">Giọng Việt chỉ đọc <strong>cụm từ ngắn</strong> (ví dụ: “Nhân viên công ty”), sau khi đọc xong mới đếm ngược đủ số giây đã chọn. Khi hiện đáp án: tiếng Hàn, phiên âm Latin và nghĩa Việt.</p>
    <div class="divider"></div>
    <div class="sectiontitle"><h2 style="font-size:17px">⚙ Nhịp video & hiệu ứng</h2><span class="pill">Có thể chỉnh trước khi xuất</span></div>
    <div class="fieldrow">
-    <div class="field compact"><label for="timingThink">Đếm ngược (giây)</label><input type="number" id="timingThink" min="4" max="12" step=".5"></div>
-    <div class="field compact"><label for="timingReveal">Hiện đáp án (giây)</label><input type="number" id="timingReveal" min="1.5" max="7" step=".5"></div>
+    <div class="field compact"><label for="timingThink">Đếm ngược sau khi đọc xong (giây)</label><input type="number" id="timingThink" min="4" max="12" step=".5"></div>
+    <div class="field compact"><label for="timingReveal">Hiện đáp án tối thiểu (giây)</label><input type="number" id="timingReveal" min="1.5" max="7" step=".5"></div>
     <div class="field compact"><label for="timingTransition">Chuyển cảnh (giây)</label><input type="number" id="timingTransition" min=".3" max="2" step=".1"></div>
     <div class="field compact"><label for="timingIntro">Mở đầu (giây)</label><input type="number" id="timingIntro" min=".5" max="4" step=".5"></div>
     <div class="field compact"><label for="videoWidth">Độ phân giải</label><select id="videoWidth"><option value="540">540 × 960</option><option value="1080">1080 × 1920</option></select></div>
@@ -152,7 +153,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
    <div class="actions">
      <button class="btn outline" id="previewBefore">👁 Xem trước câu hỏi</button>
      <button class="btn secondary" id="previewAfter">✓ Xem trước đáp án</button>
-     <button class="btn secondary" id="previewMotion">▶ Preview chuyển cảnh & SFX</button>
+     <button class="btn secondary" id="previewMotion">▶ Preview có tiếng đọc, đếm ngược & SFX</button>
      <span class="note" id="previewHint">Chọn 1 câu ở bảng phía trên rồi bấm xem trước.</span>
    </div>
    <div style="display:flex;justify-content:center;margin:14px 0;background:#edf2f8;border-radius:16px;padding:12px">
@@ -376,7 +377,14 @@ function renderQuestions(){
    const topic=make("td");
    topic.append(make("strong",q.topic),make("small",q.level+" · Lô "+(q.batch_id||"cũ").slice(0,8)));
    tr.append(topic);
-   tr.append(make("td",q.question),make("td",q.correct),make("td",q.explanation||"Chưa có giải thích"));
+   const clueCell=make("td");
+   clueCell.append(make("strong",q.short_clue||q.clue||q.question));
+   if(q.question!==(q.short_clue||q.clue||q.question))clueCell.append(make("small","Gốc: "+q.question));
+   const answerCell=make("td");
+   answerCell.append(make("strong",q.correct));
+   answerCell.append(make("small",(q.romanization||"Phiên âm cần duyệt")+
+     (q.meaning?" · "+q.meaning:" · Chưa có nghĩa được duyệt")));
+   tr.append(clueCell,answerCell,make("td",q.explanation||"Chưa có giải thích"));
    rows.append(tr);
  }
  $("questionPageInfo").textContent="Trang "+state.questionPage+" / "+maxPage+" · "+all.length+" câu";
@@ -686,13 +694,13 @@ $("previewMotion").addEventListener("click",async()=>{
  if(!await saveProduction())return;
  const theme=document.querySelector('input[name="theme"]:checked').value;
  notice("Đang dựng preview ngắn cho một câu hỏi.");
- const result=await run(()=>api("/api/preview/clip",{id:q.id,theme}));
+ const result=await run(()=>api("/api/preview/clip",{id:q.id,theme,with_voice:$("voice").checked,voice_engine:$("voiceEngine").value}));
  if(result){
    const player=$("motionPreview");
    player.src=result.preview_url;
    player.style.display="block";
    player.load();
-   notice("Đã tạo preview chuyển cảnh và SFX. Bấm ▶ để xem.","success");
+   notice("Đã tạo preview có đếm ngược và "+($("voice").checked?"giọng đọc Việt–Hàn.":"SFX.")+" Bấm ▶ để xem.","success");
  }
 });
 

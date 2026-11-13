@@ -90,6 +90,8 @@ jobs:
               throw 'Preview or batch video UI missing'
             }
             if ($homePage.Content -notmatch 'Kết nối Facebook Page') { throw 'Meta Page connection UI missing' }
+            if ($homePage.Content -notmatch 'Đếm ngược sau khi đọc xong') { throw 'Audio-first countdown UI missing' }
+            if ($homePage.Content -notmatch 'phiên âm Latin' -and $homePage.Content -notmatch 'phiên âm') { throw 'Pronunciation UI missing' }
             Write-Output "EXE HTTP, video settings, batch, logo and Page UI smoke tests passed"
           } catch {
             $logPath = Join-Path $env:LOCALAPPDATA "TiengHanSoEasyStudio\studio.log"
@@ -111,8 +113,8 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.4.0
-          name: Tiếng Hàn So Easy Studio v0.4.0
+          tag_name: v0.4.1
+          name: Tiếng Hàn So Easy Studio v0.4.1
           target_commitish: main
           files: dist/TiengHanSoEasyStudio.exe
           make_latest: true

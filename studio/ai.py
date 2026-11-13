@@ -33,8 +33,13 @@ def generate(provider,topic,level,count,recent,fmt="từ vựng"):
     if not 1<=count<=30:raise ValueError("1-30 questions per request")
     prompt=("Tạo "+str(count)+" câu trắc nghiệm tiếng Hàn cho người Việt. "
       +"Chủ đề: "+json.dumps(topic,ensure_ascii=False)+"; cấp độ: "+level+"; dạng: "+fmt+". "
-      +"Trả JSON array thuần, mỗi phần tử gồm topic,question,correct,wrong1,wrong2,wrong3,romanization,explanation,level. "
-      +"Câu hỏi tiếng Việt rõ nghĩa, bốn lựa chọn tiếng Hàn phân biệt, duy nhất một câu đúng, giải thích ngắn. "
+      +"Trả JSON array thuần, mỗi phần tử gồm topic,question,clue,correct,wrong1,wrong2,wrong3,romanization,meaning,explanation,level. "
+      +"Ưu tiên QUIZ TỪ VỰNG NGẮN: clue là cụm tiếng Việt 1-6 từ, tối đa 40 ký tự (ví dụ: 'Khúc xương', 'Nhân viên công ty'), không phải câu hỏi. "
+      +"question giống clue, không viết câu rườm rà như 'Từ tiếng Hàn nào có nghĩa là...' hay 'Từ nào chỉ...'. "
+      +"meaning là nghĩa tiếng Việt chính xác của correct, không phải lời giải dài; romanization là phiên âm tiếng Hàn theo Revised Romanization (Latin). "
+      +"Bốn đáp án Hangul ngắn, đồng loại ngữ pháp, phân biệt rõ, chỉ 1 đáp án đúng. explanation tối đa 1 câu ngắn. "
+      +"Với hội thoại/ngữ pháp vẫn giữ thông tin cần thiết để câu hỏi không bị mơ hồ, nhưng viết ngắn gọn. "
+      +"Nếu không chắc nghĩa hoặc phiên âm, không sáng tác thông tin: để trống và đánh dấu để người dùng kiểm duyệt. "
       +"Không lặp lại đáp án hoặc câu đã dùng sau đây: "+json.dumps(recent[-50:],ensure_ascii=False))
     if provider=="gemini":
         try:key=next_key(provider)

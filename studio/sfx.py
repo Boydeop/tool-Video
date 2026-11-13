@@ -19,26 +19,32 @@ def _sfx_notes(samples,start_sec,notes,volume=1):
             v=math.sin(2*math.pi*hz*t)*env*10000*volume
             samples[i]=max(-32767,min(32767,samples[i]+int(v)))
 
-def build_sfx(path,questions,think,reveal,transition,intro,gain=.34):
+def build_sfx(path,questions,think,reveal,transition,intro,gain=.34,scenes=None):
     """Build a single PCM track for countdown ticks, answer chime, transitions."""
     if not 0<=gain<=1:raise ValueError("Invalid SFX volume")
-    total=int(round((intro+questions*(think+reveal+transition))*SAMPLE_RATE))
+    if scenes is not None and len(scenes)!=questions:
+        raise ValueError("Scene count mismatch for SFX")
+    total=int(round((scenes[-1].end if scenes else
+                     intro+questions*(think+reveal+transition))*SAMPLE_RATE))
     samples=array("h",[0])*total
     # Intro sparkle.
     _sfx_notes(samples,.45,[(540,.10),(680,.10),(820,.20)],gain*.58)
     cycle=think+reveal+transition
     for i in range(questions):
-        start=intro+i*cycle
-        # Short tick each second in the second half of the countdown.
+        start=scene_start=scenes[i].start if scenes else intro+i*cycle
+        countdown_start=scenes[i].countdown_start if scenes else start
+        answer_start=scenes[i].answer_start if scenes else start+think
+        transition_start=scenes[i].transition_start if scenes else start+think+reveal
+        # No countdown tick while the Vietnamese question is speaking.
         for offset in range(1,int(think)+1):
             if offset<think-.2:
-                _sfx_notes(samples,start+offset,[(970,.055)],gain*.48)
+                _sfx_notes(samples,countdown_start+offset,[(970,.055)],gain*.48)
         # Positive answer chime.
-        _sfx_notes(samples,start+think+.04,[(740,.13),(940,.13),(1175,.25)],gain*.82)
+        _sfx_notes(samples,answer_start+.04,[(740,.13),(940,.13),(1175,.25)],gain*.82)
         if i<questions-1:
             # Quiet original soft slide swoosh with deterministic noise.
             rng=random.Random(i+71)
-            begin=int((start+think+reveal+.06)*SAMPLE_RATE)
+            begin=int((transition_start+.06)*SAMPLE_RATE)
             for j in range(int(min(.45,transition)*SAMPLE_RATE)):
                 p=begin+j
                 if p>=len(samples):break
