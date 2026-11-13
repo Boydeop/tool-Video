@@ -129,10 +129,12 @@ class Store:
             for r in rows:
                 payload=json.loads(r["payload"])
                 quiz=Quiz.parse(payload)
-                result.append(dict(id=r["id"],status=r["status"],provider=r["provider"],
+                item=dict(id=r["id"],status=r["status"],provider=r["provider"],
                     created_at=r["created_at"],batch_id=r["batch_id"],
-                    last_video=r["last_video"],**payload,
-                    short_clue=quiz.short_clue,meaning=quiz.vietnamese_meaning))
+                    last_video=r["last_video"],**payload)
+                item["short_clue"]=quiz.short_clue
+                item["meaning"]=quiz.vietnamese_meaning
+                result.append(item)
             return result
 
     def get_questions(self, ids: list[str], status=None) -> list[Quiz]:
