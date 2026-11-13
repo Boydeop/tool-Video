@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - fix/visual-template-autopilot-seasonal-v110
   workflow_dispatch:
 
 permissions:
