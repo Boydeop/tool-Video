@@ -12,11 +12,11 @@ from .keys import import_txt, readiness, write_keys
 from .models import list_models, selected_models, set_model, test_model
 from .quiz import TOPICS
 from .scheduler import Scheduler
-from .voice import available
+from .voice import available, readiness as tts_readiness, test_speech, ENGINES
 
 LOGGER = logging.getLogger("tienghansoeasy.http")
 MAX_REQUEST = 80_000
-APP_VERSION = "v0.3.1"
+APP_VERSION = "v0.3.2"
 
 
 def _ui_path() -> Path:
@@ -103,8 +103,25 @@ def create_server(service, host="127.0.0.1", port=8765):
                         "videos": service.list_videos(),
                         "providers": readiness(),
                         "models": selected_models(),
-                        "tts_ready": available()
+                        "tts_ready": available(),
+                        "tts_engines": tts_readiness()
                     })
+                elif url.path.startswith("/api/voice/sample/"):
+                    name = unquote(url.path[len("/api/voice/sample/"):])
+                    if not name.endswith(".mp3") or len(name)!=68 or not all(c in "0123456789abcdef" for c in name[:-4]):
+                        self.respond(404,{"error":"Không có mẫu âm thanh."})
+                        return
+                    path=(service.root/"tts_samples"/name).resolve()
+                    if not path.is_file():
+                        self.respond(404,{"error":"Không tìm thấy mẫu."})
+                        return
+                    body=path.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type","audio/mpeg")
+                    self.send_header("Content-Length",str(len(body)))
+                    self.send_header("Cache-Control","no-store")
+                    self.end_headers()
+                    self.wfile.write(body)
                 elif url.path.startswith("/api/videos/"):
                     self._send_video(unquote(url.path[len("/api/videos/"):]))
                 else:
@@ -123,7 +140,7 @@ def create_server(service, host="127.0.0.1", port=8765):
             route = urlsplit(self.path).path
             routes = ("/api/generate", "/api/daily", "/api/approve", "/api/render",
                       "/api/schedule", "/api/keys", "/api/keys/import",
-                      "/api/models/select", "/api/models/test")
+                      "/api/models/select", "/api/models/test", "/api/voice/test")
             if route not in routes:
                 self.respond(404, {"error": "Không tìm thấy chức năng."})
                 return
@@ -154,13 +171,20 @@ def create_server(service, host="127.0.0.1", port=8765):
                     status = str(raw.get("status", "approved"))
                     service.store.approve(ids, status=status)
                     result = {"updated": len(ids), "status": status}
+                elif route == "/api/voice/test":
+                    language=str(raw.get("language",""))
+                    engine=str(raw.get("engine","auto"))
+                    testfile=test_speech(language,engine,service.root/"tts_samples")
+                    result={"ok":True,"language":language,"engine":engine,
+                            "audio_url":"/api/voice/sample/"+testfile.name}
                 elif route == "/api/render":
                     ids = raw.get("ids", [])
                     if not isinstance(ids, list) or not 0 < len(ids) <= 30:
                         raise ValueError("Chọn từ 1 đến 30 câu đã duyệt.")
                     result = {"video": service.render_approved(
                         ids, str(raw.get("theme", "hanji")),
-                        with_voice=raw.get("with_voice") is True)}
+                        with_voice=raw.get("with_voice") is True,
+                        voice_engine=str(raw.get("voice_engine","auto")))}
                 elif route == "/api/models/select":
                     result = set_model(str(raw.get("provider", "")),
                                        str(raw.get("model", "")))

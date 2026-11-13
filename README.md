@@ -180,3 +180,20 @@ keys you intend to use before producing large batches.
 v0.3.1 EXE is built by Windows GitHub Actions and smoke-tests that the bundled
 UI contains the model selector and that /api/status reports model configuration.
 Older local API keys and question databases are preserved on update.
+
+## v0.3.2: TTS fails with NoAudioReceived
+
+Edge TTS occasionally returns `NoAudioReceived` even with healthy Internet. Studio
+now retries Edge for each voice, tries an alternate Edge voice, and in the default
+Auto mode falls back to gTTS (Vietnamese + Korean). Both Edge and gTTS are
+unofficial online dependencies with independent limits and availability; no
+internet service is guaranteed. Select **Tự động (Edge → Google)**, **Chỉ Edge**,
+or **Chỉ Google**. Before rendering, click **Thử giọng tiếng Việt** and
+**Thử giọng tiếng Hàn** to receive playable MP3 samples. These tests are real
+third-party requests and need Internet. MP3 bytes are cached locally; no text
+or API keys are committed. The render pipeline never silently declares an
+audio failure a successful voiced video. If both TTS systems fail, switch off
+voice explicitly to create a silent MP4 or investigate your network/service.
+
+Settings for API models and keys remain unchanged. The Windows EXE contains
+gTTS in addition to edge-tts, Pillow, FFmpeg and FFprobe.

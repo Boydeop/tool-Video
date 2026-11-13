@@ -1,64 +1,134 @@
-"""Optional Vietnamese/Korean Edge online TTS and deterministic FFmpeg mixing."""
+"""Resilient online Vietnamese/Korean narration with explicit TTS fallback.
+
+Engine modes: auto (Edge first, gTTS fallback), edge, google. Both depend on
+third-party online services and may fail. Never silently return a mute video.
+"""
 from __future__ import annotations
+
 import asyncio
 import hashlib
+import logging
 from pathlib import Path
 import subprocess
+import time
+
 from .fftools import binary
 
-VI_VOICE="vi-VN-HoaiMyNeural"
-KO_VOICE="ko-KR-SunHiNeural"
+LOGGER=logging.getLogger("tienghansoeasy.voice")
+VOICES={
+    "vi":("vi-VN-HoaiMyNeural","vi-VN-NamMinhNeural"),
+    "ko":("ko-KR-SunHiNeural","ko-KR-InJoonNeural"),
+}
+LANGUAGES={"vi":"vi","ko":"ko"}
+VI_VOICE=VOICES["vi"][0]
+KO_VOICE=VOICES["ko"][0]
+ENGINES=("auto","edge","google")
+
+class SpeechError(RuntimeError):
+    pass
 
 def available():
-    try:
-        import edge_tts
-        return True
-    except ImportError:
-        return False
+    return readiness()["edge"] or readiness()["google"]
 
-async def _speak(text,voice,target):
+def readiness():
+    try: import edge_tts
+    except ImportError: edge=False
+    else: edge=True
+    try: import gtts
+    except ImportError: google=False
+    else: google=True
+    return {"edge":edge,"google":google}
+
+def check_engine(engine):
+    if engine not in ENGINES:
+        raise ValueError("Nguồn giọng đọc không hợp lệ.")
+    return engine
+
+async def _speak_edge(text,voice,target):
     import edge_tts
     await edge_tts.Communicate(text,voice).save(str(target))
 
-def synthesize(text,voice,cache_dir):
-    if not available():
-        raise RuntimeError("Missing edge-tts. Install requirements.txt.")
+def _speak_google(text,language,target):
+    from gtts import gTTS
+    gTTS(text=text,lang=language,slow=False,timeout=20).save(str(target))
+
+def synthesize(text,voice,cache_dir,engine="auto"):
+    """Return an MP3 file. Only cache successful files per TTS engine/voice/text."""
+    check_engine(engine)
+    if not isinstance(text,str) or not text.strip() or len(text)>500:
+        raise ValueError("Nội dung TTS phải từ 1 đến 500 ký tự.")
+    language=next((code for code,voices in VOICES.items() if voice in voices),None)
+    if language is None:
+        raise ValueError("Giọng đọc không được hỗ trợ.")
     cache=Path(cache_dir)
     cache.mkdir(parents=True,exist_ok=True)
-    digest=hashlib.sha256((voice+"|"+text).encode("utf-8")).hexdigest()
-    target=cache/(digest+".mp3")
-    if target.is_file() and target.stat().st_size>100: return target
-    tmp=target.with_suffix(".working.mp3")
-    try:
-        asyncio.run(_speak(text,voice,tmp))
-        if not tmp.is_file() or tmp.stat().st_size<=100:
-            raise RuntimeError("TTS returned empty audio.")
-        tmp.replace(target)
-    except Exception as exc:
-        tmp.unlink(missing_ok=True)
-        raise RuntimeError("TTS online failed; video was not rendered with voice: "+type(exc).__name__) from exc
-    return target
+    ready=readiness()
+    engines=(("edge","google") if engine=="auto" else (engine,))
+    errors=[]
+    for provider in engines:
+        if not ready.get(provider,False):
+            errors.append(provider+": chưa cài thư viện")
+            continue
+        voices=VOICES[language] if provider=="edge" else (language,)
+        for name in voices:
+            digest=hashlib.sha256((provider+"|"+name+"|"+text).encode("utf-8")).hexdigest()
+            target=cache/(digest+".mp3")
+            if target.is_file() and target.stat().st_size>100:
+                return target
+            # Retry transient Edge NoAudioReceived, then try next voice/provider.
+            tries=2 if provider=="edge" else 1
+            for attempt in range(tries):
+                tmp=cache/(digest+".working.mp3")
+                tmp.unlink(missing_ok=True)
+                try:
+                    if provider=="edge":
+                        asyncio.run(_speak_edge(text,name,tmp))
+                    else:
+                        _speak_google(text,language,tmp)
+                    if not tmp.is_file() or tmp.stat().st_size<=100:
+                        raise SpeechError("TTS không trả dữ liệu âm thanh.")
+                    tmp.replace(target)
+                    LOGGER.info("TTS generated via %s for %s (%s bytes)",provider,language,target.stat().st_size)
+                    return target
+                except Exception as exc:
+                    tmp.unlink(missing_ok=True)
+                    # Never log text or complete URL; error type is enough.
+                    LOGGER.warning("TTS provider=%s voice=%s attempt=%s error=%s",
+                                   provider,name,attempt+1,type(exc).__name__)
+                    errors.append(provider+" "+name+": "+type(exc).__name__)
+                    if attempt+1<tries:
+                        time.sleep(0.7*(attempt+1))
+    raise SpeechError(
+        "Không nhận được âm thanh từ các dịch vụ TTS. "
+        +"; ".join(errors[-5:])
+        +". Thử nguồn Google TTS hoặc chọn xuất không giọng đọc.")
 
-def prepare_events(questions,cache_dir,think,reveal):
+def test_speech(language,engine,cache_dir):
+    if language not in LANGUAGES:
+        raise ValueError("Ngôn ngữ không hợp lệ.")
+    phrase={"vi":"Xin chào! Cùng học tiếng Hàn mỗi ngày.",
+            "ko":"안녕하세요. 한국어를 같이 공부해요."}[language]
+    path=synthesize(phrase,VOICES[language][0],cache_dir,engine)
+    return path
+
+def prepare_events(questions,cache_dir,think,reveal,engine="auto"):
     events=[]
-    length=(think+reveal)
+    duration=think+reveal
     for index,q in enumerate(questions):
-        start_ms=round(index*length*1000)
-        # Vietnamese question at beginning, Korean pronunciation on reveal.
-        vi=synthesize(q.question,VI_VOICE,cache_dir)
-        ko=synthesize(q.correct,KO_VOICE,cache_dir)
-        events.append((vi,start_ms))
-        events.append((ko,start_ms+round(think*1000)))
+        offset=round(index*duration*1000)
+        vi=synthesize(q.question,VI_VOICE,cache_dir,engine)
+        ko=synthesize(q.correct,KO_VOICE,cache_dir,engine)
+        events.append((vi,offset))
+        events.append((ko,offset+round(think*1000)))
     return events
 
 def audio_streams(path):
-    cmd=[binary("ffprobe"),"-v","error","-select_streams","a",
-         "-show_entries","stream=codec_name","-of","csv=p=0",str(path)]
-    proc=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
-                        text=True,timeout=30,check=False)
+    proc=subprocess.run([binary("ffprobe"),"-v","error","-select_streams","a",
+         "-show_entries","stream=codec_name","-of","csv=p=0",str(path)],
+        stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=30,check=False)
     if proc.returncode:
         raise RuntimeError("ffprobe failed: "+proc.stderr[-600:])
-    return [x.strip() for x in proc.stdout.splitlines() if x.strip()]
+    return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
 def mux_narration(silent_video,events,final_path,duration):
     if not events: raise ValueError("No speech assets to mux")
