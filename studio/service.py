@@ -12,6 +12,8 @@ from .facebook import credentials
 from .production import Production
 from .quiz import TOPICS, daily_plan, choose_random_topic
 from .renderer import render,draw_frame
+from .naming import video_name
+from .cache_manager import CacheManager
 
 class Service:
     def __init__(self,root="data"):
@@ -95,10 +97,18 @@ class Service:
 
     def render_approved(self,ids,theme="hanji",filename=None,width=None,
                         with_voice=False,voice_engine="auto",progress=None):
-        questions=self.store.get_questions(ids,status="approved")
+        questions=self.store.get_questions(ids,status=("approved","auto_approved"))
         if not questions:raise ValueError("Chọn ít nhất một câu đã duyệt.")
         config=self.production.settings()
-        name=filename or "video_"+uuid.uuid4().hex[:12]+".mp4"
+        if filename:
+            name=filename
+        else:
+            topics={q.topic for q in questions}
+            levels={q.level for q in questions}
+            label=next(iter(topics)) if len(topics)==1 else "Tổng hợp tiếng Hàn"
+            level=next(iter(levels)) if len(levels)==1 else "TOPIK MIX"
+            name=video_name(self.store.allocate_video_number(),label,level,
+                            width or config["width"])
         if Path(name).name!=name or not name.endswith(".mp4"):
             raise ValueError("Tên file xuất không hợp lệ.")
         path=Path(config["export_dir"])/name
@@ -111,7 +121,7 @@ class Service:
             intro=config["intro"],sfx=config["sfx"],sfx_volume=config["sfx_volume"],
             logo_path=self.production.logo(),logo_position=config["logo_position"],
             logo_scale=config["logo_scale"],logo_x=config["logo_x"],logo_y=config["logo_y"],
-            progress=progress)
+            progress=progress,shorts_safe=config.get("shorts_safe",True))
         from .metadata import overwrite_metadata
         overwrite_metadata(completed,config)
         self.store.mark_rendered(ids,completed)
@@ -127,7 +137,8 @@ class Service:
             config["reveal"],config["transition"],
             self.production.logo() if show_logo else None,
             config["logo_position"],config["logo_scale"],
-            logo_x=config["logo_x"],logo_y=config["logo_y"])
+            logo_x=config["logo_x"],logo_y=config["logo_y"],
+            shorts_safe=config.get("shorts_safe",True))
         buf=io.BytesIO()
         im.save(buf,format="PNG")
         return buf.getvalue()
@@ -144,7 +155,8 @@ class Service:
                sfx_volume=cfg["sfx_volume"],with_voice=with_voice,
                voice_engine=voice_engine,voice_cache=cfg["cache_dir"],
                logo_path=self.production.logo(),logo_position=cfg["logo_position"],
-               logo_scale=cfg["logo_scale"],logo_x=cfg["logo_x"],logo_y=cfg["logo_y"])
+               logo_scale=cfg["logo_scale"],logo_x=cfg["logo_x"],logo_y=cfg["logo_y"],
+               shorts_safe=cfg.get("shorts_safe",True))
         for old in sorted(folder.glob("preview_*.mp4"),
                           key=lambda x:x.stat().st_mtime,reverse=True)[20:]:
             old.unlink(missing_ok=True)
@@ -165,7 +177,7 @@ class Service:
             raise ValueError("Chọn từ 1 đến 120 câu không trùng.")
         if not 1<=per_video<=6:
             raise ValueError("Chia từ 1 đến 6 câu cho mỗi video Reels.")
-        self.store.get_questions(ids,status="approved")
+        self.store.get_questions(ids,status=("approved","auto_approved"))
         completed=[]
         for i in range(0,len(ids),per_video):
             try:
@@ -197,9 +209,44 @@ class Service:
     def overwrite_video_metadata(self,name):
         from .metadata import overwrite_metadata
         path=self.video_path(name)
-        if self.store.has_pending_page_job(path):
+        if self.store.has_pending_page_job(path) or self.store.has_outbound(path):
             raise ValueError("Video đang lên lịch hoặc chưa xác nhận trạng thái đăng Meta. Không ghi đè.")
         return overwrite_metadata(path,self.production.settings())
+
+    def cache_stats(self):
+        from .cache_manager import CacheManager
+        media=CacheManager(self.production.settings()["cache_dir"]).stats()
+        samples=CacheManager(self.root/"tts_samples").stats()
+        return {"files":media["files"]+samples["files"],
+                "bytes":media["bytes"]+samples["bytes"],
+                "mb":round((media["bytes"]+samples["bytes"])/1048576,2),
+                "media":media,"voice_samples":samples}
+
+    def clear_cache(self,days=0):
+        if not isinstance(days,int):raise ValueError("Invalid retention setting")
+        media=CacheManager(self.production.settings()["cache_dir"]).clear(
+            older_than_days=days,dry_run=False)
+        samples=CacheManager(self.root/"tts_samples").clear(
+            older_than_days=days,dry_run=False)
+        return {"deleted":media["files"]+samples["files"],
+                "freed_mb":round((media["bytes"]+samples["bytes"])/1048576,2),
+                "errors":media["errors"]+samples["errors"],
+                "remaining":self.cache_stats()}
+
+    def schedule_platform(self,name,platform,title,caption,when,
+                          public_url="",privacy="private"):
+        from .instagram import validate_public_url
+        path=self.video_path(name)
+        if platform=="instagram":
+            validate_public_url(public_url)
+        elif platform=="youtube":
+            from .youtube import YouTubeAccount
+            if not YouTubeAccount(self.root).status()["connected"]:
+                raise ValueError("YouTube chưa được kết nối bằng OAuth.")
+        else:
+            raise ValueError("Nền tảng không được hỗ trợ.")
+        return self.store.schedule_outbound(path,platform,title,caption,when,
+                                           public_url,privacy)
 
     def seo_video(self,name):
         from .seo import draft

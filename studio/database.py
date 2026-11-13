@@ -70,6 +70,29 @@ class Store:
                 seo_caption TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS counters(
+                name TEXT PRIMARY KEY,value INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS production_runs(
+                id TEXT PRIMARY KEY,status TEXT NOT NULL,
+                plan TEXT NOT NULL,results TEXT NOT NULL DEFAULT '[]',
+                error TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS production_runs_created ON production_runs(created_at);
+            CREATE TABLE IF NOT EXISTS outbound_posts(
+                id TEXT PRIMARY KEY,video_path TEXT NOT NULL,
+                platform TEXT NOT NULL,caption TEXT NOT NULL,
+                title TEXT NOT NULL,publish_at TEXT NOT NULL,
+                public_url TEXT NOT NULL DEFAULT '',
+                privacy TEXT NOT NULL DEFAULT 'private',
+                status TEXT NOT NULL DEFAULT 'scheduled',
+                remote_id TEXT NOT NULL DEFAULT '',
+                error TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,updated_at TEXT NOT NULL,
+                UNIQUE(video_path,platform)
+            );
+            CREATE INDEX IF NOT EXISTS outbound_due ON outbound_posts(status,publish_at);
             CREATE TABLE IF NOT EXISTS audit(
                 id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL,
                 kind TEXT NOT NULL, detail TEXT NOT NULL
@@ -86,6 +109,104 @@ class Store:
             job_cols={row["name"] for row in c.execute("PRAGMA table_info(jobs)")}
             if "title" not in job_cols:
                 c.execute("ALTER TABLE jobs ADD COLUMN title TEXT NOT NULL DEFAULT ''")
+
+    def allocate_video_number(self):
+        """Atomic monotonically increasing sequence; gaps after failures are fine."""
+        with self._lock,self.db() as c:
+            c.execute("INSERT OR IGNORE INTO counters(name,value) VALUES('video',0)")
+            c.execute("UPDATE counters SET value=value+1 WHERE name='video'")
+            return int(c.execute("SELECT value FROM counters WHERE name='video'").fetchone()[0])
+
+    def auto_approve(self,ids):
+        """Records machine checks separately from human approval."""
+        if not ids:return
+        with self._lock,self.db() as c:
+            placeholders=",".join("?" for _ in ids)
+            rows=c.execute("SELECT id,status FROM questions WHERE id IN ("+placeholders+")",ids).fetchall()
+            if len(rows)!=len(set(ids)) or any(r["status"]!="draft" for r in rows):
+                raise ValueError("Only drafts can pass automated checks")
+            c.execute("UPDATE questions SET status='auto_approved' WHERE id IN ("+
+                      placeholders+")",ids)
+
+    def create_production_run(self,run_id,plan):
+        with self._lock,self.db() as c:
+            c.execute("""INSERT INTO production_runs(id,status,plan,results,created_at,updated_at)
+                         VALUES(?,'running',?,'[]',?,?)""",
+                     (run_id,json.dumps(plan,ensure_ascii=False),utcnow(),utcnow()))
+
+    def update_production_run(self,run_id,status,results,error=""):
+        if status not in ("running","completed","partial","failed","interrupted"):
+            raise ValueError("Invalid run status")
+        with self._lock,self.db() as c:
+            row=c.execute("""UPDATE production_runs SET status=?,results=?,error=?,updated_at=?
+                         WHERE id=?""",(status,json.dumps(results,ensure_ascii=False),
+                                         str(error)[:900],utcnow(),run_id))
+            if row.rowcount!=1:raise ValueError("Production run not found")
+
+    def list_production_runs(self,limit=40):
+        with self.db() as c:
+            return [{**dict(r),"plan":json.loads(r["plan"]),
+                     "results":json.loads(r["results"])}
+                    for r in c.execute("SELECT * FROM production_runs ORDER BY created_at DESC LIMIT ?",(limit,))]
+
+    def recover_incomplete_runs(self):
+        # Crash-restart recovery: never misreport a partially generated run as complete.
+        with self._lock,self.db() as c:
+            c.execute("UPDATE production_runs SET status='interrupted',updated_at=? WHERE status='running'",
+                      (utcnow(),))
+            c.execute("UPDATE outbound_posts SET status='needs_review',error='App restarted during upload; check the platform before trying again',updated_at=? WHERE status='publishing'",
+                      (utcnow(),))
+
+    def schedule_outbound(self,video_path,platform,title,caption,when,
+                          public_url="",privacy="private"):
+        from datetime import timedelta
+        if platform not in ("youtube","instagram"):
+            raise ValueError("Unsupported automated publishing platform")
+        point=datetime.fromisoformat(str(when).replace("Z","+00:00"))
+        if point.tzinfo is None or point.astimezone(timezone.utc)<=datetime.now(timezone.utc):
+            raise ValueError("Schedule must be in the future with timezone")
+        path=Path(video_path).resolve()
+        if path.suffix.lower()!=".mp4" or not path.is_file():
+            raise ValueError("Missing MP4")
+        if privacy not in ("private","unlisted","public"):
+            raise ValueError("Unknown YouTube privacy")
+        if len(title)>150 or len(caption)>2000:raise ValueError("Publishing text is too long")
+        jid=uuid.uuid4().hex
+        with self._lock,self.db() as c:
+            c.execute("""INSERT INTO outbound_posts
+              (id,video_path,platform,title,caption,publish_at,public_url,privacy,status,created_at,updated_at)
+              VALUES(?,?,?,?,?,?,?,?,'scheduled',?,?)""",
+              (jid,str(path),platform,title,caption,point.astimezone(timezone.utc).isoformat(),
+               public_url,privacy,utcnow(),utcnow()))
+        return jid
+
+    def claim_outbound(self,limit=2):
+        with self._lock,self.db() as c:
+            rows=c.execute("""SELECT * FROM outbound_posts WHERE status='scheduled'
+                              AND publish_at<=? ORDER BY publish_at LIMIT ?""",
+                          (utcnow(),limit)).fetchall()
+            result=[]
+            for row in rows:
+                c.execute("UPDATE outbound_posts SET status='publishing',updated_at=? WHERE id=? AND status='scheduled'",
+                          (utcnow(),row["id"]))
+                result.append(dict(row))
+            return result
+
+    def finish_outbound(self,jid,status,remote_id="",error=""):
+        if status not in ("submitted","needs_review","cancelled"):
+            raise ValueError("Unknown publishing status")
+        with self._lock,self.db() as c:
+            c.execute("""UPDATE outbound_posts SET status=?,remote_id=?,error=?,updated_at=?
+                         WHERE id=?""",(status,str(remote_id)[:200],str(error)[:700],utcnow(),jid))
+
+    def list_outbound(self,limit=100):
+        with self.db() as c:
+            return [dict(r) for r in c.execute("SELECT * FROM outbound_posts ORDER BY created_at DESC LIMIT ?",(limit,))]
+
+    def has_outbound(self,video_path):
+        with self.db() as c:
+            return c.execute("SELECT 1 FROM outbound_posts WHERE video_path=? LIMIT 1",
+                             (str(Path(video_path).resolve()),)).fetchone() is not None
 
     def log(self, kind, detail):
         with self._lock, self.db() as c:
@@ -146,7 +267,9 @@ class Store:
             data = {r["id"]: r for r in c.execute(query, ids)}
             if len(data) != len(set(ids)):
                 raise ValueError("Không tìm thấy một số câu hỏi.")
-            if status and any(data[i]["status"] != status for i in ids):
+            if status and any(data[i]["status"] not in
+                (status if isinstance(status,(tuple,list,set)) else (status,))
+                for i in ids):
                 raise ValueError("Câu hỏi phải được duyệt trước khi dựng video.")
             return [Quiz.parse(json.loads(data[i]["payload"])) for i in ids]
 
@@ -191,7 +314,8 @@ class Store:
                        MAX(topic) topic,MAX(created_at) created_at,
                        COUNT(*) total,
                        SUM(CASE WHEN status='draft' THEN 1 ELSE 0 END) drafts,
-                       SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) approved,
+                       SUM(CASE WHEN status IN ('approved','auto_approved') THEN 1 ELSE 0 END) approved,
+                       SUM(CASE WHEN status='auto_approved' THEN 1 ELSE 0 END) auto_approved,
                        SUM(CASE WHEN status='rendered' THEN 1 ELSE 0 END) rendered
                 FROM questions GROUP BY COALESCE(NULLIF(batch_id,''),'legacy')
                 ORDER BY created_at DESC LIMIT ?""",(limit,))]
@@ -202,7 +326,7 @@ class Store:
         with self._lock,self.db() as c:
             placeholders=",".join("?" for _ in ids)
             rows=c.execute("SELECT id,topic,status FROM questions WHERE id IN ("+placeholders+")",ids).fetchall()
-            if len(rows)!=len(set(ids)) or any(row["status"]!="approved" for row in rows):
+            if len(rows)!=len(set(ids)) or any(row["status"] not in ("approved","auto_approved") for row in rows):
                 raise ValueError("All questions must be approved and not yet rendered.")
             vid=uuid.uuid4().hex
             c.execute("""INSERT INTO video_registry(id,path,question_ids,topic,status,created_at)

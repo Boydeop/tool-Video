@@ -135,8 +135,22 @@ def _logo_overlay(img,path,position="top-right",scale=.15,logo_x=0.82,logo_y=0.1
     result.alpha_composite(logo,(x,y))
     return result.convert("RGB")
 
+def shorts_safe_frame(image,theme):
+    """Keep visual text away from UI overlays in YouTube Shorts / Instagram Reels.
+
+    9:16 canvas stays intact; the design is inset from the top, right action
+    rail and lower caption/audio controls. Logo is composited afterwards so
+    drag-to-position coordinates remain exact.
+    """
+    bg=THEMES[theme][0]
+    output=Image.new("RGB",(540,960),bg)
+    shrunk=image.resize((421,749),Image.Resampling.LANCZOS)
+    output.paste(shrunk,(20,63))
+    return output
+
+
 def draw_intro(theme,width=540,logo_path=None,logo_position="top-right",logo_scale=.15,progress=1,
-               logo_x=.82,logo_y=.10):
+               logo_x=.82,logo_y=.10,shorts_safe=False):
     bg,fg,accent=THEMES[theme]
     im=Image.new("RGB",(540,960),bg);d=ImageDraw.Draw(im)
     d.rounded_rectangle((36,225,504,630),radius=29,fill="#FFFFFF" if theme!="blue" else "#153E68")
@@ -144,6 +158,7 @@ def draw_intro(theme,width=540,logo_path=None,logo_position="top-right",logo_sca
     _label(d,270,380,"THỬ THÁCH TIẾNG HÀN",424,2,36,"#191612" if theme!="blue" else "#FFFFFF",28)
     _label(d,270,503,"Chọn đáp án đúng trước khi hết giờ!",410,2,25,"#324D63" if theme!="blue" else "#D9EBFD",21)
     _label(d,270,727,"한국어 퀴즈",410,1,41,accent,30)
+    if shorts_safe:im=shorts_safe_frame(im,theme)
     im=_logo_overlay(im,logo_path,logo_position,logo_scale,logo_x,logo_y)
     if width!=540:im=im.resize((width,width*16//9),Image.Resampling.LANCZOS)
     return im
@@ -151,14 +166,14 @@ def draw_intro(theme,width=540,logo_path=None,logo_position="top-right",logo_sca
 def draw_frame(quiz:Quiz,idx,total,theme,elapsed,think=5.5,width=540,
                reveal=2.8,transition=.8,logo_path=None,
                logo_position="top-right",logo_scale=.15,
-               prompt_duration=1.35,answer_duration=None,logo_x=.82,logo_y=.10):
+               prompt_duration=1.35,answer_duration=None,logo_x=.82,logo_y=.10,shorts_safe=False):
     """Render a frame with three explicit stages: speaking, thinking, reveal."""
     if theme not in THEMES:
         raise ValueError("Unknown video theme")
     if width!=540:
         frame=draw_frame(quiz,idx,total,theme,elapsed,think,540,
                          reveal,transition,logo_path,logo_position,logo_scale,
-                         prompt_duration,answer_duration,logo_x,logo_y)
+                         prompt_duration,answer_duration,logo_x,logo_y,shorts_safe)
         return frame.resize((width,width*16//9),Image.Resampling.LANCZOS)
 
     bg,fg,accent=THEMES[theme]
@@ -244,6 +259,7 @@ def draw_frame(quiz:Quiz,idx,total,theme,elapsed,think=5.5,width=540,
         _label(d,270,860,"NGHE XONG, CHỌN ĐÁP ÁN",463,1,19,fg,16)
 
     _label(d,270,929,"tienghansoeasy.io.vn",470,1,17,accent,15)
+    if shorts_safe:im=shorts_safe_frame(im,theme)
     im=_logo_overlay(im,logo_path,logo_position,logo_scale,logo_x,logo_y)
 
     # Soft transition; no hard flashes or blurred Hangul.
@@ -261,7 +277,7 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
            think=5.5,reveal=2.8,with_voice=False,voice_cache=None,
            voice_engine="auto",transition=.8,intro=1.5,sfx=True,sfx_volume=.34,
            logo_path=None,logo_position="top-right",logo_scale=.15,
-           logo_x=.82,logo_y=.10,progress=None):
+           logo_x=.82,logo_y=.10,progress=None,shorts_safe=False):
     if not questions or theme not in THEMES or width not in (540,1080) or fps not in (24,30):
         raise ValueError("Unsupported video configuration.")
     if not 4<=think<=12 or not 1.5<=reveal<=7 or not .3<=transition<=2 or not .5<=intro<=4:
@@ -309,7 +325,7 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
             step=max(1,frames_total//75)
             for tick in range(int(round(scenes[0].start*fps))):
                 im=draw_intro(theme,width,logo_path,logo_position,logo_scale,
-                              logo_x=logo_x,logo_y=logo_y)
+                              logo_x=logo_x,logo_y=logo_y,shorts_safe=shorts_safe)
                 proc.stdin.write(im.tobytes())
                 frames_done+=1
                 if frames_done%step==0:report(24+65*frames_done/frames_total,"Đang vẽ khung video")
@@ -320,7 +336,7 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
                                   reveal,transition,logo_path,logo_position,logo_scale,
                                   prompt_duration=scene.prompt_duration,
                                   answer_duration=scene.answer_duration,
-                                  logo_x=logo_x,logo_y=logo_y)
+                                  logo_x=logo_x,logo_y=logo_y,shorts_safe=shorts_safe)
                     proc.stdin.write(im.tobytes())
                     frames_done+=1
                     if frames_done%step==0:report(24+65*frames_done/frames_total,
@@ -340,6 +356,17 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
         if events:
             mux_narration(silent,events,target,duration)
         else:
-            silent.replace(target)
+            # Even silent export must contain an AAC stereo stream for Reels.
+            command=[binary("ffmpeg"),"-hide_banner","-loglevel","error","-y",
+                    "-i",str(silent),"-f","lavfi","-i",
+                    "anullsrc=channel_layout=stereo:sample_rate=48000",
+                    "-map","0:v:0","-map","1:a:0","-c:v","copy",
+                    "-c:a","aac","-b:a","128k","-t",f"{duration:.4f}",
+                    "-movflags","+faststart",str(target)]
+            result=subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                                  timeout=max(90,int(duration*10)),check=False,**hidden_subprocess())
+            if result.returncode:
+                raise RuntimeError("Silent AAC mux failed: "+
+                                   result.stderr.decode("utf-8","replace")[-500:])
         report(98,"Đã dựng MP4, đang ghi metadata")
     return str(target)

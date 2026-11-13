@@ -1,10 +1,14 @@
 """Local scheduler with at-most-once dispatch and manual reconciliation."""
 import threading
 from .publisher import publish_reel
+from .youtube import YouTubeAccount
+from .instagram import InstagramAccount
 
 class Scheduler:
     def __init__(self,store,interval=30):
         self.store,self.interval=store,interval
+        self.youtube=YouTubeAccount(store.path.parent)
+        self.instagram=InstagramAccount(store.path.parent)
         self.stopped=threading.Event()
         self.thread=None
     def tick(self):
@@ -16,6 +20,22 @@ class Scheduler:
             except Exception as exc:
                 self.store.finish_job(job["id"],"needs_review",error=str(exc))
                 self.store.log("needs_review",job["id"])
+        for job in self.store.claim_outbound():
+            try:
+                if job["platform"]=="youtube":
+                    remote=self.youtube.upload(job["video_path"],job["title"],
+                                               job["caption"],job["privacy"])
+                elif job["platform"]=="instagram":
+                    remote=self.instagram.publish(job["public_url"],job["caption"])
+                else:
+                    raise RuntimeError("Unknown outbound platform")
+                self.store.finish_outbound(job["id"],"submitted",remote_id=remote)
+                self.store.log("platform_submitted",job["platform"]+" "+job["id"])
+            except Exception as exc:
+                # It is unsafe to repeat an uncertain remote upload automatically.
+                self.store.finish_outbound(job["id"],"needs_review",
+                                           error=type(exc).__name__+": "+str(exc)[:500])
+                self.store.log("platform_needs_review",job["platform"]+" "+job["id"])
     def run(self):
         while not self.stopped.is_set():
             try: self.tick()
