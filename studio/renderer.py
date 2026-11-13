@@ -135,24 +135,66 @@ def _logo_overlay(img,path,position="top-right",scale=.15,logo_x=0.82,logo_y=0.1
     result.alpha_composite(logo,(x,y))
     return result.convert("RGB")
 
-def shorts_safe_frame(image,theme):
-    """Keep visual text away from UI overlays in YouTube Shorts / Instagram Reels.
+@lru_cache(maxsize=6)
+def korean_background(theme):
+    """Procedural, low-opacity Korean cultural illustrations. No external assets.
 
-    9:16 canvas stays intact; the design is inset from the top, right action
-    rail and lower caption/audio controls. Logo is composited afterwards so
-    drag-to-position coordinates remain exact.
+    Hanok eaves, traditional window lattice, mountain contour, mugunghwa-like
+    five-petal rosette and taegeuk circle. Kept underneath all text/cards.
     """
-    bg=THEMES[theme][0]
-    output=Image.new("RGB",(540,960),bg)
-    shrunk=image.resize((421,749),Image.Resampling.LANCZOS)
-    output.paste(shrunk,(20,63))
+    background=Image.new("RGBA",(540,960),THEMES[theme][0])
+    layer=Image.new("RGBA",(540,960),(0,0,0,0))
+    d=ImageDraw.Draw(layer)
+    ink=(36,88,155,22) if theme!="blue" else (224,237,255,24)
+    warm=(212,63,38,23) if theme!="blue" else (255,230,216,33)
+    # Traditional Hanok eaves: a graceful curved roofline and supporting beams.
+    d.arc((-86,-40,335,234),170,350,fill=ink,width=6)
+    d.line([(2,134),(120,103),(241,126),(328,109),(423,148)],
+           fill=ink,width=5,joint="curve")
+    d.line([(66,145),(66,186),(286,186),(286,146)],fill=ink,width=3)
+    # Traditional lattice window at edges, barely visible behind the cards.
+    for x in (8,500):
+        d.rectangle((x,300,x+28,500),outline=ink,width=3)
+        for y in range(320,498,29):
+            d.line((x,y,x+28,y),fill=ink,width=2)
+        d.line((x+14,300,x+14,500),fill=ink,width=2)
+    # Mountain line, inspired by Korean ink landscapes.
+    d.line([(0,872),(80,826),(119,850),(199,794),(274,835),
+            (350,784),(443,834),(540,792)],fill=ink,width=5,joint="curve")
+    d.line([(0,892),(122,864),(217,885),(351,845),(540,870)],
+           fill=ink,width=3,joint="curve")
+    # Five petal mugunghwa-like motif.
+    import math as _math
+    cx,cy=450,180
+    for n in range(5):
+        theta=2*_math.pi*n/5
+        px=cx+36*_math.cos(theta)
+        py=cy+36*_math.sin(theta)
+        d.ellipse((px-26,py-26,px+26,py+26),outline=warm,width=4)
+    d.ellipse((cx-10,cy-10,cx+10,cy+10),fill=warm)
+    # Faint taegeuk, a cultural motif rather than an intrusive flag.
+    d.arc((407,680,517,790),8,352,fill=ink,width=6)
+    d.arc((427,684,486,752),180,360,fill=warm,width=5)
+    d.arc((427,726,486,794),0,180,fill=ink,width=5)
+    background=Image.alpha_composite(background,layer)
+    return background.convert("RGB")
+
+def shorts_safe_frame(image,theme):
+    """Balanced 9:16 safe composition with full-frame themed background.
+
+    The old (421,749) content at (20,63) created a giant empty lower/right
+    block. Use a centered, readable inset with modest right action-rail room.
+    """
+    output=korean_background(theme).copy()
+    shrunk=image.resize((462,821),Image.Resampling.LANCZOS)
+    output.paste(shrunk,(27,58))
     return output
 
 
 def draw_intro(theme,width=540,logo_path=None,logo_position="top-right",logo_scale=.15,progress=1,
                logo_x=.82,logo_y=.10,shorts_safe=False):
     bg,fg,accent=THEMES[theme]
-    im=Image.new("RGB",(540,960),bg);d=ImageDraw.Draw(im)
+    im=korean_background(theme).copy();d=ImageDraw.Draw(im)
     d.rounded_rectangle((36,225,504,630),radius=29,fill="#FFFFFF" if theme!="blue" else "#153E68")
     _label(d,270,302,"TIẾNG HÀN SO EASY",420,1,34,accent,26)
     _label(d,270,380,"THỬ THÁCH TIẾNG HÀN",424,2,36,"#191612" if theme!="blue" else "#FFFFFF",28)
@@ -177,7 +219,7 @@ def draw_frame(quiz:Quiz,idx,total,theme,elapsed,think=5.5,width=540,
         return frame.resize((width,width*16//9),Image.Resampling.LANCZOS)
 
     bg,fg,accent=THEMES[theme]
-    im=Image.new("RGB",(540,960),bg)
+    im=korean_background(theme).copy()
     d=ImageDraw.Draw(im)
     answer_start=prompt_duration+think
     show_answer=elapsed>=answer_start

@@ -85,10 +85,13 @@ class ExportQueue:
                 self.service.store.update_production_run(jid,"running",items)
             completed=run_pipeline(self.service,plan,progress,store_results)
             outputs=completed["videos"]
-            terminal="completed" if len(outputs)==plan.videos else ("partial" if outputs else "failed")
+            all_full=(len(outputs)==plan.videos and
+                      all(row.get("status")=="rendered" for row in results))
+            terminal="completed" if all_full else ("partial" if outputs else "failed")
             self.service.store.update_production_run(jid,terminal,results)
             self._update(jid,status=terminal,percent=100,
-                         phase="Đã kết thúc Autopilot: "+str(len(outputs))+"/"+str(plan.videos)+" MP4",
+                         phase=("Đã hoàn thành "+str(len(outputs))+"/"+str(plan.videos)+
+                            " MP4"+(" (một số video ít câu hơn)" if terminal=="partial" else "")),
                          videos=outputs,topics=results)
         except Exception as exc:
             self.service.store.update_production_run(jid,"failed",results,str(exc))

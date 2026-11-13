@@ -344,3 +344,17 @@ Lịch đăng trên từng nền tảng được lưu độc lập trong SQLite,
 - Nếu chưa có kiểm chứng về dịch Hàn-Việt, hãy xem lại mẫu ngẫu nhiên trước khi đăng công khai hàng loạt.
 - Các bài test CI dùng mock Google/Meta; việc upload thật vẫn phải kiểm thử với tài khoản cá nhân đã được cấp quyền.
 
+
+
+## v1.1.0 · Autopilot Recovery, Seasonal Calendar and Korean-themed Shorts
+
+- Fixed the previous all-or-nothing gate: a valid set of 4/5 no longer prevents every MP4. AI tries to enrich missing Korean romanization/meanings, requests additional questions (bounded retry), and optionally uses a **clearly labelled curated fallback** with explicit word/meaning/romanization triples. At least 2 structurally valid questions can render a shorter video, marked rendered_short and partial in history.
+- Rejected questions remain drafts. Machine checks do not prove that a Korean translation is linguistically correct. Curated fallback vocabulary is finite and explicitly identified, not claimed to be limitless AI content.
+- Separate random or seasonal topic modes. Seasonal subjects use upcoming Gregorian events inside 55 days, Vietnam time UTC+7; for example 13 November 2026 is 42 days before Christmas on 25 December. Noel video branches cover greetings, presents, winter, food, shopping and decorations. Korean lunar holidays need verified year-specific dates and are not assigned fabricated Gregorian dates.
+- Shorts Safe layout revised from tiny 421x749/offset 20,63 to balanced 462x821/offset 27,58 on a complete 540x960 themed background. Faint Korean Hanok eaves, lattice, mountains, stylized flower and Taegeuk motifs are generated procedurally by Pillow and remain under all text.
+- Automatic metadata is enabled by default: topic/TOPIK title, artist Tiếng Hàn So Easy, copyright with current year and website, website comment. After SEO generation the MP4 title tag is updated again. The manual override remains inside Settings, under an advanced panel. Video metadata is not DRM, Content ID or legal copyright proof.
+- UI reorganized into five screens: Production (includes manual question creation under Advanced), Bank & Preview (manual selected-question render under Advanced), API & Voice, Publishing, Settings & Cache. Old question bank and video library are preserved.
+- Important fix: saving production settings no longer hard-codes 24fps for 1080p. 1080x1920 exports use 30fps, 540x960 testing uses 24fps.
+- TikTok still does NOT have unauthorized public Direct Post. Facebook, YouTube and Instagram require the appropriate account permissions; local scheduling still requires an active Studio worker.
+
+Regression tests cover 4 MP4 from no-AI seeded fallback, seasonal Christmas videos, missing-data rejection when fallback is off, metadata defaults, rendering geometry and UI navigation.
