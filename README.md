@@ -107,7 +107,7 @@ Run tests:
 - The renderer uses a 540x960 base canvas and upscales for larger resolutions; native 1080p typography is a future improvement.
 - Daily batch needs external cron/Windows Task Scheduler trigger.
 
-## Windows one-click EXE (v0.2.0)
+## Windows one-click EXE (v0.2.1)
 
 A Windows GitHub Actions workflow creates a standalone desktop EXE containing Python runtime, Pillow, edge-tts, FFmpeg and FFprobe. Download from the repository Releases (or the Build Windows EXE Actions artifact if release publishing is restricted). Double-click TiengHanSoEasyStudio.exe to start the local dashboard. Data is stored in the user's LOCALAPPDATA/TiengHanSoEasyStudio directory. The EXE does not require installing Python or FFmpeg separately.
 
@@ -124,3 +124,9 @@ The dashboard now enables narration by default (checkbox). It requests online Vi
 - Offline FFmpeg audio mux is covered by automated tests using generated tone audio without network.
 - Online edge-tts and the actual Meta API require separate tests with Internet and user credentials.
 - Windows EXE build is performed and published by GitHub Actions on the main branch.
+
+## Windows GUI hotfix (v0.2.1)
+
+Fixes Brave/Chrome ERR_EMPTY_RESPONSE when running the frozen no-console EXE. Python's default HTTP request logger tries to write to sys.stderr, which is None in PyInstaller --windowed. The HTTP handler now sends request and crash logs through the file logger instead. The GUI waits for the health endpoint before opening the browser and shows a usable startup error. Logs: LOCALAPPDATA/TiengHanSoEasyStudio/studio.log. GitHub Actions now launches the actual built EXE in --smoke-server mode and verifies /health, / and /api/status before releasing it.
+
+If you previously downloaded v0.2.0, close it and use v0.2.1 instead. The existing local database and saved API keys stay in LOCALAPPDATA/TiengHanSoEasyStudio.

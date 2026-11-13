@@ -1,7 +1,10 @@
 """Local-only UI, localhost access only: not intended for public deployment."""
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 import json
+import logging
 from .scheduler import Scheduler
+
+LOGGER = logging.getLogger("tienghansoeasy.http")
 
 HTML='''<!DOCTYPE html><html lang="vi"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -63,9 +66,14 @@ for(const job of d.jobs){const tr=document.createElement('tr');for(const val of 
 }catch(err){show(err.message)}}refresh()
 </script></html>'''
 
-def serve(service,host="127.0.0.1",port=8765):
-    scheduler=Scheduler(service.store);scheduler.start()
+def create_server(service,host="127.0.0.1",port=8765):
     class Handler(BaseHTTPRequestHandler):
+        def log_message(self,fmt,*args):
+            # PyInstaller --windowed sets sys.stderr=None. The default
+            # BaseHTTPRequestHandler log_message would crash in send_response().
+            # Never log credentials or POST bodies.
+            LOGGER.info("%s %s",self.client_address[0],fmt % args)
+
         def send(self,status,data,mime="application/json"):
             content=(data if isinstance(data,str) else json.dumps(data,ensure_ascii=False)).encode()
             self.send_response(status);self.send_header("Content-Type",mime+"; charset=utf-8")
@@ -73,6 +81,7 @@ def serve(service,host="127.0.0.1",port=8765):
             self.end_headers();self.wfile.write(content)
         def do_GET(self):
             if self.path=="/":self.send(200,HTML,"text/html")
+            elif self.path=="/health":self.send(200,{"status":"ok","app":"TiengHanSoEasyStudio"})
             elif self.path=="/api/status":
                 self.send(200,{"questions":service.store.list_questions(limit=300),
                                "jobs":service.store.list_jobs(),
@@ -113,7 +122,25 @@ def serve(service,host="127.0.0.1",port=8765):
                         str(raw.get("caption","")),str(raw.get("scheduled_at","")))}
                 self.send(200,result)
             except (ValueError,RuntimeError,KeyError) as exc:self.send(400,{"error":str(exc)})
-    print("Open http://127.0.0.1:8765")
-    try:ThreadingHTTPServer((host,port),Handler).serve_forever()
-    except KeyboardInterrupt:pass
-    finally:scheduler.stop()
+    class LocalServer(ThreadingHTTPServer):
+        daemon_threads=True
+        def handle_error(self,request,client_address):
+            # The base implementation writes to sys.stderr (None in GUI EXEs).
+            LOGGER.exception("HTTP handler crashed for %s",client_address[0])
+    return LocalServer((host,port),Handler)
+
+def serve(service,host="127.0.0.1",port=8765,on_ready=None):
+    server=create_server(service,host,port)
+    scheduler=Scheduler(service.store)
+    try:
+        scheduler.start()
+        LOGGER.info("Studio server bound to %s:%s",*server.server_address)
+        if on_ready:
+            on_ready(server.server_address)
+        server.serve_forever(poll_interval=0.2)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        scheduler.stop()
+        server.server_close()
+
