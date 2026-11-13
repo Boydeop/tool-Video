@@ -22,9 +22,9 @@ class AudioTests(unittest.TestCase):
                 str(sample)],check=True,timeout=30)
             silent=root/"silent.mp4"
             final=root/"spoken.mp4"
-            render([q],silent,theme="hanji",fps=2,think=0.5,reveal=0.5)
+            render([q],silent,theme="hanji",fps=24,think=4,reveal=1.5,transition=.3,intro=.5,sfx=False)
             self.assertEqual(audio_streams(silent),[])
-            mux_narration(silent,[(sample,50)],final,1)
+            mux_narration(silent,[(sample,50)],final,6.3)
             self.assertIn("aac",audio_streams(final))
             self.assertGreater(final.stat().st_size,silent.stat().st_size)
 

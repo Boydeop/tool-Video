@@ -111,15 +111,15 @@ def test_speech(language,engine,cache_dir):
     path=synthesize(phrase,VOICES[language][0],cache_dir,engine)
     return path
 
-def prepare_events(questions,cache_dir,think,reveal,engine="auto"):
+def prepare_events(questions,cache_dir,think,reveal,engine="auto",intro=0,transition=0):
     events=[]
-    duration=think+reveal
+    cycle=think+reveal+transition
     for index,q in enumerate(questions):
-        offset=round(index*duration*1000)
+        offset=round((intro+index*cycle)*1000)
         vi=synthesize(q.question,VI_VOICE,cache_dir,engine)
         ko=synthesize(q.correct,KO_VOICE,cache_dir,engine)
-        events.append((vi,offset))
-        events.append((ko,offset+round(think*1000)))
+        events.append((vi,offset,"voice"))
+        events.append((ko,offset+round(think*1000),"voice"))
     return events
 
 def audio_streams(path):
@@ -131,25 +131,41 @@ def audio_streams(path):
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
 def mux_narration(silent_video,events,final_path,duration):
-    if not events: raise ValueError("No speech assets to mux")
-    cmd=[binary("ffmpeg"),"-hide_banner","-loglevel","error","-y",
-         "-i",str(silent_video)]
+    """Normalize each spoken clip, duck SFX, and limit master mix.
+
+    Accepts legacy (path, delay_ms) pairs and new (path, delay_ms, kind).
+    Speech target -18 LUFS, SFX gentler, master peak limited to avoid clipping.
+    """
+    if not events:raise ValueError("No narration or SFX events")
+    cmd=[binary("ffmpeg"),"-hide_banner","-loglevel","error","-y","-i",str(silent_video)]
     filters=[]
-    for n,(audio,delay_ms) in enumerate(events,1):
-        if not Path(audio).is_file(): raise ValueError("Missing narration clip")
+    for n,event in enumerate(events,1):
+        audio,delay_ms=event[0],int(event[1])
+        kind=event[2] if len(event)>2 else "voice"
+        if kind not in ("voice","sfx") or delay_ms<0 or not Path(audio).is_file():
+            raise ValueError("Invalid narration or SFX event")
         cmd.extend(["-i",str(audio)])
-        filters.append(f"[{n}:a]adelay={int(delay_ms)}:all=1[a{n}]")
+        # Per-clip normalization prevents Korean voice being far louder than
+        # Vietnamese voice; final limiter prevents mixed peaks.
+        process=("loudnorm=I=-18:TP=-2:LRA=8" if kind=="voice"
+                 else "volume=0.55")
+        filters.append(f"[{n}:a]aresample=48000,{process},"
+                       f"aformat=sample_fmts=fltp:channel_layouts=stereo,"
+                       f"adelay={delay_ms}:all=1[a{n}]")
     refs="".join(f"[a{n}]" for n in range(1,len(events)+1))
-    filters.append(refs+f"amix=inputs={len(events)}:duration=longest:dropout_transition=0,atrim=duration={duration:.3f},apad[audio]")
+    filters.append(refs+f"amix=inputs={len(events)}:duration=longest:normalize=0,"
+                   f"alimiter=limit=0.89,atrim=duration={duration:.4f},apad[audio]")
     cmd+=["-filter_complex",";".join(filters),"-map","0:v:0","-map","[audio]",
-          "-c:v","copy","-c:a","aac","-b:a","160k",
-          "-t",f"{duration:.3f}","-movflags","+faststart",str(final_path)]
-    result=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
-                          text=True,timeout=max(120,int(duration*10)),check=False)
-    if result.returncode:
+          "-c:v","copy","-c:a","aac","-ar","48000","-ac","2","-b:a","160k",
+          "-t",f"{duration:.4f}","-movflags","+faststart",str(final_path)]
+    try:
+        result=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                              text=True,timeout=max(180,int(duration*20)),check=False)
+        if result.returncode:
+            raise RuntimeError("Audio normalization/mux failed: "+result.stderr[-1600:])
+        if not audio_streams(final_path):
+            raise RuntimeError("Output MP4 has no AAC audio stream.")
+    except Exception:
         Path(final_path).unlink(missing_ok=True)
-        raise RuntimeError("Narration mux failed: "+result.stderr[-1400:])
-    if not audio_streams(final_path):
-        Path(final_path).unlink(missing_ok=True)
-        raise RuntimeError("Output MP4 contains no audio stream.")
+        raise
     return str(final_path)

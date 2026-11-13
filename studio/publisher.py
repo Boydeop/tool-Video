@@ -5,12 +5,14 @@ from pathlib import Path
 import urllib.error
 import urllib.parse
 import urllib.request
+from .facebook import credentials
 
 class PublishingError(RuntimeError): pass
 
-def publish_reel(video_path,caption):
-    page=os.getenv("FB_PAGE_ID","").strip()
-    token=os.getenv("FB_PAGE_ACCESS_TOKEN","").strip()
+def publish_reel(video_path,caption,title=""):
+    page,token=credentials()
+    page=page.strip()
+    token=token.strip()
     version=os.getenv("META_GRAPH_VERSION","v24.0")
     if not page.isdigit() or not token: raise PublishingError("Set valid Page ID and Page access token")
     if not version.startswith("v") or not version[1:].replace(".","").isdigit():
@@ -40,7 +42,8 @@ def publish_reel(video_path,caption):
             raise PublishingError("Upload uncertain; check Page before retry") from exc
     if response.get("success") is False: raise PublishingError("Meta did not confirm upload")
     finish=urllib.request.Request(base,data=form({"upload_phase":"finish","video_id":video_id,
-        "video_state":"PUBLISHED","description":caption[:2000]}))
+        "video_state":"PUBLISHED","description":caption[:2000],
+        "title":str(title)[:160]}))
     try:
         with urllib.request.urlopen(finish,timeout=120) as r: result=json.load(r)
     except (urllib.error.HTTPError,urllib.error.URLError) as exc:

@@ -107,7 +107,7 @@ Run tests:
 - The renderer uses a 540x960 base canvas and upscales for larger resolutions; native 1080p typography is a future improvement.
 - Daily batch needs external cron/Windows Task Scheduler trigger.
 
-## Windows one-click EXE (v0.3.1)
+## Windows one-click EXE (v0.4.0)
 
 A Windows GitHub Actions workflow creates a standalone desktop EXE containing Python runtime, Pillow, edge-tts, FFmpeg and FFprobe. Download from the repository Releases (or the Build Windows EXE Actions artifact if release publishing is restricted). Double-click TiengHanSoEasyStudio.exe to start the local dashboard. Data is stored in the user's LOCALAPPDATA/TiengHanSoEasyStudio directory. The EXE does not require installing Python or FFmpeg separately.
 
@@ -197,3 +197,39 @@ voice explicitly to create a silent MP4 or investigate your network/service.
 
 Settings for API models and keys remain unchanged. The Windows EXE contains
 gTTS in addition to edge-tts, Pillow, FFmpeg and FFprobe.
+
+
+## v0.4.0 · Production studio
+
+- **Better type rendering:** Vietnamese is laid out with Windows Segoe UI and Korean with Malgun Gothic, explicitly separating font runs, Unicode NFC normalization, multi-line wrapping, and a readable minimum font size. The app uses installed OS fonts, not redistributable fonts. Linux preview requires suitable Noto Sans CJK and DejaVu fonts.
+- **Slower, adjustable pacing:** defaults: opening 1.5s, countdown 5.5s, answer 2.8s, transition 0.8s. Video renders at 24 FPS for Facebook Reels. Each question has a soft fade/slide.
+- **Consistent speech loudness:** FFmpeg loudnorm is applied to each TTS audio clip, with a peak limiter on the final mix. Original clock ticks, answer chime and transition swooshes are synthesized offline; no sound packs to download. SFX can be disabled and its gain adjusted.
+- **Preview:** preview the exact quiz frame before/after answer, plus generate a short motion/SFX MP4 for one question before rendering a batch.
+- **Branding:** import PNG/JPEG/WebP logo under 2 MB and adjust scale and corner placement; preview and final export share the same compositor.
+- **Storage:** choose custom output and TTS cache folders with the local Windows folder picker. The app stores paths in \`production.local.json\` in your local user-data directory. Existing files are not deleted when changing folders.
+- **Batch history:** new SQLite migration adds batch IDs, an exported status, a video registry and SEO metadata, while keeping your old questions. Filter by batch, by draft/approved/rendered/rejected, and paginate 20 questions per page.
+- **Bulk publishing workflow:** render selected approved questions in groups of up to six per MP4. Successful groups are recorded even if a later group fails. New MP4 files appear in the media library.
+- **Facebook Page connection:** paste your own Page ID and Page Access Token in the Facebook & SEO tab; Studio calls the official Graph API to verify that the Page is readable and stores the token with Windows DPAPI protection for the current Windows user. This is a **manual Page-token connection**, not automatic Facebook OAuth login. A successful read does NOT prove you have pages_manage_posts or Meta App Review approval; those can only be verified through authorized publishing. Never provide your token in chat or GitHub.
+- **AI title/SEO drafts:** select a newly generated, registered MP4 and ask the configured AI provider to draft its Facebook title, description and hashtags based on the quiz questions. You must review/edit the text before scheduling. A draft is not silently published.
+- **Scheduling:** the scheduler still requires the app to remain running. It uses Meta's Page Reels upload API, and keeps ambiguous network results in \`needs_review\`, with no automated repost. A successful upload response is not proof the Page has already surfaced the Reel.
+
+**Availability:** Edge/gTTS, generative AI models and Meta publishing are internet-dependent, quota/permissions-dependent services. CI runs offline mocks and EXE smoke tests, not live Meta publishing or provider accounts. Always verify the Page, test a voice sample and preview one video before bulk publishing.
+
+**Reels video length:** keep the total duration within your Page's supported Reels length by choosing around 3–6 questions per MP4. You can change timing and output resolution in the dashboard.
+
+**Windows paths and saved secrets:** output/cache paths live only in local settings. API keys are still stored as plaintext in the local key file. Facebook token storage uses Windows per-user DPAPI and cannot be migrated to a different Windows user without reconnecting.
+
+
+
+### Export-folder history and honest publishing states
+
+Changing the output directory preserves your previous output directories in local
+\`production.local.json\`. The media library can still find MP4s in previously
+selected export folders and in the original Studio output folder. No existing MP4
+files are moved or deleted.
+
+The app avoids scheduling the same video twice while a scheduled, pending or
+uncertain Meta job is already recorded. After Meta accepts the Reels finish call,
+a job is marked \`submitted\` rather than publicly \`published\`. Confirm its
+public appearance and moderation status on Meta Business Suite. Unexpected
+upload failures are marked \`needs_review\` and never blindly retried.
