@@ -12,7 +12,7 @@ from pathlib import Path
 import subprocess
 import time
 
-from .fftools import binary
+from .fftools import binary, hidden_subprocess
 
 LOGGER=logging.getLogger("tienghansoeasy.voice")
 VOICES={
@@ -116,7 +116,7 @@ def audio_duration(path):
     proc=subprocess.run([binary("ffprobe"),"-v","error",
           "-show_entries","format=duration","-of","default=nk=1:nw=1",
           str(path)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,
-          text=True,timeout=30,check=False)
+          text=True,timeout=30,check=False,**hidden_subprocess())
     if proc.returncode:
         raise SpeechError("Không xác định được độ dài giọng đọc.")
     try:
@@ -128,18 +128,20 @@ def audio_duration(path):
         raise SpeechError("File giọng đọc không có thời lượng hợp lệ.") from exc
 
 def prepare_events(questions,cache_dir,think,reveal,engine="auto",
-                   intro=0,transition=0,fps=24,return_scenes=False):
+                   intro=0,transition=0,fps=24,return_scenes=False,progress=None):
     """Compute narration timeline using each TTS clip's measured duration.
 
     For compatibility, returns events only unless return_scenes=True.
     """
     from .timeline import build_scenes
     clips=[]
-    for question in questions:
+    for position,question in enumerate(questions,1):
+        if progress:progress(position-1,len(questions),"Tạo giọng đọc")
         # Speak the short Vietnamese clue, never a verbose grammar template.
         vi=synthesize(question.short_clue,VI_VOICE,cache_dir,engine)
         ko=synthesize(question.correct,KO_VOICE,cache_dir,engine)
         clips.append((vi,ko,audio_duration(vi),audio_duration(ko)))
+        if progress:progress(position,len(questions),"Đã tải giọng đọc")
     scenes=build_scenes(len(questions),think,reveal,transition,intro,fps,
              [row[2] for row in clips],[row[3] for row in clips])
     events=[]
@@ -156,7 +158,7 @@ def prepare_events(questions,cache_dir,think,reveal,engine="auto",
 def audio_streams(path):
     proc=subprocess.run([binary("ffprobe"),"-v","error","-select_streams","a",
          "-show_entries","stream=codec_name","-of","csv=p=0",str(path)],
-        stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=30,check=False)
+        stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=30,check=False,**hidden_subprocess())
     if proc.returncode:
         raise RuntimeError("ffprobe failed: "+proc.stderr[-600:])
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
@@ -191,7 +193,7 @@ def mux_narration(silent_video,events,final_path,duration):
           "-t",f"{duration:.4f}","-movflags","+faststart",str(final_path)]
     try:
         result=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
-                              text=True,timeout=max(180,int(duration*20)),check=False)
+                              text=True,timeout=max(180,int(duration*20)),check=False,**hidden_subprocess())
         if result.returncode:
             raise RuntimeError("Audio normalization/mux failed: "+result.stderr[-1600:])
         if not audio_streams(final_path):

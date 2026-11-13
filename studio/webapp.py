@@ -9,6 +9,7 @@ import sys
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from .keys import import_txt, readiness, write_keys
+from .exports import ExportQueue
 from .facebook import connect as connect_page, disconnect as disconnect_page, page_status
 from .models import list_models, selected_models, set_model, test_model
 from .quiz import TOPICS
@@ -17,7 +18,7 @@ from .voice import available, readiness as tts_readiness, test_speech, ENGINES
 
 LOGGER = logging.getLogger("tienghansoeasy.http")
 MAX_REQUEST = 4_000_000
-APP_VERSION = "v0.4.1"
+APP_VERSION = "v0.4.2"
 
 
 def _ui_path() -> Path:
@@ -28,6 +29,7 @@ def _ui_path() -> Path:
 
 
 def create_server(service, host="127.0.0.1", port=8765):
+    export_queue=ExportQueue(service)
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             # PyInstaller --windowed uses sys.stderr=None; never write there.
@@ -100,12 +102,17 @@ def create_server(service, host="127.0.0.1", port=8765):
                     params=parse_qs(url.query)
                     qid=params.get("id",[""])[0]
                     theme=params.get("theme",["hanji"])[0]
-                    data=service.preview(qid,theme,params.get("answer",["1"])[0]=="1")
+                    data=service.preview(qid,theme,params.get("answer",["1"])[0]=="1",
+                                         show_logo=params.get("clean",["0"])[0]!="1")
                     self.send_response(200)
                     self.send_header("Content-Type","image/png")
                     self.send_header("Content-Length",str(len(data)))
                     self.send_header("Cache-Control","no-store")
                     self.end_headers();self.wfile.write(data)
+                elif url.path == "/api/render/progress":
+                    params=parse_qs(url.query)
+                    jid=params.get("job_id",[""])[0]
+                    self.respond(200,export_queue.status(jid))
                 elif url.path == "/api/logo":
                     path=service.production.logo()
                     if not path:
@@ -184,7 +191,8 @@ def create_server(service, host="127.0.0.1", port=8765):
                       "/api/models/select", "/api/models/test", "/api/voice/test",
                       "/api/production/settings", "/api/production/choose", "/api/logo/upload",
                       "/api/facebook/connect", "/api/facebook/disconnect", "/api/seo",
-                      "/api/render/batch", "/api/preview/clip")
+                      "/api/render/batch", "/api/preview/clip", "/api/render/start",
+                      "/api/answers/enrich", "/api/answers/save", "/api/videos/metadata")
             if route not in routes:
                 self.respond(404, {"error": "Không tìm thấy chức năng."})
                 return
@@ -239,6 +247,20 @@ def create_server(service, host="127.0.0.1", port=8765):
                         with_voice=raw.get("with_voice") is True,
                         voice_engine=str(raw.get("voice_engine","auto")))
                     result={"preview_url":"/api/preview/clip/"+name.name}
+                elif route == "/api/render/start":
+                    ids=raw.get("ids",[])
+                    limit=int(raw.get("per_video",6))
+                    result=export_queue.start(ids,
+                        theme=str(raw.get("theme","hanji")),per_video=limit,
+                        with_voice=raw.get("with_voice") is True,
+                        voice_engine=str(raw.get("voice_engine","auto")))
+                elif route == "/api/answers/enrich":
+                    result=service.enrich_answer_details(raw.get("ids",[]))
+                elif route == "/api/answers/save":
+                    result=service.edit_answer_details(str(raw.get("id","")),
+                           raw.get("details",{}))
+                elif route == "/api/videos/metadata":
+                    result=service.overwrite_video_metadata(str(raw.get("video_name","")))
                 elif route == "/api/render/batch":
                     result=service.render_many(raw.get("ids",[]),
                         theme=str(raw.get("theme","hanji")),
