@@ -163,6 +163,7 @@ class ShortProfileTests(unittest.TestCase):
             ident=service.store.insert_question(quiz(0))
             service.store.approve([ident])
             def render(_items,path,**kwargs):
+                Path(path).parent.mkdir(parents=True,exist_ok=True)
                 Path(path).write_bytes(b"test")
                 self.assertTrue(kwargs["shorts_safe"])
                 return str(path)
