@@ -14,7 +14,7 @@ from studio.database import Store
 from studio.quality import inspect_quiz
 from studio.production import Production
 from studio.service import Service
-from studio.renderer import shorts_safe_frame, korean_background,draw_frame
+from studio.renderer import shorts_safe_frame, korean_background,draw_frame,KOREAN_PATHS,VIETNAMESE_REGULAR
 from studio.quiz import Quiz
 
 class CalendarTests(unittest.TestCase):
@@ -172,6 +172,9 @@ class BrandAndShortsTests(unittest.TestCase):
             self.assertEqual(bg.size,(540,960))
             self.assertNotEqual(bg.getpixel((66,173)),bg.getpixel((350,400)))
 
+    @unittest.skipUnless(any(Path(p).is_file() for p in KOREAN_PATHS) and
+                         any(Path(p).is_file() for p in VIETNAMESE_REGULAR),
+                         "Host does not have Korean/Vietnamese fonts")
     def test_legacy_preview_still_valid(self):
         q=Quiz(topic="Màu sắc",question="Màu đỏ",clue="Màu đỏ",
              correct="빨강",romanization="ppalgang",meaning="Màu đỏ",
