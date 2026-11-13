@@ -3,7 +3,7 @@ from datetime import date
 from pathlib import Path
 from .ai import fallback
 from .database import DuplicateQuestion,Store
-from .quiz import daily_plan
+from .quiz import TOPICS, daily_plan, choose_random_topic
 from .renderer import render
 
 class Service:
@@ -13,6 +13,27 @@ class Service:
         os.environ["THSE_KEYS_FILE"]=str(self.root/"keys.local.json")
         self.root.mkdir(parents=True,exist_ok=True)
         self.store=Store(self.root/"studio.sqlite3")
+
+    def suggest_topic(self, exclude=None, level="TOPIK 1"):
+        # The preview and generated topic remain consistent when the UI
+        # submits the selected topic. No free-form typing is necessary.
+        return {"topic": choose_random_topic(self.store.topic_counts(), exclude),
+                "level": level, "topics_available": len(TOPICS)}
+
+    def generate_random(self, level="TOPIK 1", count=6, exclude=None):
+        selected = self.suggest_topic(exclude=exclude, level=level)
+        result = self.generate(selected["topic"], level, count)
+        return {"plan": selected, **result}
+
+    def list_videos(self, limit=50):
+        folder = self.root / "videos"
+        if not folder.is_dir():
+            return []
+        files = sorted(folder.glob("*.mp4"), key=lambda p: p.stat().st_mtime,
+                       reverse=True)
+        return [{"name": path.name, "path": str(path.resolve()),
+                 "size_mb": round(path.stat().st_size / 1048576, 1)}
+                for path in files[:limit] if path.is_file()]
 
     def generate(self,topic,level,count=6,fmt="từ vựng",providers=None):
         if not 1<=count<=30: raise ValueError("Request 1-30 questions")

@@ -100,3 +100,17 @@ def daily_plan(day: date, topic_counts: dict[str, int] | None = None) -> dict:
     return {"date": day.isoformat(), "topic": topic,
             "level": LEVELS[(seed // 3) % len(LEVELS)],
             "format": FORMATS[seed % len(FORMATS)]}
+
+def choose_random_topic(topic_counts: dict[str, int] | None = None,
+                        exclude: str | None = None, rng=None) -> str:
+    """Choose a random topic, weighting underused areas more heavily.
+
+    'exclude' prevents immediate repetition when pressing Reroll.
+    Uniqueness of every question is not mathematically guaranteed.
+    """
+    source = rng if rng is not None else random.SystemRandom()
+    counts = topic_counts or {}
+    options = [topic for topic in TOPICS if topic != exclude] or TOPICS[:]
+    weights = [1.0 / ((1 + max(0, counts.get(topic, 0))) ** 1.5)
+               for topic in options]
+    return source.choices(options, weights=weights, k=1)[0]
