@@ -1481,7 +1481,7 @@ async function loadStatus(){
  updateProductionPanel();updateFacebookPanel();updateAutopilotHistory();updatePlatforms();updateMaintenance(data.cache);
 }
 async function initialize(){
- try{await Promise.all([loadStatus(),chooseTopic(false),loadEvents()]);updateTopicMode();synchronizeQuickProduction("autopilot");await recoverActiveExport()}
+ try{await Promise.all([loadStatus(),chooseTopic(false),loadEvents()]);updateTopicMode();synchronizeQuickProduction("manual");await recoverActiveExport()}
  catch(error){notice("Không tải được dữ liệu Studio: "+error.message,"error")}
 }
 initialize();
