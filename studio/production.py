@@ -10,9 +10,9 @@ from PIL import Image
 
 _LOCK=threading.RLock()
 DEFAULTS={"think":5.5,"reveal":2.8,"transition":0.8,"intro":1.5,
-          "fps":24,"width":540,"sfx":True,"sfx_volume":0.34,
+          "fps":30,"width":1080,"sfx":True,"sfx_volume":0.34,
           "logo_position":"top-right","logo_scale":0.15,
-          "logo_x":0.82,"logo_y":0.10,
+          "logo_x":0.82,"logo_y":0.10,"shorts_safe":True,
           "metadata_title":"Tiếng Hàn So Easy",
           "metadata_artist":"Tiếng Hàn So Easy",
           "metadata_copyright":"© Tiếng Hàn So Easy. All rights reserved.",
@@ -58,7 +58,8 @@ class Production:
         new["width"]=int(new["width"])
         if new["fps"] not in (24,30) or new["width"] not in (540,1080):
             raise ValueError("Chỉ hỗ trợ 540/1080p và 24/30 FPS.")
-        if new["logo_position"] not in POSITIONS or not isinstance(new["sfx"],bool):
+        if (new["logo_position"] not in POSITIONS or not isinstance(new["sfx"],bool)
+            or not isinstance(new["shorts_safe"],bool)):
             raise ValueError("Vị trí logo hoặc SFX không hợp lệ.")
         for field in ("metadata_title","metadata_artist","metadata_copyright","metadata_comment"):
             if not isinstance(new[field],str) or len(new[field])>220 or any(ord(ch)<32 for ch in new[field]):

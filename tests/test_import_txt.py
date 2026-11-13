@@ -40,6 +40,11 @@ class ImportTxtTests(unittest.TestCase):
                 self.assertNotIn("AIzaDEMO",json.dumps(next_result))
                 self.assertTrue(path.is_file())
                 # The file is local and excluded from Git.
-                self.assertIn("gsk_DEMO00001",path.read_text(encoding="utf-8"))
+                stored=path.read_text(encoding="utf-8")
+                if os.name=="nt":
+                    self.assertNotIn("gsk_DEMO00001",stored)
+                    self.assertIn("encrypted",stored)
+                else:
+                    self.assertIn("gsk_DEMO00001",stored)
 
 if __name__ == "__main__": unittest.main()

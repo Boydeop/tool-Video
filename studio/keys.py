@@ -1,6 +1,7 @@
-"""Secure-ish local key management and TXT import for user-owned API keys.
+"""Local key management and TXT import for user-owned API keys.
 
-User keys remain plaintext in LOCALAPPDATA; never share this folder.
+Windows key files are DPAPI encrypted per Windows user; existing plaintext
+files migrate on first access. Non-Windows files are chmod 0600.
 We obey provider-level rate-limit cooldown (HTTP 429), not rotate to evade limits.
 """
 from __future__ import annotations
@@ -10,6 +11,7 @@ from pathlib import Path
 import re
 import threading
 import time
+from .facebook import _protect,_unprotect
 
 PROVIDERS = ("gemini", "groq", "openrouter")
 _LOCK = threading.RLock()
@@ -44,7 +46,13 @@ def _settings():
         return {}
     try:
         parsed = json.loads(path.read_text(encoding="utf-8"))
-        return parsed if isinstance(parsed, dict) else {}
+        if not isinstance(parsed,dict):return {}
+        if "encrypted" in parsed:
+            return json.loads(_unprotect(parsed["encrypted"]))
+        if os.name=="nt" and any(provider in parsed for provider in PROVIDERS):
+            # Migrate existing key file without exposing its contents to UI/logs.
+            _save(parsed)
+        return parsed
     except (OSError, ValueError):
         return {}
 
@@ -74,7 +82,8 @@ def _save(data):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     try:
-        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        payload={"encrypted":_protect(json.dumps(data,ensure_ascii=False))} if os.name=="nt" else data
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         if os.name != "nt":
             os.chmod(tmp, 0o600)
         tmp.replace(path)

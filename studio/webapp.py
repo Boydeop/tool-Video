@@ -10,6 +10,8 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from .keys import import_txt, readiness, write_keys
 from .exports import ExportQueue
+from .youtube import YouTubeAccount
+from .instagram import InstagramAccount
 from .facebook import connect as connect_page, disconnect as disconnect_page, page_status
 from .models import list_models, selected_models, set_model, test_model
 from .quiz import TOPICS
@@ -18,7 +20,7 @@ from .voice import available, readiness as tts_readiness, test_speech, ENGINES
 
 LOGGER = logging.getLogger("tienghansoeasy.http")
 MAX_REQUEST = 4_000_000
-APP_VERSION = "v0.4.2"
+APP_VERSION = "v1.0.0"
 
 
 def _ui_path() -> Path:
@@ -30,6 +32,8 @@ def _ui_path() -> Path:
 
 def create_server(service, host="127.0.0.1", port=8765):
     export_queue=ExportQueue(service)
+    youtube=YouTubeAccount(service.root)
+    instagram=InstagramAccount(service.root)
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             # PyInstaller --windowed uses sys.stderr=None; never write there.
@@ -113,6 +117,16 @@ def create_server(service, host="127.0.0.1", port=8765):
                     params=parse_qs(url.query)
                     jid=params.get("job_id",[""])[0]
                     self.respond(200,export_queue.status(jid))
+                elif url.path == "/api/render/active":
+                    self.respond(200,export_queue.active())
+                elif url.path == "/api/cache/status":
+                    self.respond(200,{"cache":service.cache_stats(),
+                                      "busy":export_queue.is_running()})
+                elif url.path == "/api/platform/status":
+                    self.respond(200,{"youtube":youtube.status(),"instagram":instagram.status(),
+                                      "outbound":service.store.list_outbound(100)})
+                elif url.path == "/api/production/runs":
+                    self.respond(200,{"runs":service.store.list_production_runs(40)})
                 elif url.path == "/api/logo":
                     path=service.production.logo()
                     if not path:
@@ -145,6 +159,11 @@ def create_server(service, host="127.0.0.1", port=8765):
                         "topics_count": len(TOPICS),
                         "questions": service.store.list_questions(limit=500),
                         "batches": service.store.list_batches(limit=120),
+                        "production_runs": service.store.list_production_runs(limit=40),
+                        "outbound_posts": service.store.list_outbound(limit=100),
+                        "cache": service.cache_stats(),
+                        "youtube":youtube.status(),"instagram":instagram.status(),
+                        "total_questions":service.store.count_questions(),
                         "production": service.production.settings(),
                         "facebook": page_status(),
                         "jobs": service.store.list_jobs(limit=100),
@@ -192,7 +211,11 @@ def create_server(service, host="127.0.0.1", port=8765):
                       "/api/production/settings", "/api/production/choose", "/api/logo/upload",
                       "/api/facebook/connect", "/api/facebook/disconnect", "/api/seo",
                       "/api/render/batch", "/api/preview/clip", "/api/render/start",
-                      "/api/answers/enrich", "/api/answers/save", "/api/videos/metadata")
+                      "/api/answers/enrich", "/api/answers/save", "/api/videos/metadata",
+                      "/api/autopilot/start", "/api/cache/clear",
+                      "/api/youtube/configure", "/api/youtube/connect", "/api/youtube/disconnect",
+                      "/api/instagram/connect", "/api/instagram/disconnect",
+                      "/api/platform/schedule")
             if route not in routes:
                 self.respond(404, {"error": "Không tìm thấy chức năng."})
                 return
@@ -247,6 +270,37 @@ def create_server(service, host="127.0.0.1", port=8765):
                         with_voice=raw.get("with_voice") is True,
                         voice_engine=str(raw.get("voice_engine","auto")))
                     result={"preview_url":"/api/preview/clip/"+name.name}
+                elif route == "/api/autopilot/start":
+                    result=export_queue.start_autopilot(raw)
+                elif route == "/api/cache/clear":
+                    if export_queue.is_running():
+                        raise ValueError("Không thể dọn cache khi đang sản xuất video.")
+                    days=int(raw.get("older_than_days",0))
+                    if raw.get("confirmed") is not True:
+                        raise ValueError("Bạn phải xác nhận xóa cache.")
+                    result=service.clear_cache(days)
+                elif route == "/api/youtube/configure":
+                    result=youtube.configure(raw.get("client",{}))
+                elif route == "/api/youtube/connect":
+                    result=youtube.connect_start()
+                elif route == "/api/youtube/disconnect":
+                    result=youtube.disconnect()
+                elif route == "/api/instagram/connect":
+                    result=instagram.connect(str(raw.get("ig_id","")),
+                                              str(raw.get("token","")))
+                elif route == "/api/instagram/disconnect":
+                    result=instagram.disconnect()
+                elif route == "/api/platform/schedule":
+                    platform=str(raw.get("platform",""))
+                    name=str(raw.get("video_name",""))
+                    if platform=="instagram" and not instagram.status()["connected"]:
+                        raise ValueError("Chưa kết nối Instagram Professional.")
+                    job=service.schedule_platform(name,platform,
+                        str(raw.get("title","")),str(raw.get("caption","")),
+                        str(raw.get("scheduled_at","")),
+                        str(raw.get("public_url","")),
+                        str(raw.get("privacy","private")))
+                    result={"job_id":job,"platform":platform,"status":"scheduled"}
                 elif route == "/api/render/start":
                     ids=raw.get("ids",[])
                     limit=int(raw.get("per_video",6))
@@ -317,6 +371,7 @@ def create_server(service, host="127.0.0.1", port=8765):
 def serve(service, host="127.0.0.1", port=8765, on_ready=None):
     server = create_server(service, host, port)
     scheduler = Scheduler(service.store)
+    service.store.recover_incomplete_runs()
     try:
         scheduler.start()
         LOGGER.info("Studio server bound to %s:%s", *server.server_address)

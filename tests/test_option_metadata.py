@@ -100,6 +100,8 @@ class OptionsTests(unittest.TestCase):
 class FakeService:
     class Store:
         def get_questions(self,ids,status=None):return list(ids)
+        def create_production_run(self,*args,**kwargs):pass
+        def update_production_run(self,*args,**kwargs):pass
     def __init__(self):self.store=self.Store()
     def render_approved(self,ids,theme,with_voice,voice_engine,progress):
         progress(10,"Creating voice")

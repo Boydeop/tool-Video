@@ -35,11 +35,72 @@ class ExportQueue:
                   "total_videos":(len(ids)+per_video-1)//per_video,
                   "created_at":datetime.now(timezone.utc).isoformat()}
             self._running=jid
+            try:
+                self.service.store.create_production_run(
+                    jid,{"mode":"manual","per_video":per_video,
+                         "question_count":len(ids),"theme":theme})
+            except Exception:
+                self._running=None
+                self._jobs.pop(jid,None)
+                raise
         thread=threading.Thread(target=self._run,
                   args=(jid,ids,theme,per_video,with_voice,voice_engine),
                   daemon=True,name="thse-export-"+jid[:8])
         thread.start()
         return {"job_id":jid,"status":"queued"}
+
+    def is_running(self):
+        with self._lock:
+            return self._running is not None
+
+    def start_autopilot(self,config):
+        from .autopilot import Plan
+        plan=Plan.parse(config)
+        with self._lock:
+            if self._running is not None:
+                raise ValueError("Đang có lượt xuất video khác.")
+            jid=uuid.uuid4().hex
+            self.service.store.create_production_run(jid,{"mode":"autopilot",**plan.public_dict()})
+            self._jobs[jid]={"job_id":jid,"status":"queued","percent":0,
+                "phase":"Chờ tạo nhiều chủ đề","videos":[],"error":None,
+                "total_videos":plan.videos,"topics":[],
+                "created_at":datetime.now(timezone.utc).isoformat()}
+            self._running=jid
+        threading.Thread(target=self._run_autopilot,args=(jid,plan),
+                 daemon=True,name="thse-autopilot-"+jid[:8]).start()
+        return {"job_id":jid,"status":"queued","mode":"autopilot"}
+
+    def _run_autopilot(self,jid,plan):
+        from .autopilot import run_pipeline
+        results=[]
+        try:
+            self._update(jid,status="running",phase="Đang sinh câu hỏi nhiều chủ đề")
+            def progress(percent,phase):
+                self._update(jid,percent=min(98,int(percent)),phase=phase)
+            def store_results(items):
+                nonlocal results
+                results=items
+                outputs=[item.get("video") for item in items if item.get("video")]
+                self._update(jid,topics=items,videos=outputs)
+                self.service.store.update_production_run(jid,"running",items)
+            completed=run_pipeline(self.service,plan,progress,store_results)
+            outputs=completed["videos"]
+            terminal="completed" if len(outputs)==plan.videos else ("partial" if outputs else "failed")
+            self.service.store.update_production_run(jid,terminal,results)
+            self._update(jid,status=terminal,percent=100,
+                         phase="Đã kết thúc Autopilot: "+str(len(outputs))+"/"+str(plan.videos)+" MP4",
+                         videos=outputs,topics=results)
+        except Exception as exc:
+            self.service.store.update_production_run(jid,"failed",results,str(exc))
+            self._update(jid,status="failed",error=str(exc)[:500],
+                         phase="Autopilot gặp lỗi, xem câu đã tạo và video đã xuất")
+        finally:
+            with self._lock:
+                if self._running==jid:self._running=None
+
+    def active(self):
+        with self._lock:
+            return self.status(self._running) if self._running else {"active":False}
 
     def status(self,jid):
         with self._lock:
@@ -73,9 +134,20 @@ class ExportQueue:
                     self._jobs[jid]["videos"].append(path)
                 self._update(jid,percent=round(done*100/len(ids)),
                        phase="Đã hoàn thành video "+str(len(self._jobs[jid]["videos"])))
+                self.service.store.update_production_run(jid,"running",
+                     [{"video":v,"status":"rendered"} for v in self._jobs[jid]["videos"]])
+            self.service.store.update_production_run(jid,"completed",
+                 [{"video":v,"status":"rendered"} for v in self._jobs[jid]["videos"]])
             self._update(jid,status="completed",percent=100,
                          phase="Tất cả video đã hoàn thành")
         except Exception as exc:
+            try:
+                videos=self.status(jid)["videos"]
+                self.service.store.update_production_run(jid,
+                     "partial" if videos else "failed",
+                     [{"video":v,"status":"rendered"} for v in videos],str(exc))
+            except Exception:
+                pass
             self._update(jid,status="failed",
                   phase="Đã dừng do lỗi. Video hoàn tất vẫn được giữ.",
                   error=str(exc)[:550])
