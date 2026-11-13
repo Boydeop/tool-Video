@@ -131,6 +131,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
     </div>
     <p class="note">Autopilot sẽ thử bổ sung dữ liệu và tạo bù. Có thể xuất video ngắn hơn nếu đủ ít nhất 2 câu hợp lệ. Chỉ kiểm tra cấu trúc, không thể xác nhận độ chính xác tiếng Hàn thay giáo viên. Chưa tự động đăng lên mạng xã hội.</p>
     <div class="actions"><button class="btn" id="autoStart">🚀 Tạo nhiều chủ đề và dựng tất cả</button>
+      <button class="btn secondary" id="autoPreviewTemplate">👁 Xem mẫu video đã chọn</button>
       <span class="pill" id="autoStatus">Chưa có lượt sản xuất</span></div>
     <div id="autoProgress" style="display:none;margin-top:15px;padding:16px;background:#f4f8fd;border-radius:14px">
       <div style="display:flex;justify-content:space-between;gap:10px"><strong id="autoPhase">Chuẩn bị AI</strong><strong id="autoPercent">0%</strong></div>
@@ -1186,6 +1187,35 @@ document.querySelectorAll('input[name="topicMode"]').forEach(el=>
   el.addEventListener("change",updateTopicMode));
 $("eventSelect").addEventListener("change",updateEventHint);
 $("eventRefresh").addEventListener("click",loadEvents);
+function synchronizeQuickProduction(source){
+ if(source==="autopilot"){
+   const theme=$("autoTheme").value;
+   const radio=document.querySelector('input[name="theme"][value="'+theme+'"]');
+   if(radio)radio.checked=true;
+   $("videoWidth").value=$("autoWidth").value;
+   $("voice").checked=$("autoVoice").checked;
+ }else{
+   const radio=document.querySelector('input[name="theme"]:checked');
+   if(radio)$("autoTheme").value=radio.value;
+   $("autoWidth").value=$("videoWidth").value;
+   $("autoVoice").checked=$("voice").checked;
+ }
+}
+$("autoTheme").addEventListener("change",()=>synchronizeQuickProduction("autopilot"));
+$("autoWidth").addEventListener("change",()=>synchronizeQuickProduction("autopilot"));
+$("autoVoice").addEventListener("change",()=>synchronizeQuickProduction("autopilot"));
+document.querySelectorAll('input[name="theme"]').forEach(el=>
+   el.addEventListener("change",()=>synchronizeQuickProduction("manual")));
+$("videoWidth").addEventListener("change",()=>synchronizeQuickProduction("manual"));
+$("voice").addEventListener("change",()=>synchronizeQuickProduction("manual"));
+$("autoPreviewTemplate").addEventListener("click",async()=>{
+ synchronizeQuickProduction("autopilot");
+ const q=state.questions.find(x=>x.status!=="rejected");
+ showPanel("questions");
+ if(!q){notice("Chưa có câu hỏi. Hãy tạo câu đầu tiên hoặc thử Autopilot.");return}
+ state.selection=new Set([q.id]);renderQuestions();
+ await previewFrame(true);
+});
 function updateAutopilotHistory(){
  const holder=$("autoHistory");holder.replaceChildren();
  const recent=state.productionRuns||[];
@@ -1451,7 +1481,7 @@ async function loadStatus(){
  updateProductionPanel();updateFacebookPanel();updateAutopilotHistory();updatePlatforms();updateMaintenance(data.cache);
 }
 async function initialize(){
- try{await Promise.all([loadStatus(),chooseTopic(false),loadEvents()]);updateTopicMode();await recoverActiveExport()}
+ try{await Promise.all([loadStatus(),chooseTopic(false),loadEvents()]);updateTopicMode();synchronizeQuickProduction("autopilot");await recoverActiveExport()}
  catch(error){notice("Không tải được dữ liệu Studio: "+error.message,"error")}
 }
 initialize();
