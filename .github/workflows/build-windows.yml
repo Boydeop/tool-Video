@@ -83,7 +83,14 @@ jobs:
             if ($homePage.Content -notmatch 'Chọn model AI') { throw 'Model selector UI missing from built EXE' }
             if ($null -eq $status.tts_engines.edge -or $null -eq $status.tts_engines.google) { throw 'Bundled TTS engines missing' }
             if ($homePage.Content -notmatch 'Thử giọng tiếng Hàn') { throw 'Voice test UI missing' }
-            Write-Output "EXE HTTP + model + TTS UI smoke tests passed"
+            if ($null -eq $status.production.think) { throw 'Production settings are missing' }
+            if ($null -eq $status.facebook.connected) { throw 'Facebook connection status is missing' }
+            if ($null -eq $status.batches) { throw 'Batch history is missing' }
+            if ($homePage.Content -notmatch 'previewMotion' -or $homePage.Content -notmatch 'renderBatch') {
+              throw 'Preview or batch video UI missing'
+            }
+            if ($homePage.Content -notmatch 'Kết nối Facebook Page') { throw 'Meta Page connection UI missing' }
+            Write-Output "EXE HTTP, video settings, batch, logo and Page UI smoke tests passed"
           } catch {
             $logPath = Join-Path $env:LOCALAPPDATA "TiengHanSoEasyStudio\studio.log"
             if (Test-Path $logPath) { Get-Content $logPath -Tail 100 }
@@ -104,8 +111,8 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.3.2
-          name: Tiếng Hàn So Easy Studio v0.3.2
+          tag_name: v0.4.0
+          name: Tiếng Hàn So Easy Studio v0.4.0
           target_commitish: main
           files: dist/TiengHanSoEasyStudio.exe
           make_latest: true

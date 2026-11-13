@@ -12,7 +12,7 @@ class RendererTests(unittest.TestCase):
                wrong1="감사합니다",wrong2="죄송합니다",wrong3="안녕히 가세요")
         with tempfile.TemporaryDirectory() as tmp:
             output=Path(tmp)/"hello.mp4"
-            render([q],output,theme="hanji",width=540,fps=2,think=0.5,reveal=0.5)
+            render([q],output,theme="hanji",width=540,fps=24,think=4,reveal=1.5,transition=.3,intro=.5,sfx=True)
             self.assertTrue(output.is_file())
             self.assertGreater(output.stat().st_size,1000)
 

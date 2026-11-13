@@ -10,7 +10,7 @@ class Scheduler:
     def tick(self):
         for job in self.store.claim_due():
             try:
-                remote=publish_reel(job["video_path"],job["caption"])
+                remote=publish_reel(job["video_path"],job["caption"],title=job.get("title",""))
                 self.store.finish_job(job["id"],"published",remote_id=remote)
                 self.store.log("published",job["id"])
             except Exception as exc:

@@ -9,14 +9,15 @@ import sys
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from .keys import import_txt, readiness, write_keys
+from .facebook import connect as connect_page, disconnect as disconnect_page, page_status
 from .models import list_models, selected_models, set_model, test_model
 from .quiz import TOPICS
 from .scheduler import Scheduler
 from .voice import available, readiness as tts_readiness, test_speech, ENGINES
 
 LOGGER = logging.getLogger("tienghansoeasy.http")
-MAX_REQUEST = 80_000
-APP_VERSION = "v0.3.2"
+MAX_REQUEST = 4_000_000
+APP_VERSION = "v0.4.0"
 
 
 def _ui_path() -> Path:
@@ -60,11 +61,15 @@ def create_server(service, host="127.0.0.1", port=8765):
             if not name or name != Path(name).name or not name.endswith(".mp4"):
                 self.respond(404, {"error": "Không tìm thấy video."})
                 return
-            folder = (service.root / "videos").resolve()
-            path = (folder / name).resolve()
-            if folder not in path.parents or not path.is_file():
-                self.respond(404, {"error": "Không tìm thấy video."})
-                return
+            try:
+                path = service.video_path(name)
+            except ValueError:
+                # Compatibility with legacy output created before custom folders.
+                folder=(service.root/"videos").resolve()
+                path=(folder/name).resolve()
+                if path.parent != folder or not path.is_file():
+                    self.respond(404, {"error": "Không tìm thấy video."})
+                    return
             self.send_response(200)
             self.send_header("Content-Type", "video/mp4")
             self.send_header("Content-Length", str(path.stat().st_size))
@@ -91,6 +96,39 @@ def create_server(service, host="127.0.0.1", port=8765):
                     params = parse_qs(url.query)
                     exclude = params.get("exclude", [None])[0]
                     self.respond(200, service.suggest_topic(exclude=exclude))
+                elif url.path == "/api/preview":
+                    params=parse_qs(url.query)
+                    qid=params.get("id",[""])[0]
+                    theme=params.get("theme",["hanji"])[0]
+                    data=service.preview(qid,theme,params.get("answer",["1"])[0]=="1")
+                    self.send_response(200)
+                    self.send_header("Content-Type","image/png")
+                    self.send_header("Content-Length",str(len(data)))
+                    self.send_header("Cache-Control","no-store")
+                    self.end_headers();self.wfile.write(data)
+                elif url.path == "/api/logo":
+                    path=service.production.logo()
+                    if not path:
+                        self.respond(404,{"error":"No logo"});return
+                    data=path.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type","image/png")
+                    self.send_header("Content-Length",str(len(data)))
+                    self.send_header("Cache-Control","no-store")
+                    self.end_headers();self.wfile.write(data)
+                elif url.path.startswith("/api/preview/clip/"):
+                    name=unquote(url.path[len("/api/preview/clip/"):])
+                    path=service.preview_clip_path(name)
+                    self.send_response(200)
+                    self.send_header("Content-Type","video/mp4")
+                    self.send_header("Content-Length",str(path.stat().st_size))
+                    self.send_header("Cache-Control","private, no-store")
+                    self.end_headers()
+                    with path.open("rb") as fp:
+                        while True:
+                            chunk=fp.read(256*1024)
+                            if not chunk:break
+                            self.wfile.write(chunk)
                 elif url.path == "/api/models":
                     params = parse_qs(url.query)
                     self.respond(200, list_models(params.get("provider", [""])[0]))
@@ -98,7 +136,10 @@ def create_server(service, host="127.0.0.1", port=8765):
                     self.respond(200, {
                         "version": APP_VERSION,
                         "topics_count": len(TOPICS),
-                        "questions": service.store.list_questions(limit=300),
+                        "questions": service.store.list_questions(limit=500),
+                        "batches": service.store.list_batches(limit=120),
+                        "production": service.production.settings(),
+                        "facebook": page_status(),
                         "jobs": service.store.list_jobs(limit=100),
                         "videos": service.list_videos(),
                         "providers": readiness(),
@@ -140,13 +181,17 @@ def create_server(service, host="127.0.0.1", port=8765):
             route = urlsplit(self.path).path
             routes = ("/api/generate", "/api/daily", "/api/approve", "/api/render",
                       "/api/schedule", "/api/keys", "/api/keys/import",
-                      "/api/models/select", "/api/models/test", "/api/voice/test")
+                      "/api/models/select", "/api/models/test", "/api/voice/test",
+                      "/api/production/settings", "/api/production/choose", "/api/logo/upload",
+                      "/api/facebook/connect", "/api/facebook/disconnect", "/api/seo",
+                      "/api/render/batch", "/api/preview/clip")
             if route not in routes:
                 self.respond(404, {"error": "Không tìm thấy chức năng."})
                 return
             try:
                 length = int(self.headers.get("Content-Length", "0"))
-                if not 0 < length <= MAX_REQUEST:
+                limit=MAX_REQUEST if route=="/api/logo/upload" else 180_000
+                if not 0 < length <= limit:
                     raise ValueError("Dữ liệu gửi vượt giới hạn.")
                 raw = json.loads(self.rfile.read(length))
                 if not isinstance(raw, dict):
@@ -177,6 +222,27 @@ def create_server(service, host="127.0.0.1", port=8765):
                     testfile=test_speech(language,engine,service.root/"tts_samples")
                     result={"ok":True,"language":language,"engine":engine,
                             "audio_url":"/api/voice/sample/"+testfile.name}
+                elif route == "/api/production/settings":
+                    result=service.production.update(raw)
+                elif route == "/api/production/choose":
+                    result=service.production.choose_directory(str(raw.get("kind","")))
+                elif route == "/api/logo/upload":
+                    result=service.production.set_logo(raw.get("base64",""))
+                elif route == "/api/facebook/connect":
+                    result=connect_page(str(raw.get("page_id","")),str(raw.get("token","")))
+                elif route == "/api/facebook/disconnect":
+                    result=disconnect_page()
+                elif route == "/api/seo":
+                    result=service.seo_video(str(raw.get("video_name","")))
+                elif route == "/api/preview/clip":
+                    name=service.preview_motion(str(raw.get("id","")),str(raw.get("theme","hanji")))
+                    result={"preview_url":"/api/preview/clip/"+name.name}
+                elif route == "/api/render/batch":
+                    result=service.render_many(raw.get("ids",[]),
+                        theme=str(raw.get("theme","hanji")),
+                        per_video=int(raw.get("per_video",6)),
+                        with_voice=raw.get("with_voice") is True,
+                        voice_engine=str(raw.get("voice_engine","auto")))
                 elif route == "/api/render":
                     ids = raw.get("ids", [])
                     if not isinstance(ids, list) or not 0 < len(ids) <= 30:
@@ -206,7 +272,8 @@ def create_server(service, host="127.0.0.1", port=8765):
                     result = {"job_id": service.schedule(
                         str(raw.get("video_path", "")),
                         str(raw.get("caption", "")),
-                        str(raw.get("scheduled_at", "")))}
+                        str(raw.get("scheduled_at", "")),
+                        str(raw.get("title", "")))}
                 self.respond(200, result)
             except (ValueError, RuntimeError, KeyError) as exc:
                 self.respond(400, {"error": str(exc)})

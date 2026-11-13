@@ -17,7 +17,7 @@ def main():
     a=sub.add_parser("approve");a.add_argument("ids",nargs="+")
     r=sub.add_parser("render");r.add_argument("ids",nargs="+")
     r.add_argument("--theme",choices=["hanji","blue","sejong"],default="hanji")
-    r.add_argument("--width",type=int,choices=[540,720,1080],default=540)
+    r.add_argument("--width",type=int,choices=[540,1080],default=540)
     r.add_argument("--voice",action="store_true",help="Online Vietnamese and Korean narration")
     s=sub.add_parser("schedule")
     s.add_argument("--video",required=True);s.add_argument("--caption",required=True)

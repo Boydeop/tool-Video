@@ -62,18 +62,37 @@ class Store:
                 day TEXT PRIMARY KEY, topic TEXT NOT NULL,
                 result TEXT NOT NULL, created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS video_registry(
+                id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE,
+                question_ids TEXT NOT NULL, topic TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'rendered',
+                seo_title TEXT NOT NULL DEFAULT '',
+                seo_caption TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS audit(
                 id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL,
                 kind TEXT NOT NULL, detail TEXT NOT NULL
             );
             """)
+            # Migrate old 0.3.x SQLite in place without removing questions.
+            columns={row["name"] for row in c.execute("PRAGMA table_info(questions)")}
+            if "batch_id" not in columns:
+                c.execute("ALTER TABLE questions ADD COLUMN batch_id TEXT NOT NULL DEFAULT ''")
+            if "last_video" not in columns:
+                c.execute("ALTER TABLE questions ADD COLUMN last_video TEXT NOT NULL DEFAULT ''")
+            c.execute("CREATE INDEX IF NOT EXISTS questions_batch_id ON questions(batch_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS questions_status_created ON questions(status,created_at)")
+            job_cols={row["name"] for row in c.execute("PRAGMA table_info(jobs)")}
+            if "title" not in job_cols:
+                c.execute("ALTER TABLE jobs ADD COLUMN title TEXT NOT NULL DEFAULT ''")
 
     def log(self, kind, detail):
         with self._lock, self.db() as c:
             c.execute("INSERT INTO audit(created_at,kind,detail) VALUES(?,?,?)",
                       (utcnow(), kind, str(detail)[:1500]))
 
-    def insert_question(self, quiz: Quiz, provider="manual") -> str:
+    def insert_question(self, quiz: Quiz, provider="manual", batch_id="") -> str:
         quiz.validate()
         qhash = fingerprint(quiz.question)
         ahash = fingerprint(quiz.correct)
@@ -91,11 +110,11 @@ class Store:
                     raise DuplicateQuestion("Đáp án gần trùng với dữ liệu cũ.")
             qid = uuid.uuid4().hex
             c.execute("""INSERT INTO questions
-                (id,topic,question,correct,payload,question_hash,answer_hash,status,provider,created_at)
-                VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                (id,topic,question,correct,payload,question_hash,answer_hash,status,provider,created_at,batch_id)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
                 (qid,quiz.topic,quiz.question,quiz.correct,
                  json.dumps(quiz.to_dict(),ensure_ascii=False),
-                 qhash,ahash,"draft",provider,utcnow()))
+                 qhash,ahash,"draft",provider,utcnow(),batch_id))
             return qid
 
     def list_questions(self, status=None, limit=100):
@@ -107,7 +126,8 @@ class Store:
                 rows = c.execute("SELECT * FROM questions ORDER BY created_at DESC LIMIT ?",
                                  (limit,)).fetchall()
             return [dict(id=r["id"],status=r["status"],provider=r["provider"],
-                         created_at=r["created_at"],**json.loads(r["payload"])) for r in rows]
+                         created_at=r["created_at"],batch_id=r["batch_id"],
+                         last_video=r["last_video"],**json.loads(r["payload"])) for r in rows]
 
     def get_questions(self, ids: list[str], status=None) -> list[Quiz]:
         if not ids:
@@ -133,6 +153,58 @@ class Store:
                 if row.rowcount != 1:
                     raise ValueError("Không tìm thấy câu: " + str(qid))
 
+    def list_batches(self,limit=80):
+        with self.db() as c:
+            return [dict(r) for r in c.execute("""
+                SELECT COALESCE(NULLIF(batch_id,''),'legacy') batch_id,
+                       MAX(topic) topic,MAX(created_at) created_at,
+                       COUNT(*) total,
+                       SUM(CASE WHEN status='draft' THEN 1 ELSE 0 END) drafts,
+                       SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) approved,
+                       SUM(CASE WHEN status='rendered' THEN 1 ELSE 0 END) rendered
+                FROM questions GROUP BY COALESCE(NULLIF(batch_id,''),'legacy')
+                ORDER BY created_at DESC LIMIT ?""",(limit,))]
+
+    def mark_rendered(self,ids,path):
+        if not ids:raise ValueError("Empty selection.")
+        target=str(Path(path).resolve())
+        with self._lock,self.db() as c:
+            placeholders=",".join("?" for _ in ids)
+            rows=c.execute("SELECT id,topic,status FROM questions WHERE id IN ("+placeholders+")",ids).fetchall()
+            if len(rows)!=len(set(ids)) or any(row["status"]!="approved" for row in rows):
+                raise ValueError("All questions must be approved and not yet rendered.")
+            vid=uuid.uuid4().hex
+            c.execute("""INSERT INTO video_registry(id,path,question_ids,topic,status,created_at)
+                         VALUES(?,?,?,?,'rendered',?)""",
+                (vid,target,json.dumps(ids),rows[0]["topic"],utcnow()))
+            c.execute("UPDATE questions SET status='rendered',last_video=? WHERE id IN ("+placeholders+")", [target,*ids])
+            return vid
+
+    def list_videos(self,limit=80):
+        with self.db() as c:
+            return [dict(r) for r in c.execute("SELECT * FROM video_registry ORDER BY created_at DESC LIMIT ?",(limit,))]
+
+    def get_video(self,path):
+        with self.db() as c:
+            row=c.execute("SELECT * FROM video_registry WHERE path=?",(str(Path(path).resolve()),)).fetchone()
+            if not row:raise ValueError("Video is not in the production registry.")
+            return dict(row)
+
+    def set_video_seo(self,path,title,caption):
+        if len(title)>180 or len(caption)>2000:raise ValueError("SEO too long")
+        with self._lock,self.db() as c:
+            row=c.execute("UPDATE video_registry SET seo_title=?,seo_caption=? WHERE path=?",
+                           (title,caption,str(Path(path).resolve())))
+            if row.rowcount!=1:raise ValueError("Video not registered.")
+        return {"title":title,"caption":caption}
+
+    def mark_scheduled(self,path):
+        with self._lock,self.db() as c:
+            row=c.execute("UPDATE video_registry SET status='scheduled' WHERE path=? AND status='rendered'",
+                          (str(Path(path).resolve()),))
+            if row.rowcount!=1:
+                raise ValueError("Video already scheduled or not part of Studio registry.")
+
     def recent_prompts(self, limit=40):
         with self.db() as c:
             return [r["question"] + " => " + r["correct"] for r in c.execute(
@@ -147,7 +219,7 @@ class Store:
         with self.db() as c:
             return c.execute("SELECT COUNT(*) FROM questions").fetchone()[0]
 
-    def add_job(self, video_path, caption, scheduled_at):
+    def add_job(self, video_path, caption, scheduled_at, title=""):
         run_at = datetime.fromisoformat(scheduled_at.replace("Z","+00:00"))
         if run_at.tzinfo is None:
             raise ValueError("Cần thời gian ISO 8601 có múi giờ.")
@@ -158,10 +230,10 @@ class Store:
             raise ValueError("Không tìm thấy video MP4.")
         jid=uuid.uuid4().hex
         with self._lock, self.db() as c:
-            c.execute("""INSERT INTO jobs(id,video_path,caption,scheduled_at,status,created_at,updated_at)
-                         VALUES(?,?,?,?,'scheduled',?,?)""",
+            c.execute("""INSERT INTO jobs(id,video_path,caption,scheduled_at,status,created_at,updated_at,title)
+                         VALUES(?,?,?,?,'scheduled',?,?,?)""",
                       (jid,str(path),caption[:2000],run_at.astimezone(timezone.utc).isoformat(),
-                       utcnow(),utcnow()))
+                       utcnow(),utcnow(),str(title)[:160]))
         return jid
 
     def list_jobs(self, limit=100):
