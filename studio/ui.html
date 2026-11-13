@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tiếng Hàn So Easy · Video Studio</title>
+<style>
+:root{color-scheme:light;--blue:#1e5bbb;--deep:#0f4c81;--ink:#191612;--red:#e84a36;--cream:#fdfbf7;--soft:#eef4fc;--line:#e5eaf1;--muted:#65758a;--green:#178451;--shadow:0 10px 30px rgba(27,59,104,.06)}
+*{box-sizing:border-box}body{font:15px/1.55 "Segoe UI",Arial,sans-serif;background:var(--cream);color:var(--ink);margin:0}
+button,input,select,textarea{font:inherit}button{cursor:pointer;border:0}button:disabled{cursor:not-allowed;opacity:.46}
+a{color:var(--blue)}.app{max-width:1440px;margin:auto;padding:24px;display:grid;grid-template-columns:242px minmax(0,1fr);gap:26px}
+.sidebar{background:var(--deep);color:#fff;border-radius:24px;min-height:calc(100vh - 48px);padding:23px 14px;display:flex;flex-direction:column;gap:14px;position:sticky;top:24px;align-self:start}
+.brand{padding:10px 14px 20px;border-bottom:1px solid #ffffff32}.brandmark{font-size:26px}.brand strong{display:block;font-size:17px;letter-spacing:.4px}.brand small{color:#d0e3ff;font-size:12px}
+.nav{display:grid;gap:7px}.nav button{width:100%;text-align:left;color:#d6e6fd;background:transparent;border-radius:12px;padding:13px;font-weight:650}.nav button:hover,.nav button.active{background:#ffffff20;color:#fff}.nav .num{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:8px;background:#ffffff1a;margin-right:10px;font-size:12px}
+.sidehelp{margin-top:auto;background:#ffffff13;border-radius:15px;padding:14px;color:#e0ebff;font-size:12px}.sidehelp b{color:#fff}
+.content{min-width:0;padding-bottom:36px}.top{display:flex;align-items:center;justify-content:space-between;gap:20px;margin:8px 0 22px}
+.overline{letter-spacing:2.1px;text-transform:uppercase;font-size:11px;font-weight:800;color:var(--red)}h1{font-size:clamp(24px,3vw,35px);line-height:1.16;margin:7px 0 7px;color:var(--deep)}.subtitle{color:var(--muted);margin:0}
+.version{border:1px solid var(--line);border-radius:100px;padding:7px 13px;background:white;color:var(--deep);font-size:12px;font-weight:700;white-space:nowrap}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}.metric{background:white;border:1px solid var(--line);border-radius:16px;padding:15px 17px;box-shadow:var(--shadow)}.metric .name{font-size:12px;color:var(--muted)}.metric strong{font-size:27px;color:var(--deep);display:block;line-height:1.2;margin-top:5px}
+.panel{display:none}.panel.active{display:block}.card{background:white;border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:25px;margin-bottom:17px}
+.sectiontitle{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}.sectiontitle h2{margin:0;font-size:21px;color:var(--deep)}
+.note{color:var(--muted);font-size:13px;margin:3px 0 14px}.pill{font-size:12px;padding:6px 11px;border-radius:100px;background:var(--soft);color:var(--blue);font-weight:700}
+.topiccard{background:linear-gradient(125deg,#0f4c81,#1e5bbb);color:white;padding:30px;border-radius:20px;position:relative;overflow:hidden;margin:17px 0 21px}
+.topiccard:after{content:"가";font-size:190px;position:absolute;right:-5px;top:-90px;color:#ffffff16;font-weight:900;pointer-events:none}.topiccard small{letter-spacing:1.6px;font-size:12px;font-weight:700;color:#e7eeff}.topiccard h3{position:relative;z-index:1;font-size:clamp(22px,3vw,31px);margin:12px 0 23px;max-width:80%}
+.fieldrow{display:flex;gap:14px;flex-wrap:wrap;align-items:end;margin-bottom:19px}.field{display:flex;flex-direction:column;gap:7px;flex:1;min-width:140px}.field.compact{flex:0 0 155px}
+.field label,.fieldlabel{font-weight:700;font-size:13px;color:var(--deep)}
+select,input[type=text],input[type=number],input[type=password],input[type=datetime-local],textarea{border:1px solid #ccd6e2;background:white;border-radius:11px;padding:12px;min-width:0;width:100%;outline:none;color:var(--ink)}
+select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px #1e5bbb18}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--blue);color:white;font-weight:700;border-radius:11px;padding:12px 19px;min-height:44px;transition:filter .12s}.btn:hover:not(:disabled){filter:brightness(.95)}
+.btn.secondary{background:var(--soft);color:var(--blue)}.btn.red{background:var(--red)}.btn.outline{background:white;border:1px solid #cbd9eb;color:var(--deep)}.btn.small{padding:8px 12px;min-height:35px;font-size:12px}
+.actions{display:flex;flex-wrap:wrap;gap:9px;align-items:center}.tip{background:#fff5e9;border:1px solid #ffe1b7;border-radius:12px;color:#7a4d16;padding:12px 14px;font-size:13px}
+.empty{padding:42px 18px;text-align:center;color:var(--muted);border:1px dashed #c6d5e6;border-radius:14px;background:#fafcff}.empty strong{display:block;color:var(--deep);font-size:16px;margin:6px}
+.tablewrap{overflow-x:auto}.table{border-collapse:collapse;width:100%;min-width:640px}.table th{font-size:12px;color:var(--muted);letter-spacing:.3px;font-weight:700;text-align:left;padding:12px;background:#f6f9fd}.table td{padding:13px 10px;border-bottom:1px solid var(--line);vertical-align:middle;font-size:13px}.table td small{color:var(--muted);display:block}.table tr:hover td{background:#f9fbfe}.table td:last-child{max-width:280px}.table input{width:17px;height:17px;accent-color:var(--blue)}
+.status{display:inline-flex;font-size:11px;font-weight:700;border-radius:50px;padding:5px 9px;background:#fff2e0;color:#9e6016}.status.approved{background:#e8f7ee;color:var(--green)}.status.rejected{background:#fce8e5;color:#b33226}
+.toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0 17px}.toolbar select{max-width:190px}.choose{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--muted)}
+.themegrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;margin:13px 0}.themegrid label{border:1px solid var(--line);border-radius:13px;padding:11px;cursor:pointer;display:flex;gap:9px;align-items:center;font-size:13px;font-weight:700}.themegrid label:has(input:checked){border-color:var(--blue);background:#eff5ff}.themegrid input{accent-color:var(--blue)}.swatch{width:27px;height:36px;border-radius:6px;background:#fdfbf7;border:1px solid #c1d0dd;position:relative}.swatch:after{content:"";background:var(--blue);position:absolute;left:5px;right:5px;top:8px;height:5px;border-radius:2px}.swatch.blue{background:#0f4c81}.swatch.blue:after{background:#e84a36}.swatch.sejong{background:#f7f4eb}.swatch.sejong:after{background:#d13624}
+.switchrow{display:flex;gap:9px;align-items:center;font-size:14px;margin:15px 0}.switchrow input{accent-color:var(--blue);width:17px;height:17px}
+.keygrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:18px}.keybox{border:1px solid var(--line);border-radius:14px;padding:13px}.keybox strong{display:block;font-size:15px;color:var(--deep)}.keybox small{font-size:12px;color:var(--muted)}.keybox em{display:block;font-style:normal;font-size:24px;font-weight:800;color:var(--blue)}
+.upload{border:2px dashed #aabfe0;border-radius:15px;padding:21px;text-align:center;background:#f8fbff;cursor:pointer}.upload input{max-width:100%;font-size:13px}.upload strong{display:block;margin-bottom:6px;color:var(--deep)}.upload small{display:block;color:var(--muted);margin-top:7px}
+.example{background:#f5f8fc;border:1px solid var(--line);border-radius:12px;padding:12px 16px;white-space:pre-wrap;font:12px/1.6 Consolas,monospace;color:#435975}.keynotice{border-left:3px solid var(--red);padding-left:13px;color:#6c6c6c;font-size:12px}
+.flexrow{display:grid;grid-template-columns:1fr 1fr;gap:14px}.divider{border-top:1px solid var(--line);margin:23px 0}
+.result{display:none;position:fixed;z-index:100;right:22px;bottom:22px;max-width:min(520px,calc(100vw - 32px));padding:14px 18px;border-radius:14px;background:#12385b;color:white;box-shadow:0 12px 35px #0f4c8138;white-space:pre-wrap;font-size:13px}.result.visible{display:block}.result.error{background:#9a2c23}.result.success{background:#136f48}
+.busy{pointer-events:none;opacity:.75}.footer{font-size:12px;color:var(--muted);text-align:center;margin:18px}
+@media(max-width:900px){.app{display:block;padding:14px}.sidebar{position:static;min-height:0;border-radius:16px;margin-bottom:20px}.brand{padding-bottom:10px}.nav{grid-template-columns:repeat(4,minmax(0,1fr));gap:3px}.nav button{font-size:12px;text-align:center;padding:9px 3px}.nav .num{display:none}.sidehelp{display:none}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.card{padding:17px}.top{margin:10px 0 20px}}
+@media(max-width:520px){.metrics{gap:8px}.metric{padding:12px}.nav button{font-size:11px}.flexrow{display:block}.themegrid,.keygrid{grid-template-columns:1fr}.field.compact{flex:1 1 140px}.sectiontitle h2{font-size:18px}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar">
+ <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v0.3.0</small></div>
+ <nav class="nav" aria-label="Điều hướng">
+  <button data-nav="create" class="active"><span class="num">1</span> Tạo câu hỏi</button>
+  <button data-nav="questions"><span class="num">2</span> Duyệt & Video</button>
+  <button data-nav="keys"><span class="num">3</span> API Key TXT</button>
+  <button data-nav="publish"><span class="num">4</span> Lịch đăng Page</button>
+ </nav>
+ <div class="sidehelp"><b>Gợi ý bắt đầu</b><p>Đầu tiên nhập API key ở mục 3. Sau đó quay lại mục 1, bấm tạo câu hỏi ngẫu nhiên và duyệt nội dung trước khi xuất MP4.</p></div>
+</aside>
+<main class="content">
+ <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Chọn ngẫu nhiên → kiểm duyệt → xuất MP4 có giọng đọc → đặt lịch Facebook.</p></div><span class="version">Bản v0.3.0</span></header>
+ <div class="metrics">
+  <div class="metric"><span class="name">Câu hỏi đã lưu</span><strong id="statQuestions">0</strong></div>
+  <div class="metric"><span class="name">Câu đã duyệt</span><strong id="statApproved">0</strong></div>
+  <div class="metric"><span class="name">Video MP4</span><strong id="statVideos">0</strong></div>
+  <div class="metric"><span class="name">API key đã cấu hình</span><strong id="statKeys">0</strong></div>
+ </div>
+
+ <section class="panel active" id="panel-create">
+  <div class="card">
+   <div class="sectiontitle"><h2>1. Tạo câu hỏi bằng AI</h2><span class="pill">Không cần nhập chủ đề</span></div>
+   <p class="note">Studio tự đề xuất chủ đề trong hơn 50 lĩnh vực, ưu tiên những chủ đề bạn ít tạo video. Có thể đổi chủ đề bất cứ lúc nào.</p>
+   <div class="topiccard"><small>🎲 CHỦ ĐỀ ĐƯỢC CHỌN NGẪU NHIÊN</small><h3 id="topicName">Đang chọn chủ đề…</h3><button class="btn outline" id="reroll">↻ Đổi chủ đề khác</button></div>
+   <div class="fieldrow">
+    <div class="field compact"><label for="level">Trình độ</label><select id="level"><option>TOPIK 1</option><option>TOPIK 2</option><option>TOPIK 3</option><option>TOPIK 4</option></select></div>
+    <div class="field compact"><label for="count">Số câu / lần</label><select id="count"><option>3</option><option selected>6</option><option>10</option><option>15</option><option>20</option><option>30</option></select></div>
+   </div>
+   <div class="actions"><button class="btn" id="generate">✨ Tạo câu hỏi chủ đề này</button><button class="btn secondary" id="daily">📅 Tạo chủ đề hôm nay</button></div>
+   <p class="note" style="margin-top:15px">Câu hỏi AI được lưu dưới dạng nháp để kiểm tra tiếng Hàn trước khi xuất video. Không bảo đảm mọi đáp án AI đều chính xác.</p>
+  </div>
+  <div class="tip" id="setupTip">💡 Chưa có API key? Chọn mục <b>API Key TXT</b> để nhập từ file văn bản hoặc dán key trực tiếp.</div>
+ </section>
+
+ <section class="panel" id="panel-questions">
+  <div class="card">
+   <div class="sectiontitle"><h2>2. Ngân hàng câu hỏi</h2><span class="pill" id="selectedCount">Đã chọn 0 câu</span></div>
+   <div class="toolbar">
+    <select id="questionFilter" aria-label="Lọc câu hỏi"><option value="all">Tất cả</option><option value="draft">Chờ duyệt</option><option value="approved">Đã duyệt</option><option value="rejected">Đã từ chối</option></select>
+    <button class="btn secondary small" id="selectDrafts">Chọn tất cả câu chờ duyệt</button>
+    <button class="btn secondary small" id="selectApproved">Chọn câu đã duyệt</button>
+    <button class="btn outline small" id="clearSelected">Bỏ chọn</button>
+    <button class="btn small" id="approve" disabled>✓ Duyệt câu đã chọn</button>
+   </div>
+   <div id="emptyQuestions" class="empty"><span style="font-size:28px">🗂️</span><strong>Chưa có câu hỏi</strong>Vào mục “Tạo câu hỏi” để tạo bộ câu hỏi đầu tiên.</div>
+   <div class="tablewrap"><table class="table"><thead><tr><th>Chọn</th><th>Trạng thái</th><th>Chủ đề / Cấp độ</th><th>Câu hỏi</th><th>Đáp án đúng</th><th>Giải thích</th></tr></thead><tbody id="questionRows"></tbody></table></div>
+  </div>
+  <div class="card">
+   <div class="sectiontitle"><h2>3. Xuất video MP4</h2><span class="pill">Dọc 9:16</span></div>
+   <p class="note">Chọn các câu <b>đã duyệt</b> ở bảng trên, rồi chọn phong cách và giọng đọc.</p>
+   <div class="themegrid">
+    <label><input type="radio" name="theme" value="hanji" checked><span class="swatch"></span> Hanji Classic</label>
+    <label><input type="radio" name="theme" value="blue"><span class="swatch blue"></span> Blue Modern</label>
+    <label><input type="radio" name="theme" value="sejong"><span class="swatch sejong"></span> Sejong Heritage</label>
+   </div>
+   <label class="switchrow"><input type="checkbox" id="voice" checked> 🔊 Đọc câu hỏi tiếng Việt và đáp án đúng bằng tiếng Hàn</label>
+   <button class="btn" id="render" disabled>🎬 Xuất video (chọn câu đã duyệt)</button>
+   <div id="videoReady" class="tip" style="display:none;margin-top:15px"></div>
+   <div class="actions" style="margin-top:12px"><a id="videoDownload" class="btn secondary" style="display:none;text-decoration:none" download>↓ Tải MP4 vừa xuất</a></div>
+  </div>
+ </section>
+
+ <section class="panel" id="panel-keys">
+  <div class="card">
+   <div class="sectiontitle"><h2>Thiết lập API Key</h2><span class="pill">Chỉ lưu trên máy bạn</span></div>
+   <p class="note">Dùng API key cá nhân của Gemini, Groq hoặc OpenRouter. Hệ thống sẽ chọn key hợp lệ theo vòng, không vượt giới hạn sử dụng của nhà cung cấp.</p>
+   <div class="keygrid">
+    <div class="keybox"><strong>Gemini</strong><em id="keyGemini">0</em><small>key đã nhận</small></div>
+    <div class="keybox"><strong>Groq</strong><em id="keyGroq">0</em><small>key đã nhận</small></div>
+    <div class="keybox"><strong>OpenRouter</strong><em id="keyOpenrouter">0</em><small>key đã nhận</small></div>
+   </div>
+   <div class="fieldrow"><div class="field"><label for="keyProvider">File chỉ có key thuộc dịch vụ nào?</label><select id="keyProvider"><option value="gemini">Gemini</option><option value="groq">Groq</option><option value="openrouter">OpenRouter</option></select></div></div>
+   <div class="upload"><strong>📄 Chọn file .TXT chứa API key</strong><input id="txtFile" type="file" accept=".txt,text/plain"><small id="fileHint">Mỗi dòng một key. File tối đa 64 KB. Có thể chứa nhiều nhóm [gemini], [groq], [openrouter].</small></div>
+   <div class="actions" style="margin-top:16px"><button class="btn" id="importFile">↑ Nhập key từ TXT</button><span class="note" style="margin:0">Key đã tồn tại sẽ không bị thêm trùng. Giữ nguyên các key khác.</span></div>
+   <div class="divider"></div>
+   <div class="sectiontitle"><h2 style="font-size:17px">Hoặc thêm thủ công</h2></div>
+   <div class="field"><label for="manualKeys">Dán một hoặc nhiều key (dấu phẩy hoặc xuống dòng)</label><input id="manualKeys" type="password" placeholder="Nhập key tại đây, không hiển thị công khai" autocomplete="off"></div>
+   <div class="actions" style="margin-top:13px"><button class="btn secondary" id="saveManual">+ Thêm key</button></div>
+   <details style="margin-top:20px"><summary style="color:var(--blue);cursor:pointer;font-weight:700">Xem mẫu file TXT</summary><div class="example"># Một file cho nhiều dịch vụ:
+[gemini]
+YOUR_GEMINI_KEY_1
+YOUR_GEMINI_KEY_2
+
+[groq]
+YOUR_GROQ_KEY
+
+[openrouter]
+YOUR_OPENROUTER_KEY</div></details>
+   <p class="keynotice">File TXT được đọc trong trình duyệt trên máy bạn, sau đó gửi đến máy chủ cục bộ 127.0.0.1. Key được lưu trong dữ liệu cá nhân của Windows dưới dạng văn bản, không đưa lên GitHub. Không chia sẻ file TXT hoặc file lưu key.</p>
+  </div>
+ </section>
+
+ <section class="panel" id="panel-publish">
+  <div class="card">
+   <div class="sectiontitle"><h2>4. Lên lịch đăng Facebook Page</h2><span class="pill">Reels</span></div>
+   <p class="note">Sau khi xuất MP4, chọn video tại đây. Cần Page ID và Page Access Token hợp lệ; tính năng đăng thật còn cần kiểm thử với Meta.</p>
+   <div class="field"><label for="videoSelect">Video đã tạo</label><select id="videoSelect"><option value="">Chưa có video</option></select></div>
+   <div class="flexrow" style="margin-top:14px">
+    <div class="field"><label for="scheduledAt">Ngày giờ đăng (múi giờ máy tính)</label><input type="datetime-local" id="scheduledAt"></div>
+    <div class="field"><label for="caption">Chú thích bài đăng</label><textarea id="caption" rows="2">Học tiếng Hàn mỗi ngày cùng Tiếng Hàn So Easy! 🇰🇷 #tienghansoeasy</textarea></div>
+   </div>
+   <div class="actions" style="margin-top:17px"><button id="schedule" class="btn">📆 Lên lịch đăng video</button></div>
+   <p class="note" style="margin-top:15px">Lịch đăng chỉ hoạt động khi ứng dụng đang chạy. Những bài lỗi không tự đăng lại để tránh trùng lặp trên Page.</p>
+  </div>
+  <div class="card"><div class="sectiontitle"><h2>Danh sách lịch đăng</h2></div>
+   <div id="emptyJobs" class="empty">Chưa có video nào được lên lịch.</div>
+   <div class="tablewrap"><table class="table"><thead><tr><th>Thời gian</th><th>Trạng thái</th><th>Video</th><th>Ghi chú</th></tr></thead><tbody id="jobRows"></tbody></table></div>
+  </div>
+ </section>
+ <footer class="footer">Tiếng Hàn khó có tui lo !!! · tienghansoeasy.io.vn · Studio chạy cục bộ trên máy bạn</footer>
+</main></div>
+<div class="result" role="status" aria-live="polite" id="toast"></div>
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const state={topic:"",questions:[],jobs:[],videos:[],providers:{},selection:new Set(),busy:false,autoToast:null,lastVideo:""};
+function make(tag,text,cls){const el=document.createElement(tag);if(text!==undefined)el.textContent=String(text);if(cls)el.className=cls;return el}
+function notice(message,type){const el=$("toast");el.textContent=message;el.className="result visible "+(type||"");if(state.autoToast)clearTimeout(state.autoToast);state.autoToast=setTimeout(()=>{el.className="result"},6500)}
+async function api(url,body){
+ const options={cache:"no-store"};
+ if(body!==undefined){options.method="POST";options.headers={"Content-Type":"application/json"};options.body=JSON.stringify(body)}
+ const response=await fetch(url,options);
+ const content=await response.json().catch(()=>({error:"Server không trả dữ liệu hợp lệ."}));
+ if(!response.ok)throw Error(content.error||("HTTP "+response.status));
+ return content;
+}
+function showPanel(name){
+ document.querySelectorAll("[data-nav]").forEach(el=>el.classList.toggle("active",el.dataset.nav===name));
+ document.querySelectorAll(".panel").forEach(el=>el.classList.toggle("active",el.id==="panel-"+name));
+ window.scrollTo({top:0,behavior:"smooth"});
+}
+document.querySelectorAll("[data-nav]").forEach(el=>el.addEventListener("click",()=>showPanel(el.dataset.nav)));
+async function run(fn,success){
+ if(state.busy)return;
+ state.busy=true;
+ document.body.classList.add("busy");
+ try{const result=await fn();if(success)notice(success,"success");return result}
+ catch(err){notice("Lỗi: "+err.message,"error");return null}
+ finally{state.busy=false;document.body.classList.remove("busy");updateSelection()}
+}
+async function chooseTopic(excludeCurrent){
+ const suffix=excludeCurrent&&state.topic?"?exclude="+encodeURIComponent(state.topic):"";
+ const r=await api("/api/topic/random"+suffix);
+ state.topic=r.topic;$("topicName").textContent=r.topic;
+}
+$("reroll").addEventListener("click",()=>run(()=>chooseTopic(true),"Đã chọn chủ đề khác."));
+async function createQuestions(daily){
+ const count=Number($("count").value),level=$("level").value;
+ const result=await run(async()=>{
+   let response;
+   if(daily)response=await api("/api/daily",{count:count});
+   else response=await api("/api/generate",{topic:state.topic,level:level,count:count});
+   await loadStatus();
+   if(response.plan&&response.plan.topic){state.topic=response.plan.topic;$("topicName").textContent=state.topic}
+   if(response.accepted&&response.accepted.length){
+     state.selection=new Set(response.accepted);
+     renderQuestions();
+     showPanel("questions");
+     notice("Đã tạo "+response.accepted.length+" câu nháp. Hãy xem và duyệt đáp án trước khi xuất video.","success");
+   }else if(response.skipped){notice("Chủ đề của hôm nay đã được tạo. Bạn vẫn có thể dùng nút tạo câu hỏi ngẫu nhiên.")}
+   else {notice("Chưa tạo được câu hỏi. Kiểm tra API key / quota tại mục API Key TXT.","error")}
+   if(response.errors&&response.errors.length)notice("API thông báo: "+response.errors.join("; "), "error");
+   return response;
+ });
+ return result;
+}
+$("generate").addEventListener("click",()=>createQuestions(false));
+$("daily").addEventListener("click",()=>createQuestions(true));
+function selectedApproved(){
+ return state.questions.filter(q=>state.selection.has(q.id)&&q.status==="approved").map(q=>q.id)
+}
+function updateSelection(){
+ const ids=state.selection,approved=selectedApproved().length;
+ $("selectedCount").textContent="Đã chọn "+ids.size+" câu · "+approved+" đã duyệt";
+ $("approve").disabled=state.busy||!state.questions.some(q=>ids.has(q.id)&&q.status!=="approved");
+ $("render").disabled=state.busy||approved===0;
+ $("render").textContent=approved?"🎬 Xuất video từ "+approved+" câu đã duyệt":"🎬 Xuất video (chọn câu đã duyệt)";
+}
+function renderQuestions(){
+ const filter=$("questionFilter").value,rows=$("questionRows");rows.replaceChildren();
+ const display=state.questions.filter(q=>filter==="all"||q.status===filter);
+ $("emptyQuestions").style.display=display.length?"none":"block";
+ const heading=$("emptyQuestions").querySelector("strong");
+ heading.textContent=state.questions.length?"Không có câu nào ở bộ lọc này":"Chưa có câu hỏi";
+ for(const q of display){
+   const tr=make("tr");
+   const select=make("td"),cb=make("input");cb.type="checkbox";cb.value=q.id;cb.checked=state.selection.has(q.id);
+   cb.addEventListener("change",()=>{if(cb.checked)state.selection.add(q.id);else state.selection.delete(q.id);updateSelection()});
+   select.append(cb);tr.append(select);
+   const status=make("td");status.append(make("span",q.status==="approved"?"Đã duyệt":q.status==="rejected"?"Đã từ chối":"Chờ duyệt","status "+q.status));tr.append(status);
+   const topic=make("td");topic.append(make("strong",q.topic),make("small",q.level));tr.append(topic);
+   tr.append(make("td",q.question),make("td",q.correct),make("td",q.explanation||"Chưa có giải thích"));
+   rows.append(tr);
+ }
+ updateSelection();
+}
+$("questionFilter").addEventListener("change",renderQuestions);
+$("selectDrafts").addEventListener("click",()=>{state.selection=new Set(state.questions.filter(q=>q.status==="draft").map(q=>q.id));renderQuestions()});
+$("selectApproved").addEventListener("click",()=>{state.selection=new Set(state.questions.filter(q=>q.status==="approved").map(q=>q.id));renderQuestions()});
+$("clearSelected").addEventListener("click",()=>{state.selection.clear();renderQuestions()});
+$("approve").addEventListener("click",async()=>{
+ const ids=state.questions.filter(q=>state.selection.has(q.id)&&q.status!=="approved").map(q=>q.id);
+ if(!ids.length){notice("Chọn câu chờ duyệt trước.");return}
+ const response=await run(()=>api("/api/approve",{ids:ids}),"Đã duyệt "+ids.length+" câu.");
+ if(response){await loadStatus();showPanel("questions")}
+});
+$("render").addEventListener("click",async()=>{
+ const ids=selectedApproved();
+ if(!ids.length){notice("Chọn ít nhất một câu đã duyệt.");return}
+ const theme=document.querySelector('input[name="theme"]:checked').value;
+ notice("Đang dựng video. Giữ ứng dụng mở đến khi xuất hoàn tất.");
+ const result=await run(()=>api("/api/render",{ids:ids,theme:theme,with_voice:$("voice").checked}));
+ if(result&&result.video){
+   state.lastVideo=result.video;
+   const name=result.video.replace(/^.*[\\\/]/,"");
+   const link=$("videoDownload");link.href="/api/videos/"+encodeURIComponent(name);link.style.display="inline-flex";
+   $("videoReady").textContent="✅ Video đã xuất: "+name;
+   $("videoReady").style.display="block";
+   await loadStatus();
+   $("videoSelect").value=result.video;
+   notice("Video đã được xuất thành công. Có thể tải xuống hoặc chọn để lên lịch đăng.","success");
+ }
+});
+$("keyProvider").addEventListener("change",()=>{$("fileHint").textContent="File không ghi nhóm sẽ được nhập cho "+$("keyProvider").value+". File tối đa 64 KB."});
+$("txtFile").addEventListener("change",()=>{const f=$("txtFile").files[0];$("fileHint").textContent=f?"Đã chọn: "+f.name+" ("+Math.round(f.size/1024)+" KB)":"Chưa chọn file TXT."});
+$("importFile").addEventListener("click",async()=>{
+ const file=$("txtFile").files[0];
+ if(!file){notice("Chọn file .txt trước khi nhập key.");return}
+ if(!file.name.toLowerCase().endsWith(".txt")){notice("Chỉ hỗ trợ file .txt","error");return}
+ if(file.size>65536){notice("File lớn hơn 64 KB. Hãy chia nhỏ file.","error");return}
+ const text=await file.text();
+ const result=await run(()=>api("/api/keys/import",{text:text,provider:$("keyProvider").value,replace:false}));
+ if(result){await loadStatus();$("txtFile").value="";
+   notice("Nhập TXT thành công: "+Object.entries(result.imported).map(x=>x[0]+": "+x[1]+" key").join(", ")+". Đã loại key trùng.","success");
+ }
+});
+$("saveManual").addEventListener("click",async()=>{
+ const input=$("manualKeys");const text=input.value.trim();
+ if(!text){notice("Nhập ít nhất một key hoặc chọn file TXT.");return}
+ const result=await run(()=>api("/api/keys/import",{text:text,provider:$("keyProvider").value,replace:false}));
+ if(result){input.value="";await loadStatus();notice("Đã lưu key vào máy của bạn.","success")}
+});
+$("schedule").addEventListener("click",async()=>{
+ const video=$("videoSelect").value,time=$("scheduledAt").value;
+ if(!video){notice("Chưa có video. Hãy xuất MP4 trước khi lên lịch.");return}
+ if(!time){notice("Chọn ngày giờ đăng trước.");return}
+ const dt=new Date(time);
+ if(isNaN(dt.getTime())||dt.getTime()<=Date.now()){notice("Ngày giờ đăng phải ở tương lai.","error");return}
+ const result=await run(()=>api("/api/schedule",{video_path:video,caption:$("caption").value,scheduled_at:dt.toISOString()}));
+ if(result){await loadStatus();notice("Đã lên lịch. Giữ Studio chạy và cấu hình Meta Page token hợp lệ.","success")}
+});
+function renderVideos(){
+ const sel=$("videoSelect"),chosen=state.lastVideo||sel.value;sel.replaceChildren();
+ const initial=make("option",state.videos.length?"Chọn video MP4…":"Chưa có video MP4");
+ initial.value="";sel.append(initial);
+ for(const v of state.videos){const option=make("option",v.name+" · "+v.size_mb+" MB");option.value=v.path;sel.append(option)}
+ if(state.videos.some(v=>v.path===chosen))sel.value=chosen;
+}
+function renderJobs(){
+ const body=$("jobRows");body.replaceChildren();$("emptyJobs").style.display=state.jobs.length?"none":"block";
+ for(const job of state.jobs){
+  const row=make("tr");
+  const when=new Date(job.scheduled_at);
+  row.append(make("td",isNaN(when.getTime())?job.scheduled_at:when.toLocaleString("vi-VN")),
+             make("td",job.status),make("td",job.video_path.replace(/^.*[\\\/]/,"")),make("td",job.error||""));
+  body.append(row);
+ }
+}
+async function loadStatus(){
+ const data=await api("/api/status");
+ state.questions=data.questions||[];state.jobs=data.jobs||[];state.videos=data.videos||[];
+ state.providers=data.providers||{};
+ const validIds=new Set(state.questions.map(q=>q.id));
+ state.selection=new Set([...state.selection].filter(id=>validIds.has(id)));
+ $("statQuestions").textContent=state.questions.length;
+ $("statApproved").textContent=state.questions.filter(q=>q.status==="approved").length;
+ $("statVideos").textContent=state.videos.length;
+ $("statKeys").textContent=Object.values(state.providers).reduce((sum,p)=>sum+(p.keys||0),0);
+ for(const p of ["gemini","groq","openrouter"]){
+   $("key"+p.charAt(0).toUpperCase()+p.slice(1)).textContent=(state.providers[p]||{}).keys||0;
+ }
+ $("setupTip").style.display=Number($("statKeys").textContent)?"none":"block";
+ renderQuestions();renderVideos();renderJobs();
+}
+async function initialize(){
+ try{await Promise.all([loadStatus(),chooseTopic(false)])}
+ catch(error){notice("Không tải được dữ liệu Studio: "+error.message,"error")}
+}
+initialize();
+})();
+</script>
+</body></html>

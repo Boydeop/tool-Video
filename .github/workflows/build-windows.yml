@@ -46,7 +46,7 @@ jobs:
       - name: Build one-file GUI EXE
         shell: pwsh
         run: |
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name TiengHanSoEasyStudio --collect-all edge_tts --add-binary "bin\ffmpeg.exe;." --add-binary "bin\ffprobe.exe;." launcher.py
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name TiengHanSoEasyStudio --collect-all edge_tts --add-data "studio\ui.html;studio" --add-binary "bin\ffmpeg.exe;." --add-binary "bin\ffprobe.exe;." launcher.py
           if (-not (Test-Path dist\TiengHanSoEasyStudio.exe)) { throw 'EXE missing' }
           Get-Item dist\TiengHanSoEasyStudio.exe | Select-Object Name,Length
           Get-FileHash dist\TiengHanSoEasyStudio.exe -Algorithm SHA256
@@ -72,12 +72,14 @@ jobs:
             }
             if (-not $ready) { throw 'EXE did not respond on localhost:8765/health' }
             $homePage = Invoke-WebRequest -Uri "http://127.0.0.1:8765/" -TimeoutSec 5 -NoProxy
-            if ($homePage.StatusCode -ne 200 -or $homePage.Content -notmatch 'TIẾNG HÀN SO EASY') {
+            if ($homePage.StatusCode -ne 200 -or $homePage.Content -notmatch 'TIẾNG HÀN SO EASY' -or $homePage.Content -notmatch 'Đổi chủ đề') {
               throw 'EXE homepage HTTP smoke test failed'
             }
             $status = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/status" -TimeoutSec 5 -NoProxy
             if ($null -eq $status.questions) { throw 'EXE /api/status smoke test failed' }
-            Write-Output "EXE HTTP smoke tests passed"
+            $random = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/topic/random" -TimeoutSec 5 -NoProxy
+            if (-not $random.topic) { throw "EXE random topic endpoint failed" }
+            Write-Output "EXE HTTP + random topic smoke tests passed"
           } catch {
             $logPath = Join-Path $env:LOCALAPPDATA "TiengHanSoEasyStudio\studio.log"
             if (Test-Path $logPath) { Get-Content $logPath -Tail 100 }
@@ -98,7 +100,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.2.1
+          tag_name: v0.3.0
           name: Tiếng Hàn So Easy Studio v0.2.1
           target_commitish: main
           files: dist/TiengHanSoEasyStudio.exe

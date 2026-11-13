@@ -107,7 +107,7 @@ Run tests:
 - The renderer uses a 540x960 base canvas and upscales for larger resolutions; native 1080p typography is a future improvement.
 - Daily batch needs external cron/Windows Task Scheduler trigger.
 
-## Windows one-click EXE (v0.2.1)
+## Windows one-click EXE (v0.3.0)
 
 A Windows GitHub Actions workflow creates a standalone desktop EXE containing Python runtime, Pillow, edge-tts, FFmpeg and FFprobe. Download from the repository Releases (or the Build Windows EXE Actions artifact if release publishing is restricted). Double-click TiengHanSoEasyStudio.exe to start the local dashboard. Data is stored in the user's LOCALAPPDATA/TiengHanSoEasyStudio directory. The EXE does not require installing Python or FFmpeg separately.
 
@@ -130,3 +130,25 @@ The dashboard now enables narration by default (checkbox). It requests online Vi
 Fixes Brave/Chrome ERR_EMPTY_RESPONSE when running the frozen no-console EXE. Python's default HTTP request logger tries to write to sys.stderr, which is None in PyInstaller --windowed. The HTTP handler now sends request and crash logs through the file logger instead. The GUI waits for the health endpoint before opening the browser and shows a usable startup error. Logs: LOCALAPPDATA/TiengHanSoEasyStudio/studio.log. GitHub Actions now launches the actual built EXE in --smoke-server mode and verifies /health, / and /api/status before releasing it.
 
 If you previously downloaded v0.2.0, close it and use v0.2.1 instead. The existing local database and saved API keys stay in LOCALAPPDATA/TiengHanSoEasyStudio.
+
+## v0.3.0: TXT keys and random-topic dashboard
+
+The dashboard now has four tabs (Create / Review & Render / API Keys TXT / Facebook Page). You no longer type a topic. On opening, the app selects a random subject from the curriculum. Click **Đổi chủ đề khác** to reroll without immediately repeating the current subject; selection favors less-used topics. Then click **Tạo câu hỏi chủ đề này**, review draft questions, approve them, and export MP4. The app prevents rendering when no approved questions are selected rather than displaying an unhelpful error. Use the **Chọn câu đã duyệt** button for convenience.
+
+### Import API keys from TXT
+
+In **API Key TXT**, choose Gemini, Groq or OpenRouter as the default service, select a .txt file (up to 64 KB), and click **Nhập key từ TXT**. One key per line, comma-separated lines and comments (lines beginning # or //) are supported. A combined file can contain sections:
+
+    [gemini]
+    YOUR_GEMINI_KEY_1
+    YOUR_GEMINI_KEY_2
+    [groq]
+    YOUR_GROQ_KEY
+    [openrouter]
+    YOUR_OPENROUTER_KEY
+
+Or use lines with provider names (e.g. gemini: MY_KEY). Imported keys are appended to the saved local pool with duplicates skipped, preserving previously saved keys. TXT is read in your browser; the content is sent only to the local server on 127.0.0.1 and is stored as plaintext in LOCALAPPDATA/TiengHanSoEasyStudio/keys.local.json. Delete the original TXT yourself after import if you do not need it. Never commit keys or expose the local dashboard to the Internet.
+
+The publishing section now shows generated MP4 files in a dropdown rather than requiring you to type their full paths. Voice still depends on a working internet connection and the online TTS service. Meta Page publishing still needs a valid Page token and real-world verification.
+
+This version is built by the Windows EXE workflow, which checks the actual bundled UI and the random-topic API before creating the v0.3.0 GitHub Release.
