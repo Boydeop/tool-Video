@@ -189,7 +189,7 @@ class FrontEndTests(unittest.TestCase):
         html=(Path(__file__).resolve().parents[1]/"studio"/"ui.html").read_text(encoding="utf-8")
         self.assertEqual(html.count('data-nav="autopilot"'),1)
         self.assertNotIn('data-nav="create"',html)
-        for control in ("eventPlanner","eventSelect","metadataAuto",
+        for control in ("eventPlanner","eventSelect","autoPreviewTemplate","metadataAuto",
                         "manualMetadata","autoEnrich","autoFallback",
                         "autoStart","manualGeneration","manualRenderSettings"):
             self.assertEqual(html.count('id="'+control+'"'),1,control)
