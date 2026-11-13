@@ -22,11 +22,23 @@ class Store:
         self.init()
 
     def db(self):
-        con = sqlite3.connect(str(self.path), timeout=30)
-        con.row_factory = sqlite3.Row
-        con.execute("PRAGMA busy_timeout=30000")
-        con.execute("PRAGMA journal_mode=WAL")
-        return con
+        # sqlite3.Connection.__exit__ commits but does NOT close the handle.
+        # Windows cannot remove a temp SQLite file while a handle stays open.
+        from contextlib import contextmanager
+
+        @contextmanager
+        def transaction():
+            con = sqlite3.connect(str(self.path), timeout=30)
+            try:
+                con.row_factory = sqlite3.Row
+                con.execute("PRAGMA busy_timeout=30000")
+                con.execute("PRAGMA journal_mode=WAL")
+                with con:
+                    yield con
+            finally:
+                con.close()
+
+        return transaction()
 
     def init(self):
         with self.db() as c:
