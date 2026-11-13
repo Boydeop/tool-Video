@@ -46,12 +46,33 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 #previewImage{object-fit:contain}
 @media(max-width:900px){.app{display:block;padding:14px}.sidebar{position:static;min-height:0;border-radius:16px;margin-bottom:20px}.brand{padding-bottom:10px}.nav{grid-template-columns:repeat(4,minmax(0,1fr));gap:3px}.nav button{font-size:12px;text-align:center;padding:9px 3px}.nav .num{display:none}.sidehelp{display:none}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.card{padding:17px}.top{margin:10px 0 20px}}
 @media(max-width:520px){.metrics{gap:8px}.metric{padding:12px}.nav button{font-size:11px}.flexrow{display:block}.themegrid,.keygrid{grid-template-columns:1fr}.field.compact{flex:1 1 140px}.sectiontitle h2{font-size:18px}}
+
+/* v1.1 responsive unified controls */
+#panel-autopilot .fieldrow:not(.auto-prefs){display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:end}
+#panel-autopilot .fieldrow .field.compact{min-width:0;flex:none;width:100%}
+#panel-autopilot select{min-width:0;width:100%;text-overflow:ellipsis}
+#panel-autopilot .auto-prefs{display:grid;grid-template-columns:1fr 1fr 180px;gap:12px;align-items:stretch}
+#panel-autopilot .auto-prefs .switchrow{margin:0;padding:10px 13px;background:#f5f8fd;border:1px solid #dce7f4;border-radius:12px;align-items:center;font-size:13px;line-height:1.4}
+#panel-autopilot .auto-prefs .switchrow input{flex:0 0 17px}
+#panel-autopilot .auto-prefs .field{justify-content:end}
+.eventstudio{background:linear-gradient(140deg,#fff8e9,#f2f7ff);border:1px solid #d9e6f4;border-radius:15px;padding:18px;margin:18px 0}
+.eventstudio strong{color:#0f4c81;font-size:17px}
+.eventstudio .event-description{font-size:13px;color:#455b73;margin:7px 0}
+.eventstudio .fieldrow{margin:13px 0 4px}
+#autoHistory small{line-height:1.65}
+#manualExportDetails,#metadataAdvanced{background:#f7f9fc;border:1px solid #dce5ee;border-radius:14px;padding:10px 14px;margin:16px 0}
+#manualExportDetails summary,#metadataAdvanced summary{font-weight:700;color:#0f4c81;cursor:pointer}
+.brand-auto{padding:12px 16px;background:#edf8f3;border:1px solid #c4e9d8;border-radius:12px;color:#145c46;line-height:1.5;margin:10px 0}
+#previewStage{margin:12px auto;max-width:100%}
+@media(max-width:1150px){#panel-autopilot .fieldrow:not(.auto-prefs){grid-template-columns:repeat(3,minmax(0,1fr))}#panel-autopilot .auto-prefs{grid-template-columns:1fr 1fr}}
+@media(max-width:740px){#panel-autopilot .fieldrow:not(.auto-prefs),#panel-autopilot .auto-prefs{grid-template-columns:1fr 1fr}}
+@media(max-width:470px){#panel-autopilot .fieldrow:not(.auto-prefs),#panel-autopilot .auto-prefs{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="app">
 <aside class="sidebar">
- <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.0.0</small></div>
+ <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.1.0</small></div>
  <nav class="nav" aria-label="Điều hướng">
   <button data-nav="autopilot" class="active"><span class="num">1</span> Sản xuất tự động</button>
   <button data-nav="create"><span class="num">2</span> Tạo câu thủ công</button>
@@ -63,7 +84,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
  <div class="sidehelp"><b>Gợi ý bắt đầu</b><p>Nhập API key ở mục 4, rồi vào mục 1 chọn số video. Autopilot tạo nhiều chủ đề và kiểm tra cấu trúc trước khi xuất; nội dung AI vẫn cần kiểm tra độ chính xác.</p></div>
 </aside>
 <main class="content">
- <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.0.0</span></header>
+ <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.1.0</span></header>
  <div class="metrics">
   <div class="metric"><span class="name">Câu hỏi đã lưu</span><strong id="statQuestions">0</strong></div>
   <div class="metric"><span class="name">Câu đã duyệt</span><strong id="statApproved">0</strong></div>
@@ -87,11 +108,24 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
       <div class="field compact"><label for="autoTheme">Template</label>
         <select id="autoTheme"><option value="hanji">Hanji Classic</option><option value="blue">Blue Modern</option><option value="sejong">Sejong Heritage</option></select></div>
     </div>
-    <div class="fieldrow">
+    <div class="fieldrow auto-prefs">
       <label class="switchrow"><input type="checkbox" id="autoVoice" checked> Giọng Việt–Hàn + đếm ngược + SFX (cần mạng)</label>
       <label class="switchrow"><input type="checkbox" id="autoSeo" checked> AI tạo tiêu đề và caption SEO; khi AI lỗi dùng template an toàn</label>
       <div class="field compact"><label for="autoWidth">Profile xuất</label>
         <select id="autoWidth"><option value="1080" selected>Shorts/Reels 1080×1920</option><option value="540">Kiểm thử nhanh 540×960</option></select></div>
+    </div>
+    <div class="eventstudio" id="seasonalStudio">
+      <strong>📅 Chủ đề theo sự kiện · riêng với chủ đề ngẫu nhiên</strong>
+      <p class="event-description">Chọn độc lập để ưu tiên Noel, Ngày Hangeul, Pepero... theo lịch Việt Nam. Nếu không bật, chủ đề ngẫu nhiên hoạt động như cũ.</p>
+      <div class="fieldrow" style="display:grid;grid-template-columns:1fr minmax(170px,.65fr);align-items:end">
+        <div class="field"><label for="autoEventMode">Cách chọn chủ đề</label><select id="autoEventMode">
+          <option value="random" selected>🎲 Chỉ ngẫu nhiên</option>
+          <option value="mix">🎁 1 chủ đề sự kiện + còn lại ngẫu nhiên</option>
+          <option value="events">📅 Ưu tiên chủ đề sự kiện sắp đến</option>
+        </select></div>
+        <div class="field"><label>Sự kiện gần nhất</label><span class="pill" id="eventCountdown">Đang kiểm tra lịch…</span></div>
+      </div>
+      <p class="event-description" id="eventDetails">Không tự phỏng đoán ngày lễ theo âm lịch.</p>
     </div>
     <p class="note">Autopilot tự duyệt **cấu trúc** nếu đủ phiên âm/nghĩa cho cả A/B/C/D. Nó không thay thế người kiểm tra tiếng Hàn. Video chỉ được đăng khi bạn lên lịch và cấp quyền riêng cho từng nền tảng. Tối đa 12 video/lượt để kiểm soát chi phí và quota API.</p>
     <div class="actions"><button class="btn" id="autoStart">🚀 Tạo nhiều chủ đề và dựng tất cả</button>
@@ -109,14 +143,14 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 
 <section class="panel" id="panel-create">
   <div class="card">
-   <div class="sectiontitle"><h2>1. Tạo câu hỏi bằng AI</h2><span class="pill">Không cần nhập chủ đề</span></div>
+   <div class="sectiontitle"><h2>Tạo câu hỏi riêng để kiểm duyệt</h2><span class="pill">Không cần nhập chủ đề</span></div>
    <p class="note">Studio tự đề xuất chủ đề trong hơn 50 lĩnh vực, ưu tiên những chủ đề bạn ít tạo video. Có thể đổi chủ đề bất cứ lúc nào.</p>
    <div class="topiccard"><small>🎲 CHỦ ĐỀ ĐƯỢC CHỌN NGẪU NHIÊN</small><h3 id="topicName">Đang chọn chủ đề…</h3><button class="btn outline" id="reroll">↻ Đổi chủ đề khác</button></div>
    <div class="fieldrow">
     <div class="field compact"><label for="level">Trình độ</label><select id="level"><option>TOPIK 1</option><option>TOPIK 2</option><option>TOPIK 3</option><option>TOPIK 4</option></select></div>
     <div class="field compact"><label for="count">Số câu / lần</label><select id="count"><option>3</option><option selected>6</option><option>10</option><option>15</option><option>20</option><option>30</option></select></div>
    </div>
-   <div class="actions"><button class="btn" id="generate">✨ Tạo câu hỏi chủ đề này</button><button class="btn secondary" id="daily">📅 Tạo chủ đề hôm nay</button><button class="btn outline" id="openModels">⚙ Chọn model AI</button></div>
+   <div class="actions"><button class="btn" id="generate">✨ Tạo câu hỏi chủ đề này</button><button class="btn secondary" id="daily" style="display:none">📅 Tạo chủ đề hôm nay</button><button class="btn outline" id="openModels">⚙ Chọn model AI</button></div>
    <p class="note" id="activeModels" style="margin-top:13px">Đang tải model đã chọn…</p>
    <p class="note" style="margin-top:15px">Câu hỏi AI được lưu dưới dạng nháp để kiểm tra tiếng Hàn trước khi xuất video. Không bảo đảm mọi đáp án AI đều chính xác.</p>
   </div>
@@ -125,7 +159,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 
  <section class="panel" id="panel-questions">
   <div class="card">
-   <div class="sectiontitle"><h2>2. Ngân hàng câu hỏi</h2><span class="pill" id="selectedCount">Đã chọn 0 câu</span></div>
+   <div class="sectiontitle"><h2>Ngân hàng câu hỏi</h2><span class="pill" id="selectedCount">Đã chọn 0 câu</span></div>
    <div class="toolbar">
     <select id="questionFilter" aria-label="Lọc câu hỏi"><option value="draft" selected>Chưa làm · Chờ duyệt</option><option value="approved">Đã duyệt tay · Chưa xuất</option><option value="auto_approved">Đã kiểm tra máy · Chưa xuất</option><option value="rendered">Đã xuất video</option><option value="rejected">Đã từ chối</option><option value="all">Tất cả trạng thái</option></select>
     <select id="batchFilter" aria-label="Lọc lô"><option value="all">Tất cả lô nội dung</option></select>
@@ -151,7 +185,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
    <div class="actions" style="margin-top:14px"><button class="btn small secondary" id="prevQuestions">← Trước</button><span class="pill" id="questionPageInfo">Trang 1</span><button class="btn small secondary" id="nextQuestions">Tiếp →</button></div>
   </div>
   <div class="card">
-   <div class="sectiontitle"><h2>3. Xuất video MP4</h2><span class="pill">Dọc 9:16</span></div>
+   <div class="sectiontitle"><h2>Thiết kế & xem trước video</h2><span class="pill">Dọc 9:16</span></div>
    <p class="note">Chỉ các câu <b>đã duyệt, chưa xuất</b> mới xuất video được. Sau khi dựng, chúng chuyển sang nhóm “Đã xuất video”.</p>
    <div class="themegrid">
     <label><input type="radio" name="theme" value="hanji" checked><span class="swatch"></span> Hanji Classic</label>
@@ -215,13 +249,15 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
      </div>
    </div>
    <video id="motionPreview" controls playsinline style="display:none;max-height:520px;max-width:100%;margin:10px auto;border-radius:12px"></video>
-   <div class="actions">
+   <details id="manualExportDetails"><summary>🎬 Tùy chọn xuất thủ công câu đã duyệt</summary>
+   <div class="actions" style="margin-top:12px">
     <button class="btn" id="render" disabled>🎬 Xuất video (chọn câu đã duyệt)</button>
     <div class="field compact"><label for="perVideo">Câu / MP4</label>
       <select id="perVideo"><option>3</option><option>4</option><option>5</option><option selected>6</option></select></div>
     <button class="btn secondary" id="renderBatch" disabled>📦 Xuất hàng loạt thành nhiều MP4</button>
    </div>
-   <p class="note">Xuất hàng loạt tự chia câu đã duyệt thành các video ngắn. Mỗi MP4 xuất xong sẽ được đánh dấu đã sử dụng, tránh trùng khi làm đợt tiếp theo.</p>
+   <p class="note">Chỉ dành cho câu được chọn ở ngân hàng. Dùng Autopilot để sản xuất nhiều chủ đề không cần tick.</p>
+   </details>
    <div id="renderProgressPanel" style="display:none;margin:14px 0;padding:16px;border:1px solid #cddced;border-radius:14px;background:#f8fbff">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
         <strong id="renderProgressPhase">Chuẩn bị xuất video</strong>
@@ -232,7 +268,10 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
    </div>
    <div id="videoReady" class="tip" style="display:none;margin-top:15px"></div>
    <div class="divider"></div>
-   <div class="sectiontitle"><h2 style="font-size:17px">© Metadata tác giả và thông báo bản quyền</h2></div>
+   <div class="sectiontitle"><h2 style="font-size:17px">© Metadata bản quyền tự động</h2></div>
+   <div class="brand-auto"><label class="switchrow" style="margin:0"><input id="autoMetadata" type="checkbox" checked> Tự gắn tác giả, năm bản quyền, website và chủ đề vào mọi MP4 khi xuất</label>
+     <small>Không cần nhập từng video. Metadata không phải DRM hay Content ID.</small></div>
+   <details id="metadataAdvanced"><summary>⚙ Nâng cao: sửa metadata riêng hoặc cập nhật video cũ</summary>
    <p class="note">Thông tin này được ghi vào thẻ MP4 (title / artist / copyright / comment). Nó giúp nhận diện nguồn, nhưng KHÔNG phải DRM, Content ID hay bằng chứng pháp lý chống sao chép.</p>
    <div class="fieldrow">
      <div class="field"><label for="metadataTitle">Tiêu đề metadata</label><input id="metadataTitle" type="text" maxlength="220"></div>
@@ -247,7 +286,8 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
      <select id="metadataVideoSelect"><option value="">Chọn MP4 đã xuất…</option></select>
    </div></div>
    <div class="actions"><button class="btn secondary" id="overwriteMetadata">© Ghi đè metadata MP4 đã chọn</button>
-     <span class="note">Cấu hình tự áp dụng cho MP4 mới. Video cũ chọn ở tab Facebook & SEO để ghi lại metadata.</span></div>
+     <span class="note">Cấu hình tự áp dụng cho MP4 mới. Chỉ dùng chức năng này cho MP4 cũ cần cập nhật.</span></div>
+   </details>
    <div style="margin-top:24px"><div class="sectiontitle"><h2 style="font-size:17px">Kho video đã sản xuất</h2><span class="pill" id="libraryCount">0 video</span></div>
     <div class="tablewrap"><table class="table"><thead><tr><th>Video</th><th>Chủ đề</th><th>Trạng thái</th><th>Tải xuống</th></tr></thead><tbody id="videoLibrary"></tbody></table></div></div>
    <div class="actions" style="margin-top:12px"><a id="videoDownload" class="btn secondary" style="display:none;text-decoration:none" download>↓ Tải MP4 vừa xuất</a></div>
@@ -417,7 +457,7 @@ const $=id=>document.getElementById(id);
 const state={topic:"",questions:[],batches:[],jobs:[],videos:[],providers:{},models:{},modelLists:{},
  production:{},productionInit:false,facebook:{},selection:new Set(),questionPage:1,
  busy:false,activeRender:false,autoToast:null,lastVideo:"",editingQuestion:null,logoX:.82,logoY:.10,
- productionRuns:[],outbound:[],youtube:{},instagram:{},autoCurrent:""};
+ productionRuns:[],outbound:[],youtube:{},instagram:{},autoCurrent:"",upcomingEvents:[]};
 function make(tag,text,cls){const el=document.createElement(tag);if(text!==undefined)el.textContent=String(text);if(cls)el.className=cls;return el}
 function notice(message,type){const el=$("toast");el.textContent=message;el.className="result visible "+(type||"");if(state.autoToast)clearTimeout(state.autoToast);state.autoToast=setTimeout(()=>{el.className="result"},6500)}
 async function api(url,body){
@@ -860,7 +900,7 @@ function productionPayload(){
  return {
   think:Number($("timingThink").value),reveal:Number($("timingReveal").value),
   transition:Number($("timingTransition").value),intro:Number($("timingIntro").value),
-  width:Number($("videoWidth").value),fps:24,
+  width:Number($("videoWidth").value),fps:30,auto_metadata:$("autoMetadata").checked,
   sfx:$("enableSfx").checked,sfx_volume:Number($("sfxVolume").value),
   shorts_safe:$("shortsSafe").checked,
   logo_position:$("logoPosition").value,logo_scale:Number($("logoScale").value),
@@ -888,6 +928,7 @@ function updateProductionPanel(){
  }
  $("enableSfx").checked=s.sfx!==false;
  $("shortsSafe").checked=s.shorts_safe!==false;
+ $("autoMetadata").checked=s.auto_metadata!==false;
  state.logoX=Number(s.logo_x??.82);
  state.logoY=Number(s.logo_y??.1);
  state.productionInit=true;
@@ -1078,6 +1119,14 @@ $("videoSelect").addEventListener("change",()=>{
 });
 
 
+function renderUpcomingEvents(){
+ const list=state.upcomingEvents||[],first=list[0];
+ $("eventCountdown").textContent=first?(first.days_until===0?"Hôm nay: "+first.name:
+   "Còn "+first.days_until+" ngày đến "+first.name):"Không có dịp trong 45 ngày";
+ $("eventDetails").textContent=first?(first.date+" · "+first.korean+
+   " · Gợi ý: "+first.topics.slice(0,3).join(" • ")):
+   "Nếu chưa có dịp phù hợp, Autopilot sẽ quay về chủ đề ngẫu nhiên.";
+}
 function updateAutopilotHistory(){
  const holder=$("autoHistory");holder.replaceChildren();
  const recent=state.productionRuns||[];
@@ -1157,12 +1206,16 @@ async function watchAutopilot(id){
        continue;
      }
      $("autoBar").value=Number(report.percent)||0;
-     $("autoPercent").textContent=(Number(report.percent)||0)+"%";
+     $("autoPercent").textContent=["completed","partial","failed","needs_review"].includes(report.status)?
+   ((report.videos||[]).length+"/"+report.total_videos+" MP4"):
+   ((Number(report.percent)||0)+"%");
      $("autoPhase").textContent=report.phase||"Đang tạo video";
      $("autoCount").textContent=(report.videos||[]).length+" / "+report.total_videos+
                                  " video đã xuất";
-     $("autoStatus").textContent=report.status;
-     if(["completed","partial","failed","interrupted"].includes(report.status)){
+     $("autoStatus").textContent=({needs_review:"Cần bổ sung câu hỏi",
+        completed:"Đã xong",partial:"Hoàn tất một phần",
+        failed:"Lỗi kỹ thuật",running:"Đang dựng"}[report.status]||report.status);
+     if(["completed","partial","failed","needs_review","interrupted"].includes(report.status)){
        await loadStatus();
        notice("Autopilot: "+(report.videos||[]).length+" MP4 đã tạo. "+
               (report.status!=="completed"?"Kiểm tra chủ đề bị thiếu trong lịch sử.":""),
@@ -1188,7 +1241,8 @@ $("autoStart").addEventListener("click",async()=>{
    videos:Number($("autoVideos").value),per_video:Number($("autoPerVideo").value),
    levels,formats,theme:$("autoTheme").value,
    with_voice:$("autoVoice").checked,voice_engine:$("voiceEngine").value,
-   width:Number($("autoWidth").value),auto_seo:$("autoSeo").checked
+   width:Number($("autoWidth").value),auto_seo:$("autoSeo").checked,
+  event_mode:$("autoEventMode").value
  }));
  if(data)watchAutopilot(data.job_id);
 });
@@ -1309,6 +1363,7 @@ async function loadStatus(){
  const data=await api("/api/status");
  state.questions=data.questions||[];state.batches=data.batches||[];
  state.productionRuns=data.production_runs||[];state.outbound=data.outbound_posts||[];
+ state.upcomingEvents=data.upcoming_events||[];
  state.youtube=data.youtube||{};state.instagram=data.instagram||{};
  state.jobs=data.jobs||[];state.videos=data.videos||[];
  state.production=data.production||{};state.facebook=data.facebook||{};
@@ -1326,7 +1381,7 @@ async function loadStatus(){
  }
  $("setupTip").style.display=Number($("statKeys").textContent)?"none":"block";
  renderBatches();renderQuestions();renderVideos();renderJobs();updateModelPanel();
- updateProductionPanel();updateFacebookPanel();updateAutopilotHistory();updatePlatforms();updateMaintenance(data.cache);
+ updateProductionPanel();updateFacebookPanel();updateAutopilotHistory();updatePlatforms();updateMaintenance(data.cache);renderUpcomingEvents();
 }
 async function initialize(){
  try{await Promise.all([loadStatus(),chooseTopic(false)]);await recoverActiveExport()}

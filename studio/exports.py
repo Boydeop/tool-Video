@@ -85,10 +85,16 @@ class ExportQueue:
                 self.service.store.update_production_run(jid,"running",items)
             completed=run_pipeline(self.service,plan,progress,store_results)
             outputs=completed["videos"]
-            terminal="completed" if len(outputs)==plan.videos else ("partial" if outputs else "failed")
-            self.service.store.update_production_run(jid,terminal,results)
+            # No video with saved drafts is a review-needed run, not a broken
+            # renderer. Surface actual file count instead of treating 100%
+            # stages processed as 100% successfully exported.
+            terminal="completed" if len(outputs)==plan.videos else ("partial" if outputs else "needs_review")
+            self.service.store.update_production_run(jid,
+                   "partial" if terminal=="needs_review" else terminal,results)
             self._update(jid,status=terminal,percent=100,
-                         phase="Đã kết thúc Autopilot: "+str(len(outputs))+"/"+str(plan.videos)+" MP4",
+                         phase=("Đã kiểm tra chủ đề, còn câu cần bổ sung: "
+                                if terminal=="needs_review" else "Đã kết thúc Autopilot: ")+
+                               str(len(outputs))+"/"+str(plan.videos)+" MP4",
                          videos=outputs,topics=results)
         except Exception as exc:
             self.service.store.update_production_run(jid,"failed",results,str(exc))

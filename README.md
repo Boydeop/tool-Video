@@ -344,3 +344,32 @@ Lịch đăng trên từng nền tảng được lưu độc lập trong SQLite,
 - Nếu chưa có kiểm chứng về dịch Hàn-Việt, hãy xem lại mẫu ngẫu nhiên trước khi đăng công khai hàng loạt.
 - Các bài test CI dùng mock Google/Meta; việc upload thật vẫn phải kiểm thử với tài khoản cá nhân đã được cấp quyền.
 
+
+
+## v1.1.0 · Template Hàn Quốc, Auto QA repair, Sự kiện
+
+Đọc báo cáo audit nguyên nhân và cách sửa: [AUDIT_V110.md](AUDIT_V110.md).
+
+### Video rõ nét, có họa tiết
+- 540x960 / 1080x1920 giữ bố cục chính gần như toàn khung. Bỏ lỗi v1.0.0 co nội dung xuống 421x749 làm chữ nhỏ và không cân đối.
+- Họa tiết chìm từ hình vector tự vẽ: mái cung điện Hàn Quốc, tháp N Seoul, hoa Mugunghwa, dải dancheong, nét giấy hanji. Mỗi template có sắc độ khác nhau, chữ và đáp án vẫn đứng trên lớp đồ họa.
+- 30 FPS được giữ khi lưu cấu hình giao diện. Cần render một MP4 thử để xem trên điện thoại và kiểm tra các vùng overlay thực của mỗi nền tảng.
+
+### Autopilot 0/N cần kiểm tra
+- Không còn loại câu vì **cụm gợi ý không trùng nguyên văn nghĩa từ** (ví dụ “Giá rẻ nhưng” so với “nhưng”).
+- Sinh thêm ứng viên câu hỏi, có vòng thử lại giới hạn, AI tự bổ sung nghĩa/phiên âm còn thiếu cho cả bốn đáp án trước khi quyết định đưa câu vào video.
+- Nếu thiếu dữ liệu/AI hết quota, không tạo ra đáp án giả: giữ câu ở dạng nháp, hiển thị nhóm lý do. 0/N sẽ có trạng thái **Cần bổ sung câu hỏi**, không phải hoàn thành video thành công.
+- Chỉ xác minh cấu trúc, **không thể thay thế kiểm tra độ chính xác tiếng Hàn**.
+
+### Chủ đề theo sự kiện là mục riêng
+- Autopilot thêm lựa chọn: **Chỉ ngẫu nhiên**, **Trộn 1 video sự kiện + phần còn lại ngẫu nhiên**, **Ưu tiên sự kiện**.
+- Có bảng đề xuất sự kiện theo giờ Việt Nam trong vòng 45 ngày: 25/12 Noel/크리스마스, 1/1 năm mới, 1/3 삼일절, 5/5 어린이날, 15/8 광복절, 9/10 한글날, 11/11 Pepero.
+- Các lễ âm lịch như Seollal/Chuseok cần nguồn niên lịch chính xác nên chưa tự gắn ngày.
+- Không trộn sự kiện với random khi chưa chọn.
+
+### Tự điền metadata và giao diện gọn
+- Với MP4 mới, mặc định tự đặt **title theo chủ đề + cấp độ**, **artist: Tiếng Hàn So Easy**, **copyright: © năm hiện tại Tiếng Hàn So Easy**, **website: tienghansoeasy.io.vn**. Không phải điền tay hoặc bấm ghi đè sau khi render.
+- Các tùy chọn sửa MP4 cũ được chuyển vào mục nâng cao, vì ghi đè video đã lên lịch có rủi ro.
+- Nhóm xuất thủ công được thu gọn, không trộn với Autopilot. Bố cục form dùng CSS grid đáp ứng màn hình lớn/nhỏ.
+
+Cách cập nhật: đóng Studio cũ; sao lưu thư mục LOCALAPPDATA/TiengHanSoEasyStudio, rồi mở EXE mới. Dữ liệu hỏi đáp và kho video cũ được giữ lại. Meta/YouTube/TikTok vẫn phải tuân thủ quyền API như báo cáo v1.0.0.

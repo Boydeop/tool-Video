@@ -20,6 +20,7 @@ class Plan:
     engine:str="auto"
     width:int=1080
     seo:bool=False
+    event_mode:str="random"
 
     @classmethod
     def parse(cls,raw:dict):
@@ -31,7 +32,8 @@ class Plan:
                  theme=str(raw.get("theme","hanji")),
                  voice=raw.get("with_voice") is True,
                  engine=str(raw.get("voice_engine","auto")),
-                 width=int(raw.get("width",1080)),seo=raw.get("auto_seo") is True)
+                 width=int(raw.get("width",1080)),seo=raw.get("auto_seo") is True,
+                 event_mode=str(raw.get("event_mode","random")))
         if not 1<=plan.videos<=12 or not 1<=plan.per_video<=6:
             raise ValueError("Maximum 12 videos per run, 1-6 questions/video")
         if not plan.levels or not all(x in LEVELS for x in plan.levels):
@@ -40,6 +42,8 @@ class Plan:
             raise ValueError("Invalid quiz formats")
         if plan.theme not in ("hanji","blue","sejong") or plan.width not in (540,1080):
             raise ValueError("Invalid video preset")
+        if plan.event_mode not in ("random","mix","events"):
+            raise ValueError("Chế độ chủ đề sự kiện không hợp lệ")
         if plan.engine not in ("auto","edge","google"):
             raise ValueError("Invalid voice engine")
         return plan
@@ -50,7 +54,7 @@ class Plan:
                 "theme":self.theme,"with_voice":self.voice,
                 "voice_engine":self.engine,"width":self.width,
                 "review_policy":"strict machine check, NOT human verified",
-                "auto_seo":self.seo}
+                "auto_seo":self.seo,"event_mode":self.event_mode}
 
 def choose_distinct_topics(counts,number,rng=None):
     if number>len(TOPICS):raise ValueError("Too many distinct topics")
@@ -65,7 +69,9 @@ def choose_distinct_topics(counts,number,rng=None):
 
 def run_pipeline(service,plan:Plan,update,on_result=None):
     """One independent topic per video; keep failed/draft attempts visible."""
-    chosen=choose_distinct_topics(service.store.topic_counts(),plan.videos)
+    from .events import choose_production_topics
+    chosen,events=choose_production_topics(service.store.topic_counts(),plan.videos,
+                                           mode=plan.event_mode)
     results=[]
     rejected=[]
     for index,topic in enumerate(chosen):
@@ -76,24 +82,69 @@ def run_pipeline(service,plan:Plan,update,on_result=None):
               "video":"","accepted":0,"reason":""}
         results.append(item)
         try:
-            generated=service.generate(topic,level,plan.per_video,fmt=fmt)
-            ids=generated["accepted"]
             good=[]
             problems=[]
-            for qid in ids:
-                quiz=service.store.get_questions([qid])[0]
-                issues=inspect_quiz(quiz)
-                if issues:problems.append({"id":qid,"issues":issues})
-                else:good.append(qid)
+            generation_errors=[]
+            inspected=set()
+            repairs=0
+            # First request includes spare candidates to survive duplicate or
+            # incomplete AI answers. A second bounded attempt is optional.
+            for attempt in range(2):
+                if len(good)>=plan.per_video:break
+                remaining=plan.per_video-len(good)
+                count=min(30,max(remaining+3,remaining*2))
+                try:
+                    generated=service.generate(topic,level,count,fmt=fmt)
+                    generation_errors.extend(generated.get("errors",[]))
+                except Exception as exc:
+                    generation_errors.append(type(exc).__name__+": "+str(exc)[:200])
+                    break
+                incoming=[qid for qid in generated.get("accepted",[]) if qid not in inspected]
+                if not incoming:
+                    break
+                for qid in incoming:
+                    inspected.add(qid)
+                    quiz=service.store.get_questions([qid])[0]
+                    issues=inspect_quiz(quiz)
+                    # Enrich ONLY missing dictionary fields with user's own
+                    # approved AI provider. Never fabricate translations.
+                    if (quiz.missing_answer_details and len(good)<plan.per_video
+                            and repairs<plan.per_video+1):
+                        repairs+=1
+
+                        try:
+                            service.enrich_answer_details([qid])
+                            quiz=service.store.get_questions([qid])[0]
+                            issues=inspect_quiz(quiz)
+                        except Exception as exc:
+                            generation_errors.append("Bổ sung "+qid[:6]+": "+
+                                type(exc).__name__)
+                    if issues:
+                        problems.append({"id":qid,"issues":issues})
+                    else:
+                        good.append(qid)
+                    if len(good)>=plan.per_video:break
             item["accepted"]=len(good)
             item["requires_review"]=problems
+            item["generation_errors"]=generation_errors[-4:]
             if len(good)<plan.per_video:
                 item["status"]="needs_review"
-                item["reason"]=("Only "+str(len(good))+"/"+str(plan.per_video)+
-                                 " questions passed strict checks. Review drafts in question bank.")
+                kinds={}
+                for candidate in problems:
+                    for issue in candidate["issues"]:
+                        kinds[issue]=kinds.get(issue,0)+1
+                examples="; ".join(k+": "+str(v) for k,v in
+                                  sorted(kinds.items(),key=lambda x:-x[1])[:3])
+                if not examples and generation_errors:
+                    examples=generation_errors[-1]
+                item["reason"]=("Chỉ có "+str(len(good))+"/"+str(plan.per_video)+
+                    " câu đạt kiểm tra. "+(examples or
+                    "API chưa trả đủ câu mới hoặc nội dung trùng.")+
+                    " Các câu chưa đạt vẫn lưu nháp.")
                 rejected.extend(problems)
                 update(100*(index+1)/plan.videos,item["reason"])
                 continue
+            good=good[:plan.per_video]
             service.store.auto_approve(good)
             def frame_progress(percent,phase):
                 update((index+max(0,min(1,percent/100)))*100/plan.videos,phase)
