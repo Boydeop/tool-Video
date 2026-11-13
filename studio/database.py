@@ -149,7 +149,7 @@ class Store:
             raise ValueError("Chưa chọn câu hỏi.")
         with self._lock, self.db() as c:
             for qid in ids:
-                row = c.execute("UPDATE questions SET status=? WHERE id=?", (status,qid))
+                row = c.execute("UPDATE questions SET status=? WHERE id=? AND status!='rendered'", (status,qid))
                 if row.rowcount != 1:
                     raise ValueError("Không tìm thấy câu: " + str(qid))
 
