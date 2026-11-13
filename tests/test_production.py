@@ -31,7 +31,7 @@ class ProductionTests(unittest.TestCase):
             self.assertEqual(Production(td).settings()["think"],7)
             newer=Path(td)/"second-output"
             prod.update({"export_dir":str(newer)})
-            self.assertIn(str(Path(td)/"output"),prod.settings()["export_history"])
+            self.assertIn(str((Path(td)/"output").resolve()),prod.settings()["export_history"])
             self.assertTrue(Path(cfg["export_dir"]).is_dir())
             with self.assertRaises(ValueError):prod.update({"think":.5})
             with self.assertRaises(ValueError):prod.update({"logo_position":"../bad"})
