@@ -56,6 +56,15 @@ class OptionsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 store.update_answer_details(ident,{"wrong1_meaning":"wrong"})
 
+    def test_scheduled_video_cannot_be_modified(self):
+        with tempfile.TemporaryDirectory() as td:
+            store=Store(Path(td)/"data.sqlite3")
+            video=Path(td)/"scheduled.mp4"
+            video.write_bytes(b"fake")
+            self.assertFalse(store.has_pending_page_job(video))
+            store.add_job(video,"caption","2030-01-01T07:00:00+07:00")
+            self.assertTrue(store.has_pending_page_job(video))
+
     def test_ai_enrichment_retains_manual_data(self):
         q=Quiz(topic="Đồ uống",question="Nước",correct="물",
                 wrong1="맥주",wrong2="콜라",wrong3="차",meaning="Nước")

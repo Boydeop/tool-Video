@@ -203,6 +203,10 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
      <div class="field"><label for="metadataCopyright">Tuyên bố bản quyền</label><input id="metadataCopyright" type="text" maxlength="220"></div>
      <div class="field"><label for="metadataComment">Ghi chú / website</label><input id="metadataComment" type="text" maxlength="220"></div>
    </div>
+   <div class="fieldrow"><div class="field">
+     <label for="metadataVideoSelect">Video MP4 cần ghi lại metadata</label>
+     <select id="metadataVideoSelect"><option value="">Chọn MP4 đã xuất…</option></select>
+   </div></div>
    <div class="actions"><button class="btn secondary" id="overwriteMetadata">© Ghi đè metadata MP4 đã chọn</button>
      <span class="note">Cấu hình tự áp dụng cho MP4 mới. Video cũ chọn ở tab Facebook & SEO để ghi lại metadata.</span></div>
    <div style="margin-top:24px"><div class="sectiontitle"><h2 style="font-size:17px">Kho video đã sản xuất</h2><span class="pill" id="libraryCount">0 video</span></div>
@@ -713,6 +717,10 @@ $("saveModel").addEventListener("click",async()=>{
 
 function renderVideos(){
  const sel=$("videoSelect"),chosen=state.lastVideo||sel.value;
+ const meta=$("metadataVideoSelect"),metaChosen=meta.value;
+ meta.replaceChildren();
+ const defaultMeta=make("option","Chọn MP4 để ghi metadata");defaultMeta.value="";
+ meta.append(defaultMeta);
  sel.replaceChildren();
  const first=make("option",state.videos.length?"Chọn video MP4…":"Chưa có video MP4");
  first.value="";sel.append(first);
@@ -721,6 +729,8 @@ function renderVideos(){
  for(const video of state.videos){
    const opt=make("option",video.name+" · "+video.status+" · "+video.size_mb+" MB");
    opt.value=video.path;sel.append(opt);
+   const option=make("option",video.name+" · "+video.status);
+   option.value=video.path;meta.append(option);
    const row=make("tr");
    row.append(make("td",video.name),make("td",video.topic||"Video cũ"),
               make("td",video.status==="rendered"?"Đã xuất":video.status==="scheduled"?"Đã lên lịch":video.status));
@@ -729,6 +739,7 @@ function renderVideos(){
    last.append(a);row.append(last);library.append(row);
  }
  if(state.videos.some(v=>v.path===chosen))sel.value=chosen;
+ if(state.videos.some(v=>v.path===metaChosen))meta.value=metaChosen;
 }
 function productionPayload(){
  return {
@@ -860,8 +871,8 @@ $("logoSprite").addEventListener("pointerup",event=>{
 });
 $("logoSprite").addEventListener("pointercancel",()=>{logoPointer=null});
 $("overwriteMetadata").addEventListener("click",async()=>{
- const video=$("videoSelect").value;
- if(!video){notice("Chọn MP4 trong tab Facebook & SEO trước.","error");return}
+ const video=$("metadataVideoSelect").value;
+ if(!video){notice("Chọn MP4 cần ghi đè metadata trước.","error");return}
  if(!await saveProduction())return;
  const name=video.replace(/^.*[\\\/]/,"");
  const result=await run(()=>api("/api/videos/metadata",{video_name:name}));

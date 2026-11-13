@@ -229,6 +229,13 @@ class Store:
             if row.rowcount!=1:raise ValueError("Video not registered.")
         return {"title":title,"caption":caption}
 
+    def has_pending_page_job(self,path):
+        with self.db() as c:
+            row=c.execute("""SELECT 1 FROM jobs WHERE video_path=?
+                AND status IN ('scheduled','publishing','submitted','needs_review') LIMIT 1""",
+                (str(Path(path).resolve()),)).fetchone()
+            return bool(row)
+
     def mark_scheduled(self,path):
         with self._lock,self.db() as c:
             row=c.execute("UPDATE video_registry SET status='scheduled' WHERE path=? AND status='rendered'",

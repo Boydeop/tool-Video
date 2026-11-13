@@ -197,12 +197,8 @@ class Service:
     def overwrite_video_metadata(self,name):
         from .metadata import overwrite_metadata
         path=self.video_path(name)
-        try:
-            existing=self.store.get_video(path)
-            if existing["status"]=="scheduled":
-                raise ValueError("Không thể ghi đè video đã lên lịch đăng.")
-        except ValueError as exc:
-            if "Không thể ghi đè" in str(exc):raise
+        if self.store.has_pending_page_job(path):
+            raise ValueError("Video đang lên lịch hoặc chưa xác nhận trạng thái đăng Meta. Không ghi đè.")
         return overwrite_metadata(path,self.production.settings())
 
     def seo_video(self,name):
