@@ -28,6 +28,9 @@ class Production:
             except (OSError,ValueError):pass
         data["export_dir"]=str(Path(data.get("export_dir") or self.root/"videos").resolve())
         data["cache_dir"]=str(Path(data.get("cache_dir") or self.root/"cache").resolve())
+        history=data.get("export_history",[])
+        data["export_history"]=[str(Path(p).expanduser().resolve()) for p in history[:20]
+                                if isinstance(p,str)] if isinstance(history,list) else []
         data["has_logo"]=(self.root/"brand_logo.png").is_file()
         return data
     def update(self,values):
@@ -36,6 +39,9 @@ class Production:
         if not isinstance(values,dict) or any(k not in allowed for k in values):
             raise ValueError("Thiết lập không hợp lệ.")
         new={**current,**values}
+        if "export_dir" in values and str(Path(values["export_dir"]).resolve())!=current["export_dir"]:
+            history=[current["export_dir"],*current.get("export_history",[])]
+            new["export_history"]=list(dict.fromkeys(history))[:20]
         for key in ("think","reveal","transition","intro","logo_scale","sfx_volume"):
             new[key]=float(new[key])
         if not (4<=new["think"]<=12 and 1.5<=new["reveal"]<=7
@@ -55,6 +61,7 @@ class Production:
             if not val.is_dir():raise ValueError("Đường dẫn không phải thư mục.")
             new[fld]=str(val)
         keep={key:new[key] for key in allowed}
+        keep["export_history"]=new.get("export_history",[])
         with _LOCK:
             tmp=self.file.with_suffix(".tmp")
             tmp.write_text(json.dumps(keep,ensure_ascii=False,indent=2),encoding="utf-8")

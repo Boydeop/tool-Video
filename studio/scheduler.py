@@ -11,8 +11,8 @@ class Scheduler:
         for job in self.store.claim_due():
             try:
                 remote=publish_reel(job["video_path"],job["caption"],title=job.get("title",""))
-                self.store.finish_job(job["id"],"published",remote_id=remote)
-                self.store.log("published",job["id"])
+                self.store.finish_job(job["id"],"submitted",remote_id=remote)
+                self.store.log("submitted_to_meta",job["id"])
             except Exception as exc:
                 self.store.finish_job(job["id"],"needs_review",error=str(exc))
                 self.store.log("needs_review",job["id"])

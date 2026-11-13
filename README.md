@@ -219,3 +219,17 @@ gTTS in addition to edge-tts, Pillow, FFmpeg and FFprobe.
 
 **Windows paths and saved secrets:** output/cache paths live only in local settings. API keys are still stored as plaintext in the local key file. Facebook token storage uses Windows per-user DPAPI and cannot be migrated to a different Windows user without reconnecting.
 
+
+
+### Export-folder history and honest publishing states
+
+Changing the output directory preserves your previous output directories in local
+\`production.local.json\`. The media library can still find MP4s in previously
+selected export folders and in the original Studio output folder. No existing MP4
+files are moved or deleted.
+
+The app avoids scheduling the same video twice while a scheduled, pending or
+uncertain Meta job is already recorded. After Meta accepts the Reels finish call,
+a job is marked \`submitted\` rather than publicly \`published\`. Confirm its
+public appearance and moderation status on Meta Business Suite. Unexpected
+upload failures are marked \`needs_review\` and never blindly retried.

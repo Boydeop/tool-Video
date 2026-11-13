@@ -743,7 +743,10 @@ function renderJobs(){
   const row=make("tr");
   const when=new Date(job.scheduled_at);
   row.append(make("td",isNaN(when.getTime())?job.scheduled_at:when.toLocaleString("vi-VN")),
-             make("td",job.status),make("td",job.video_path.replace(/^.*[\\\/]/,"")),make("td",job.error||""));
+             make("td",({scheduled:"Đã lên lịch",publishing:"Đang gửi",
+              submitted:"Meta đã nhận, cần kiểm tra Page",
+              published:"Đã đăng",needs_review:"Cần kiểm tra",
+              cancelled:"Đã hủy"}[job.status]||job.status)),make("td",job.video_path.replace(/^.*[\\\/]/,"")),make("td",job.error||""));
   body.append(row);
  }
 }

@@ -230,6 +230,10 @@ class Store:
             raise ValueError("Không tìm thấy video MP4.")
         jid=uuid.uuid4().hex
         with self._lock, self.db() as c:
+            existing=c.execute("SELECT 1 FROM jobs WHERE video_path=? AND status IN ('scheduled','publishing','submitted','published','needs_review')",
+                               (str(path),)).fetchone()
+            if existing:
+                raise ValueError("Video đã được lên lịch hoặc đã gửi Meta; kiểm tra lịch sử trước khi đặt lại.")
             c.execute("""INSERT INTO jobs(id,video_path,caption,scheduled_at,status,created_at,updated_at,title)
                          VALUES(?,?,?,?,'scheduled',?,?,?)""",
                       (jid,str(path),caption[:2000],run_at.astimezone(timezone.utc).isoformat(),
@@ -254,7 +258,7 @@ class Store:
             return claimed
 
     def finish_job(self, jid, status, remote_id=None, error=None):
-        if status not in ("published","needs_review","cancelled"):
+        if status not in ("published","submitted","needs_review","cancelled"):
             raise ValueError("Trạng thái job không hợp lệ.")
         with self._lock,self.db() as c:
             c.execute("""UPDATE jobs SET status=?,remote_id=?,error=?,updated_at=?

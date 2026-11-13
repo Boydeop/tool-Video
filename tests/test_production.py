@@ -29,6 +29,9 @@ class ProductionTests(unittest.TestCase):
             cfg=prod.update({"think":7,"reveal":3.5,"export_dir":str(Path(td)/"output"),
                              "cache_dir":str(Path(td)/"cache"),"logo_position":"bottom-left"})
             self.assertEqual(Production(td).settings()["think"],7)
+            newer=Path(td)/"second-output"
+            prod.update({"export_dir":str(newer)})
+            self.assertIn(str(Path(td)/"output"),prod.settings()["export_history"])
             self.assertTrue(Path(cfg["export_dir"]).is_dir())
             with self.assertRaises(ValueError):prod.update({"think":.5})
             with self.assertRaises(ValueError):prod.update({"logo_position":"../bad"})
@@ -57,6 +60,15 @@ class ProductionTests(unittest.TestCase):
             self.assertEqual(store.get_video(path)["status"],"rendered")
             with self.assertRaises(ValueError):store.approve([one])
             with self.assertRaises(ValueError):store.mark_rendered([one],path)
+
+    def test_prevents_double_scheduling(self):
+        with tempfile.TemporaryDirectory() as td:
+            store=Store(Path(td)/"db.sqlite")
+            video=Path(td)/"sample.mp4"
+            video.write_bytes(b"demo")
+            store.add_job(video,"caption","2030-01-01T09:00:00+07:00",title="Test")
+            with self.assertRaises(ValueError):
+                store.add_job(video,"caption again","2030-01-02T09:00:00+07:00")
 
     def test_sfx_track_contains_sound(self):
         import wave

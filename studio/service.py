@@ -60,36 +60,38 @@ class Service:
             self.store.daily_record(current.isoformat(),plan["topic"],result)
         return {"plan":plan,**result}
 
+    def output_folders(self):
+        settings=self.production.settings()
+        candidates=[settings["export_dir"],*settings.get("export_history",[]),
+                    str(self.root/"videos")]
+        return list(dict.fromkeys(Path(p).resolve() for p in candidates))
+
     def video_path(self,name):
         if not isinstance(name,str) or Path(name).name!=name or not name.endswith(".mp4"):
             raise ValueError("Tên video không hợp lệ.")
-        directory=Path(self.production.settings()["export_dir"]).resolve()
-        path=(directory/name).resolve()
-        if directory not in path.parents or not path.is_file():
-            raise ValueError("Không tìm thấy MP4.")
-        return path
+        for directory in self.output_folders():
+            path=(directory/name).resolve()
+            if path.parent==directory and path.is_file():
+                return path
+        raise ValueError("Không tìm thấy MP4.")
 
     def list_videos(self,limit=80):
-        settings=self.production.settings()
-        folder=Path(settings["export_dir"])
-        existing=sorted(folder.glob("*.mp4"),key=lambda p:p.stat().st_mtime,reverse=True)
-        registry={str(Path(r["path"]).resolve()):r for r in self.store.list_videos(limit=500)}
-        result=[]
-        for file in existing[:limit]:
-            info=registry.get(str(file.resolve())) or {}
-            result.append({"name":file.name,"path":str(file.resolve()),
+        registry={str(Path(r["path"]).resolve()):r for r in self.store.list_videos(limit=1000)}
+        found={}
+        for folder in self.output_folders():
+            if folder.is_dir():
+                for file in folder.glob("*.mp4"):
+                    try:found[str(file.resolve())]=file
+                    except OSError:pass
+        sorted_files=sorted(found.values(),key=lambda p:p.stat().st_mtime,reverse=True)
+        output=[]
+        for file in sorted_files[:limit]:
+            item=registry.get(str(file.resolve())) or {}
+            output.append({"name":file.name,"path":str(file.resolve()),
                 "size_mb":round(file.stat().st_size/1048576,1),
-                "status":info.get("status","legacy"),
-                "seo_title":info.get("seo_title",""),
-                "seo_caption":info.get("seo_caption",""),
-                "topic":info.get("topic","")})
-        # Imported legacy files under the original output folder remain discoverable.
-        old=self.root/"videos"
-        if old.resolve()!=folder.resolve() and old.is_dir():
-            for f in sorted(old.glob("*.mp4"),reverse=True)[:25]:
-                result.append({"name":f.name,"path":str(f.resolve()),"size_mb":round(f.stat().st_size/1048576,1),
-                               "status":"legacy","seo_title":"","seo_caption":"","topic":""})
-        return result
+                "status":item.get("status","legacy"),"seo_title":item.get("seo_title",""),
+                "seo_caption":item.get("seo_caption",""),"topic":item.get("topic","")})
+        return output
 
     def render_approved(self,ids,theme="hanji",filename=None,width=None,
                         with_voice=False,voice_engine="auto"):
@@ -180,8 +182,7 @@ class Service:
 
     def schedule(self,video_path,caption,at,title=""):
         target=Path(video_path).resolve()
-        folders=[Path(self.production.settings()["export_dir"]).resolve(),
-                 (self.root/"videos").resolve()]
+        folders=self.output_folders()
         if target.parent not in folders or not target.is_file() or target.suffix.lower()!=".mp4":
             raise ValueError("Video không thuộc thư mục xuất của Studio.")
         page,token=credentials()
