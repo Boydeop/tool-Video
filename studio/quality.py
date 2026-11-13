@@ -22,8 +22,7 @@ def inspect_quiz(q:Quiz)->list[str]:
     if any(len(q.answer_details(a)["meaning"])>45 for a in
             (q.correct,q.wrong1,q.wrong2,q.wrong3)):
         failures.append("Nghĩa đáp án dài")
-    if q.vietnamese_meaning and q.clue and normalize(q.vietnamese_meaning)!=normalize(q.clue):
-        # Context grammar questions may have different meanings; warn, don't
-        # mislabel these as verified.
-        failures.append("Cụm hỏi không trùng nghĩa đáp án đúng")
+    # A contextual clue may legitimately differ from the dictionary meaning:
+    # e.g. "Giá rẻ nhưng" -> 하지만 ("nhưng"). Never require literal equality.
+    # Keep structure checks strict; semantic accuracy still needs human QA.
     return failures

@@ -135,6 +135,74 @@ def _logo_overlay(img,path,position="top-right",scale=.15,logo_x=0.82,logo_y=0.1
     result.alpha_composite(logo,(x,y))
     return result.convert("RGB")
 
+
+@lru_cache(maxsize=4)
+def _korea_background(theme):
+    """Low-opacity, original vector motifs, no external assets/licenses/fonts.
+
+    Palace eaves, N Seoul Tower, Korean mugunghwa and hanji brush strokes live
+    behind content; styles differ by template without obscuring Hangul glyphs.
+    """
+    from PIL import ImageColor
+    bg,fg,accent=THEMES[theme]
+    img=Image.new("RGBA",(540,960),ImageColor.getrgb(bg)+(255,))
+    layer=Image.new("RGBA",(540,960),(0,0,0,0))
+    art=ImageDraw.Draw(layer,"RGBA")
+    base={"hanji":(117,112,76),"blue":(179,215,248),"sejong":(150,123,70)}[theme]
+    red={"hanji":(179,74,56),"blue":(240,169,146),"sejong":(190,70,52)}[theme]
+    # Hanji brush fibers: varied lengths, visible but no heavy full-frame noise.
+    for i in range(24):
+        x=(i*97+13)%540
+        y=(i*157+42)%960
+        art.line([(x,y),(min(539,x+34+(i%5)*19),min(959,y+5))],
+                 fill=base+(15,),width=2)
+    # Geometric dancheong edge ribbons, outside the primary card typography.
+    for yy in (136,190,414,807,933):
+        art.line([(8,yy),(19,yy-10),(31,yy)],fill=base+(58,),width=2)
+        art.line([(509,yy),(521,yy-10),(533,yy)],fill=base+(58,),width=2)
+    # Gyeongbokgung-style curved roof at top right.
+    art.polygon([(340,148),(366,132),(388,123),(412,105),(438,116),
+                 (464,126),(490,133),(510,150),(500,145),(472,143),
+                 (438,135),(411,124),(382,143)],fill=base+(45,))
+    art.line([(343,153),(365,142),(411,126),(467,142),(509,154)],
+             fill=red+(65,),width=4)
+    for xx in (380,410,439,467):
+        art.line([(xx,154),(xx,186)],fill=base+(51,),width=4)
+    art.line([(363,187),(486,187)],fill=base+(57,),width=4)
+    # Silhouette of N Seoul Tower, kept mostly in side/background space.
+    art.ellipse((58,615,128,632),fill=base+(44,))
+    art.polygon([(79,632),(105,632),(118,870),(65,870)],fill=base+(38,))
+    art.rectangle((88,561,97,616),fill=base+(58,))
+    art.ellipse((81,555,104,566),fill=red+(45,))
+    art.line([(93,547),(93,524)],fill=base+(66,),width=3)
+    # Mugunghwa flower: 5 petals plus circular heart.
+    cx,cy=456,858
+    for n in range(5):
+        ang=2*math.pi*n/5-math.pi/2
+        px=cx+math.cos(ang)*21
+        py=cy+math.sin(ang)*21
+        art.ellipse((px-15,py-18,px+15,py+18),fill=red+(49,))
+    art.ellipse((cx-9,cy-9,cx+9,cy+9),fill=base+(62,))
+    return Image.alpha_composite(img,layer).convert("RGB")
+
+def _panel_pattern(img,theme):
+    """Translucent flower/roof silhouette inside the question card.
+
+    Drawn before Korean/Vietnamese text, with very low contrast for legibility.
+    """
+    bg=Image.new("RGBA",img.size,(0,0,0,0))
+    d=ImageDraw.Draw(bg,"RGBA")
+    tint={"hanji":(171,142,100),"blue":(119,168,205),"sejong":(191,141,111)}[theme]
+    for cx,cy,r in ((446,266,20),(86,346,13)):
+        for n in range(5):
+            ang=n*math.tau/5
+            px=cx+math.cos(ang)*r
+            py=cy+math.sin(ang)*r
+            d.ellipse((px-10,py-10,px+10,py+10),fill=tint+(30,))
+        d.ellipse((cx-5,cy-5,cx+5,cy+5),fill=tint+(44,))
+    return Image.alpha_composite(img.convert("RGBA"),bg).convert("RGB")
+
+
 def shorts_safe_frame(image,theme):
     """Keep visual text away from UI overlays in YouTube Shorts / Instagram Reels.
 
@@ -144,15 +212,17 @@ def shorts_safe_frame(image,theme):
     """
     bg=THEMES[theme][0]
     output=Image.new("RGB",(540,960),bg)
-    shrunk=image.resize((421,749),Image.Resampling.LANCZOS)
-    output.paste(shrunk,(20,63))
+    # v1.0.0 used 421x749 and left large empty borders, shrinking Hangul.
+    # Preserve >90% of original scale and balanced horizontal margins.
+    adjusted=image.resize((492,875),Image.Resampling.LANCZOS)
+    output.paste(adjusted,(24,33))
     return output
 
 
 def draw_intro(theme,width=540,logo_path=None,logo_position="top-right",logo_scale=.15,progress=1,
                logo_x=.82,logo_y=.10,shorts_safe=False):
     bg,fg,accent=THEMES[theme]
-    im=Image.new("RGB",(540,960),bg);d=ImageDraw.Draw(im)
+    im=_korea_background(theme).copy();d=ImageDraw.Draw(im)
     d.rounded_rectangle((36,225,504,630),radius=29,fill="#FFFFFF" if theme!="blue" else "#153E68")
     _label(d,270,302,"TIẾNG HÀN SO EASY",420,1,34,accent,26)
     _label(d,270,380,"THỬ THÁCH TIẾNG HÀN",424,2,36,"#191612" if theme!="blue" else "#FFFFFF",28)
@@ -177,7 +247,7 @@ def draw_frame(quiz:Quiz,idx,total,theme,elapsed,think=5.5,width=540,
         return frame.resize((width,width*16//9),Image.Resampling.LANCZOS)
 
     bg,fg,accent=THEMES[theme]
-    im=Image.new("RGB",(540,960),bg)
+    im=_korea_background(theme).copy()
     d=ImageDraw.Draw(im)
     answer_start=prompt_duration+think
     show_answer=elapsed>=answer_start
@@ -192,6 +262,8 @@ def draw_frame(quiz:Quiz,idx,total,theme,elapsed,think=5.5,width=540,
 
     # Very short prompt, including for legacy questions.
     d.rounded_rectangle((27,207,513,382),radius=21,fill="#FFFFFF")
+    im=_panel_pattern(im,theme)
+    d=ImageDraw.Draw(im)
     _label(d,270,222,"TIẾNG HÀN LÀ GÌ?",430,1,22,accent,19)
     clue=quiz.short_clue
     size,lines=_fitted(d,clue,438,3,45,24)

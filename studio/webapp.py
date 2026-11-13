@@ -20,7 +20,7 @@ from .voice import available, readiness as tts_readiness, test_speech, ENGINES
 
 LOGGER = logging.getLogger("tienghansoeasy.http")
 MAX_REQUEST = 4_000_000
-APP_VERSION = "v1.0.0"
+APP_VERSION = "v1.1.0"
 
 
 def _ui_path() -> Path:
@@ -119,6 +119,8 @@ def create_server(service, host="127.0.0.1", port=8765):
                     self.respond(200,export_queue.status(jid))
                 elif url.path == "/api/render/active":
                     self.respond(200,export_queue.active())
+                elif url.path == "/api/events/upcoming":
+                    self.respond(200,{"events":service.upcoming_events()})
                 elif url.path == "/api/cache/status":
                     self.respond(200,{"cache":service.cache_stats(),
                                       "busy":export_queue.is_running()})
@@ -157,6 +159,7 @@ def create_server(service, host="127.0.0.1", port=8765):
                     self.respond(200, {
                         "version": APP_VERSION,
                         "topics_count": len(TOPICS),
+                        "upcoming_events": service.upcoming_events(),
                         "questions": service.store.list_questions(limit=500),
                         "batches": service.store.list_batches(limit=120),
                         "production_runs": service.store.list_production_runs(limit=40),

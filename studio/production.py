@@ -12,7 +12,7 @@ _LOCK=threading.RLock()
 DEFAULTS={"think":5.5,"reveal":2.8,"transition":0.8,"intro":1.5,
           "fps":30,"width":1080,"sfx":True,"sfx_volume":0.34,
           "logo_position":"top-right","logo_scale":0.15,
-          "logo_x":0.82,"logo_y":0.10,"shorts_safe":True,
+          "logo_x":0.82,"logo_y":0.10,"shorts_safe":True,"auto_metadata":True,
           "metadata_title":"Tiếng Hàn So Easy",
           "metadata_artist":"Tiếng Hàn So Easy",
           "metadata_copyright":"© Tiếng Hàn So Easy. All rights reserved.",
@@ -31,6 +31,14 @@ class Production:
                 contents=json.loads(self.file.read_text(encoding="utf-8"))
                 if isinstance(contents,dict):data.update(contents)
             except (OSError,ValueError):pass
+        # Treat empty fields left by old UI versions as "use branding defaults".
+        # The actual MP4 title will be generated from its topic during render.
+        for field in ("metadata_title","metadata_artist",
+                      "metadata_copyright","metadata_comment"):
+            if not str(data.get(field) or "").strip():
+                data[field]=DEFAULTS[field]
+        if not isinstance(data.get("auto_metadata"),bool):
+            data["auto_metadata"]=True
         data["export_dir"]=str(Path(data.get("export_dir") or self.root/"videos").resolve())
         data["cache_dir"]=str(Path(data.get("cache_dir") or self.root/"cache").resolve())
         history=data.get("export_history",[])
@@ -59,7 +67,8 @@ class Production:
         if new["fps"] not in (24,30) or new["width"] not in (540,1080):
             raise ValueError("Chỉ hỗ trợ 540/1080p và 24/30 FPS.")
         if (new["logo_position"] not in POSITIONS or not isinstance(new["sfx"],bool)
-            or not isinstance(new["shorts_safe"],bool)):
+            or not isinstance(new["shorts_safe"],bool)
+            or not isinstance(new["auto_metadata"],bool)):
             raise ValueError("Vị trí logo hoặc SFX không hợp lệ.")
         for field in ("metadata_title","metadata_artist","metadata_copyright","metadata_comment"):
             if not isinstance(new[field],str) or len(new[field])>220 or any(ord(ch)<32 for ch in new[field]):

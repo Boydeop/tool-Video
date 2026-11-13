@@ -25,6 +25,10 @@ class Service:
         self.production=Production(self.root)
         self.store=Store(self.root/"studio.sqlite3")
 
+    def upcoming_events(self,window_days=45):
+        from .events import upcoming_events
+        return upcoming_events(window_days=window_days)
+
     def suggest_topic(self,exclude=None,level="TOPIK 1"):
         return {"topic":choose_random_topic(self.store.topic_counts(),exclude),
                 "level":level,"topics_available":len(TOPICS)}
@@ -124,10 +128,18 @@ class Service:
             progress=progress,shorts_safe=config.get("shorts_safe",True))
         from .metadata import overwrite_metadata
         tags=dict(config)
-        if tags.get("metadata_title","").strip() in ("","Tiếng Hàn So Easy"):
+        if tags.get("auto_metadata",True):
+            from datetime import datetime,timezone,timedelta
+            year=datetime.now(timezone(timedelta(hours=7))).year
             topic_label=questions[0].topic if len({q.topic for q in questions})==1 else "Tổng hợp"
-            tags["metadata_title"]=("Tiếng Hàn So Easy | "+topic_label+
-                                     " | "+questions[0].level)[:200]
+            tags.update({
+                "metadata_title":("Tiếng Hàn So Easy | "+topic_label+
+                                  " | "+questions[0].level)[:200],
+                "metadata_artist":"Tiếng Hàn So Easy",
+                "metadata_copyright":("© "+str(year)+" Tiếng Hàn So Easy"
+                                      " · tienghansoeasy.io.vn"),
+                "metadata_comment":"Giáo dục tiếng Hàn · tienghansoeasy.io.vn"
+            })
         overwrite_metadata(completed,tags)
         self.store.mark_rendered(ids,completed)
         return completed
