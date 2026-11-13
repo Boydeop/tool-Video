@@ -123,7 +123,12 @@ class Service:
             logo_scale=config["logo_scale"],logo_x=config["logo_x"],logo_y=config["logo_y"],
             progress=progress,shorts_safe=config.get("shorts_safe",True))
         from .metadata import overwrite_metadata
-        overwrite_metadata(completed,config)
+        tags=dict(config)
+        if tags.get("metadata_title","").strip() in ("","Tiếng Hàn So Easy"):
+            topic_label=questions[0].topic if len({q.topic for q in questions})==1 else "Tổng hợp"
+            tags["metadata_title"]=("Tiếng Hàn So Easy | "+topic_label+
+                                     " | "+questions[0].level)[:200]
+        overwrite_metadata(completed,tags)
         self.store.mark_rendered(ids,completed)
         return completed
 
@@ -232,6 +237,21 @@ class Service:
                 "freed_mb":round((media["bytes"]+samples["bytes"])/1048576,2),
                 "errors":media["errors"]+samples["errors"],
                 "remaining":self.cache_stats()}
+
+    def auto_seo_for_video(self,path):
+        """Generate optional AI metadata; never lose rendered MP4 if the AI fails."""
+        item=self.store.get_video(path)
+        try:
+            result=self.seo_video(Path(path).name)
+            return {"source":"AI","title":result["title"],"caption":result["caption"]}
+        except Exception:
+            topic=item["topic"] or "Từ vựng tiếng Hàn"
+            title=("Học tiếng Hàn | "+topic+" | TOPIK Quiz")[:100]
+            caption=("Bạn biết những từ tiếng Hàn về "+topic+
+                     " chưa? Cùng luyện tập với Tiếng Hàn So Easy! "+
+                     "#TiengHanSoEasy #HocTiengHan #TOPIK #Shorts")
+            self.store.set_video_seo(path,title,caption)
+            return {"source":"template","title":title,"caption":caption}
 
     def schedule_platform(self,name,platform,title,caption,when,
                           public_url="",privacy="private"):

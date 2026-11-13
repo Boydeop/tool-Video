@@ -131,6 +131,26 @@ class QualityAndAutopilotTests(unittest.TestCase):
             self.assertEqual(len(service.store.list_videos()),2)
             self.assertTrue(changes)
 
+    def test_seo_failure_keeps_video_done(self):
+        with tempfile.TemporaryDirectory() as td:
+            service=Service(td)
+            from dataclasses import replace
+            def generate(topic,level,count,fmt):
+                q=replace(quiz(17),topic=topic,level=level)
+                return {"accepted":[service.store.insert_question(q)]}
+            def render(ids,theme,width,with_voice,voice_engine,progress):
+                path=Path(td)/"ready.mp4";path.write_bytes(b"done")
+                service.store.mark_rendered(ids,path)
+                return str(path)
+            service.generate=generate
+            service.render_approved=render
+            service.auto_seo_for_video=lambda path:(_ for _ in ()).throw(RuntimeError("No API"))
+            result=run_pipeline(service,Plan.parse({"videos":1,"per_video":1,"auto_seo":True}),
+                                lambda a,b:None)
+            self.assertEqual(result["rendered"],1)
+            self.assertEqual(result["topics"][0]["status"],"rendered")
+            self.assertEqual(result["topics"][0]["seo_source"],"unavailable")
+
     def test_missing_details_are_not_auto_published(self):
         with tempfile.TemporaryDirectory() as td:
             service=Service(td)
@@ -168,8 +188,9 @@ class ShortProfileTests(unittest.TestCase):
                 self.assertTrue(kwargs["shorts_safe"])
                 return str(path)
             with patch("studio.service.render",side_effect=render),\
-                 patch("studio.metadata.overwrite_metadata",return_value={}):
+                 patch("studio.metadata.overwrite_metadata",return_value={}) as tags:
                 path=service.render_approved([ident],width=1080)
+            self.assertIn("Gia đình",tags.call_args.args[1]["metadata_title"])
             self.assertRegex(Path(path).name,r"^THSE_\d{8}_000001_gia-dinh_TOPIK1_1080x1920\.mp4$")
             self.assertEqual(service.store.list_questions()[0]["status"],"rendered")
 

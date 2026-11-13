@@ -156,6 +156,8 @@ class Store:
                       (utcnow(),))
             c.execute("UPDATE outbound_posts SET status='needs_review',error='App restarted during upload; check the platform before trying again',updated_at=? WHERE status='publishing'",
                       (utcnow(),))
+            c.execute("UPDATE jobs SET status='needs_review',error='App restarted during Page upload; check Page before retry',updated_at=? WHERE status='publishing'",
+                      (utcnow(),))
 
     def schedule_outbound(self,video_path,platform,title,caption,when,
                           public_url="",privacy="private"):
@@ -173,6 +175,9 @@ class Store:
         if len(title)>150 or len(caption)>2000:raise ValueError("Publishing text is too long")
         jid=uuid.uuid4().hex
         with self._lock,self.db() as c:
+            if c.execute("SELECT 1 FROM outbound_posts WHERE video_path=? AND platform=?",
+                         (str(path),platform)).fetchone():
+                raise ValueError("MP4 đã được lên lịch trên nền tảng này; kiểm tra danh sách lịch.")
             c.execute("""INSERT INTO outbound_posts
               (id,video_path,platform,title,caption,publish_at,public_url,privacy,status,created_at,updated_at)
               VALUES(?,?,?,?,?,?,?,?,'scheduled',?,?)""",

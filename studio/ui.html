@@ -89,6 +89,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
     </div>
     <div class="fieldrow">
       <label class="switchrow"><input type="checkbox" id="autoVoice" checked> Giọng Việt–Hàn + đếm ngược + SFX (cần mạng)</label>
+      <label class="switchrow"><input type="checkbox" id="autoSeo" checked> AI tạo tiêu đề và caption SEO; khi AI lỗi dùng template an toàn</label>
       <div class="field compact"><label for="autoWidth">Profile xuất</label>
         <select id="autoWidth"><option value="1080" selected>Shorts/Reels 1080×1920</option><option value="540">Kiểm thử nhanh 540×960</option></select></div>
     </div>
@@ -1187,7 +1188,7 @@ $("autoStart").addEventListener("click",async()=>{
    videos:Number($("autoVideos").value),per_video:Number($("autoPerVideo").value),
    levels,formats,theme:$("autoTheme").value,
    with_voice:$("autoVoice").checked,voice_engine:$("voiceEngine").value,
-   width:Number($("autoWidth").value)
+   width:Number($("autoWidth").value),auto_seo:$("autoSeo").checked
  }));
  if(data)watchAutopilot(data.job_id);
 });

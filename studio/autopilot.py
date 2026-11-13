@@ -19,6 +19,7 @@ class Plan:
     voice:bool=False
     engine:str="auto"
     width:int=1080
+    seo:bool=False
 
     @classmethod
     def parse(cls,raw:dict):
@@ -30,7 +31,7 @@ class Plan:
                  theme=str(raw.get("theme","hanji")),
                  voice=raw.get("with_voice") is True,
                  engine=str(raw.get("voice_engine","auto")),
-                 width=int(raw.get("width",1080)))
+                 width=int(raw.get("width",1080)),seo=raw.get("auto_seo") is True)
         if not 1<=plan.videos<=12 or not 1<=plan.per_video<=6:
             raise ValueError("Maximum 12 videos per run, 1-6 questions/video")
         if not plan.levels or not all(x in LEVELS for x in plan.levels):
@@ -48,7 +49,8 @@ class Plan:
                 "levels":list(self.levels),"formats":list(self.formats),
                 "theme":self.theme,"with_voice":self.voice,
                 "voice_engine":self.engine,"width":self.width,
-                "review_policy":"strict machine check, NOT human verified"}
+                "review_policy":"strict machine check, NOT human verified",
+                "auto_seo":self.seo}
 
 def choose_distinct_topics(counts,number,rng=None):
     if number>len(TOPICS):raise ValueError("Too many distinct topics")
@@ -99,6 +101,14 @@ def run_pipeline(service,plan:Plan,update,on_result=None):
                     with_voice=plan.voice,voice_engine=plan.engine,
                     progress=frame_progress)
             item["status"]="rendered";item["video"]=output
+            if plan.seo:
+                try:
+                    metadata=service.auto_seo_for_video(output)
+                    item["seo_source"]=metadata["source"]
+                except Exception as seo_exc:
+                    # A metadata draft failure must never erase an exported MP4.
+                    item["seo_source"]="unavailable"
+                    item["seo_error"]=type(seo_exc).__name__
             update(100*(index+1)/plan.videos,"Đã xuất "+str(index+1)+"/"+str(plan.videos))
         except Exception as exc:
             item["status"]="failed"
