@@ -1,0 +1,14 @@
+.env
+data/
+output/
+__pycache__/
+*.pyc
+.venv/
+*.sqlite3*
+*.mp4
+*.log
+keys.local.json
+build/
+dist/
+*.spec
+bin/

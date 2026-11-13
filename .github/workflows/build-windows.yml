@@ -1,0 +1,75 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python packages
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: Install FFmpeg with FFprobe
+        shell: pwsh
+        run: |
+          choco install ffmpeg --no-progress -y
+          New-Item -ItemType Directory -Force -Path bin | Out-Null
+          $ff = Get-ChildItem 'C:\ProgramData\chocolatey\lib' -Filter ffmpeg.exe -Recurse -File | Select-Object -First 1
+          if (-not $ff) { throw 'Could not locate full ffmpeg.exe binary' }
+          $probe = Join-Path $ff.DirectoryName 'ffprobe.exe'
+          if (-not (Test-Path $probe)) { throw 'Could not locate ffprobe.exe binary' }
+          Copy-Item $ff.FullName bin\ffmpeg.exe
+          Copy-Item $probe bin\ffprobe.exe
+          & bin\ffmpeg.exe -version | Select-Object -First 1
+          & bin\ffprobe.exe -version | Select-Object -First 1
+
+      - name: Run Python tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Build one-file GUI EXE
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name TiengHanSoEasyStudio --collect-all edge_tts --add-binary "bin\ffmpeg.exe;." --add-binary "bin\ffprobe.exe;." launcher.py
+          if (-not (Test-Path dist\TiengHanSoEasyStudio.exe)) { throw 'EXE missing' }
+          Get-Item dist\TiengHanSoEasyStudio.exe | Select-Object Name,Length
+          Get-FileHash dist\TiengHanSoEasyStudio.exe -Algorithm SHA256
+
+      - name: Upload downloadable EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TiengHanSoEasyStudio-Windows-EXE
+          path: dist/TiengHanSoEasyStudio.exe
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish Windows release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.2.0
+          name: Tiếng Hàn So Easy Studio v0.2.0
+          target_commitish: main
+          files: dist/TiengHanSoEasyStudio.exe
+          make_latest: true
+          generate_release_notes: false
+          body: |
+            Windows standalone EXE built by GitHub Actions. Double-click to open.
+            AI and TTS require Internet; Facebook publishing requires Page permissions.
+            Personal keys remain in the local data folder, never commit them.
