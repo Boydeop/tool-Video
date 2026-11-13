@@ -80,3 +80,18 @@ Chỉ kết nối đọc được Page/IG không chứng minh quyền đăng; ph
 ## Kết luận
 
 v1.0.0 cải thiện kiến trúc local-first và khả năng tự dựng nhiều video; phát hành ổn định phụ thuộc CI qua tất cả cổng. Tích hợp đăng live của từng tài khoản vẫn phải được xác thực ngoài CI; không quảng cáo là public TikTok autopublisher hay AI dịch chính xác tuyệt đối.
+
+
+## v1.1.0: Audit supplement based on actual user screenshots
+
+| ID | Severity | Confirmed v1.0.0 root cause | Corrective change |
+|---|---|---|---|
+| B01 | HIGH | Entire batch rejected if fewer than 5/5 questions pass; AI output often omits one option meaning or romanization; clue/meaning string comparison penalizes valid grammar | Structural gate without false clue comparison, AI enrichment and bounded retry, optional curated vocabulary fallback, partial shorter MP4 |
+| B02 | HIGH | Shorts Safe resizes the whole design to 421x749 at (20,63), causing large blank areas | Balanced 462x821 inset, full-canvas procedurally drawn Korean cultural motifs |
+| B03 | MEDIUM | Copyright form always visible and requires user to interpret fields | Automatic metadata by default with optional manual override in Settings, SEO title sync |
+| B04 | MEDIUM | Separate manual generation and manual batch-render controls duplicate Autopilot | Five-tab navigation with less-used manual functions collapsed in Advanced |
+| B05 | MEDIUM | No upcoming holiday topic calendar | Separate Gregorian 55-day event mode in VN timezone, events API and event-specific subtopic plan |
+| B06 | MEDIUM | UI production payload hardcodes fps=24 even for 1080p | Resolution-based 30fps/24fps, additional regression coverage |
+| B07 | LOW | Plain backgrounds and little cultural character | Subtle Hanok, mountain, Taegeuk, flower and lattice illustrations via PIL |
+
+Residual risks: AI structural checks cannot certify Korean linguistics, seasonal curated vocabulary is limited and needs review, lunar festival dates require authoritative year-specific calendars, public publishing still depends on Meta/Google account rights, and scheduled posting needs Studio running.

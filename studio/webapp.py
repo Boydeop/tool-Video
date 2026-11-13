@@ -15,12 +15,13 @@ from .instagram import InstagramAccount
 from .facebook import connect as connect_page, disconnect as disconnect_page, page_status
 from .models import list_models, selected_models, set_model, test_model
 from .quiz import TOPICS
+from .events import upcoming_events
 from .scheduler import Scheduler
 from .voice import available, readiness as tts_readiness, test_speech, ENGINES
 
 LOGGER = logging.getLogger("tienghansoeasy.http")
 MAX_REQUEST = 4_000_000
-APP_VERSION = "v1.0.0"
+APP_VERSION = "v1.1.0"
 
 
 def _ui_path() -> Path:
@@ -102,6 +103,11 @@ def create_server(service, host="127.0.0.1", port=8765):
                     params = parse_qs(url.query)
                     exclude = params.get("exclude", [None])[0]
                     self.respond(200, service.suggest_topic(exclude=exclude))
+                elif url.path == "/api/events":
+                    self.respond(200,{"events":upcoming_events(window_days=55),
+                                      "mode":"seasonal",
+                                      "timezone":"Asia/Ho_Chi_Minh",
+                                      "lunar_dates":"not guessed"})
                 elif url.path == "/api/preview":
                     params=parse_qs(url.query)
                     qid=params.get("id",[""])[0]
@@ -157,6 +163,7 @@ def create_server(service, host="127.0.0.1", port=8765):
                     self.respond(200, {
                         "version": APP_VERSION,
                         "topics_count": len(TOPICS),
+                        "upcoming_events":upcoming_events(window_days=55),
                         "questions": service.store.list_questions(limit=500),
                         "batches": service.store.list_batches(limit=120),
                         "production_runs": service.store.list_production_runs(limit=40),

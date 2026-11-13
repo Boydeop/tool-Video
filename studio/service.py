@@ -1,5 +1,6 @@
 """Production workflow: batches, media render, preview, cache and SEO drafts."""
 from datetime import date
+from dataclasses import replace
 import io
 import json
 import os
@@ -46,6 +47,9 @@ class Service:
                 errors.append(str(exc))
                 break
             for quiz in rows:
+                # Keep the requested event/subject label, not an arbitrary
+                # model-provided topic that may differ in the JSON response.
+                quiz=replace(quiz,topic=topic,level=level)
                 try:accepted.append(self.store.insert_question(quiz,provider,batch_id))
                 except DuplicateQuestion:pass
                 if len(accepted)>=count:break
@@ -123,12 +127,16 @@ class Service:
             logo_scale=config["logo_scale"],logo_x=config["logo_x"],logo_y=config["logo_y"],
             progress=progress,shorts_safe=config.get("shorts_safe",True))
         from .metadata import overwrite_metadata
-        tags=dict(config)
-        if tags.get("metadata_title","").strip() in ("","Tiếng Hàn So Easy"):
-            topic_label=questions[0].topic if len({q.topic for q in questions})==1 else "Tổng hợp"
-            tags["metadata_title"]=("Tiếng Hàn So Easy | "+topic_label+
-                                     " | "+questions[0].level)[:200]
-        overwrite_metadata(completed,tags)
+        label=questions[0].topic if len({q.topic for q in questions})==1 else "Tổng hợp tiếng Hàn"
+        level=questions[0].level if len({q.level for q in questions})==1 else "TOPIK MIX"
+        tags=self.production.video_metadata(label,level)
+        # Metadata is remuxed automatically, without a dialog or file picker.
+        # In rare FFmpeg failures, preserve an otherwise successful MP4 and
+        # register it, but log that attribution needs checking.
+        try:
+            overwrite_metadata(completed,tags)
+        except Exception as exc:
+            self.store.log("metadata_warning",type(exc).__name__+": "+str(exc)[:160])
         self.store.mark_rendered(ids,completed)
         return completed
 
@@ -215,8 +223,10 @@ class Service:
         from .metadata import overwrite_metadata
         path=self.video_path(name)
         if self.store.has_pending_page_job(path) or self.store.has_outbound(path):
-            raise ValueError("Video đang lên lịch hoặc chưa xác nhận trạng thái đăng Meta. Không ghi đè.")
-        return overwrite_metadata(path,self.production.settings())
+            raise ValueError("Video đang có lịch đăng. Không ghi đè file đang chờ tải lên.")
+        vid=self.store.get_video(path)
+        return overwrite_metadata(path,self.production.video_metadata(vid["topic"],
+                                         seo_title=vid.get("seo_title") or None))
 
     def cache_stats(self):
         from .cache_manager import CacheManager
@@ -243,7 +253,8 @@ class Service:
         item=self.store.get_video(path)
         try:
             result=self.seo_video(Path(path).name)
-            return {"source":"AI","title":result["title"],"caption":result["caption"]}
+            title=result["title"];caption=result["caption"]
+            source="AI"
         except Exception:
             topic=item["topic"] or "Từ vựng tiếng Hàn"
             title=("Học tiếng Hàn | "+topic+" | TOPIK Quiz")[:100]
@@ -251,7 +262,17 @@ class Service:
                      " chưa? Cùng luyện tập với Tiếng Hàn So Easy! "+
                      "#TiengHanSoEasy #HocTiengHan #TOPIK #Shorts")
             self.store.set_video_seo(path,title,caption)
-            return {"source":"template","title":title,"caption":caption}
+            source="template"
+        # After SEO, remux the same MP4 again so the title embedded in its
+        # metadata matches the actual title shown in the video library.
+        try:
+            from .metadata import overwrite_metadata
+            tags=self.production.video_metadata(item["topic"],seo_title=title)
+            overwrite_metadata(path,tags)
+            return {"source":source,"title":title,"caption":caption,"metadata":"updated"}
+        except Exception as exc:
+            self.store.log("seo_metadata_warning",type(exc).__name__)
+            return {"source":source,"title":title,"caption":caption,"metadata":"needs_review"}
 
     def schedule_platform(self,name,platform,title,caption,when,
                           public_url="",privacy="private"):

@@ -6,13 +6,14 @@ import json
 import os
 from pathlib import Path
 import threading
+from datetime import datetime,timezone,timedelta
 from PIL import Image
 
 _LOCK=threading.RLock()
 DEFAULTS={"think":5.5,"reveal":2.8,"transition":0.8,"intro":1.5,
           "fps":30,"width":1080,"sfx":True,"sfx_volume":0.34,
           "logo_position":"top-right","logo_scale":0.15,
-          "logo_x":0.82,"logo_y":0.10,"shorts_safe":True,
+          "logo_x":0.82,"logo_y":0.10,"shorts_safe":True,"metadata_auto":True,
           "metadata_title":"Tiếng Hàn So Easy",
           "metadata_artist":"Tiếng Hàn So Easy",
           "metadata_copyright":"© Tiếng Hàn So Easy. All rights reserved.",
@@ -59,7 +60,8 @@ class Production:
         if new["fps"] not in (24,30) or new["width"] not in (540,1080):
             raise ValueError("Chỉ hỗ trợ 540/1080p và 24/30 FPS.")
         if (new["logo_position"] not in POSITIONS or not isinstance(new["sfx"],bool)
-            or not isinstance(new["shorts_safe"],bool)):
+            or not isinstance(new["shorts_safe"],bool)
+            or not isinstance(new["metadata_auto"],bool)):
             raise ValueError("Vị trí logo hoặc SFX không hợp lệ.")
         for field in ("metadata_title","metadata_artist","metadata_copyright","metadata_comment"):
             if not isinstance(new[field],str) or len(new[field])>220 or any(ord(ch)<32 for ch in new[field]):
@@ -77,6 +79,27 @@ class Production:
             tmp.write_text(json.dumps(keep,ensure_ascii=False,indent=2),encoding="utf-8")
             tmp.replace(self.file)
         return self.settings()
+    def video_metadata(self,topic="",level="",seo_title=None):
+        """Automatic brand metadata for every rendered MP4.
+
+        Never requires the user to type artist/copyright fields. Explicit
+        manual override remains available only after disabling metadata_auto.
+        """
+        settings=self.settings()
+        if not settings.get("metadata_auto",True):
+            return {k:settings[k] for k in
+               ("metadata_title","metadata_artist","metadata_copyright","metadata_comment")}
+        year=datetime.now(timezone(timedelta(hours=7))).year
+        title=(str(seo_title or "").strip() or
+               "Học tiếng Hàn | "+(topic.strip() or "Từ vựng mỗi ngày")+
+               (" | "+level if level else ""))[:200]
+        return {
+            "metadata_title":title,
+            "metadata_artist":"Tiếng Hàn So Easy",
+            "metadata_copyright":"© "+str(year)+" Tiếng Hàn So Easy · tienghansoeasy.io.vn",
+            "metadata_comment":"Học tiếng Hàn cùng Tiếng Hàn So Easy | https://tienghansoeasy.io.vn/",
+        }
+
     def logo(self):
         p=self.root/"brand_logo.png"
         return p if p.is_file() else None

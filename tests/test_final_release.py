@@ -158,7 +158,9 @@ class QualityAndAutopilotTests(unittest.TestCase):
                 ident=service.store.insert_question(quiz(2,False))
                 return {"accepted":[ident]}
             service.generate=generate
-            result=run_pipeline(service,Plan.parse({"videos":1,"per_video":1}),
+            result=run_pipeline(service,Plan.parse({
+                    "videos":1,"per_video":1,"curated_fallback":False,
+                    "auto_enrich":False}),
                                 lambda x,y:None)
             self.assertEqual(result["rendered"],0)
             self.assertEqual(result["topics"][0]["status"],"needs_review")
@@ -169,7 +171,7 @@ class ShortProfileTests(unittest.TestCase):
         source=Image.new("RGB",(540,960),"white")
         image=shorts_safe_frame(source,"hanji")
         self.assertEqual(image.size,(540,960))
-        self.assertEqual(image.getpixel((25,70)),(255,255,255))
+        self.assertEqual(image.getpixel((40,70)),(255,255,255))
         self.assertEqual(image.getpixel((530,930)),Image.new("RGB",(1,1),THEMES["hanji"][0]).getpixel((0,0)))
         with tempfile.TemporaryDirectory() as td:
             cfg=Production(td).settings()
