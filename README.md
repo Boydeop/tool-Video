@@ -107,7 +107,7 @@ Run tests:
 - The renderer uses a 540x960 base canvas and upscales for larger resolutions; native 1080p typography is a future improvement.
 - Daily batch needs external cron/Windows Task Scheduler trigger.
 
-## Windows one-click EXE (v0.3.0)
+## Windows one-click EXE (v0.3.1)
 
 A Windows GitHub Actions workflow creates a standalone desktop EXE containing Python runtime, Pillow, edge-tts, FFmpeg and FFprobe. Download from the repository Releases (or the Build Windows EXE Actions artifact if release publishing is restricted). Double-click TiengHanSoEasyStudio.exe to start the local dashboard. Data is stored in the user's LOCALAPPDATA/TiengHanSoEasyStudio directory. The EXE does not require installing Python or FFmpeg separately.
 
@@ -152,3 +152,31 @@ Or use lines with provider names (e.g. gemini: MY_KEY). Imported keys are append
 The publishing section now shows generated MP4 files in a dropdown rather than requiring you to type their full paths. Voice still depends on a working internet connection and the online TTS service. Meta Page publishing still needs a valid Page token and real-world verification.
 
 This version is built by the Windows EXE workflow, which checks the actual bundled UI and the random-topic API before creating the v0.3.0 GitHub Release.
+
+## v0.3.1: Choose and test AI models
+
+The Studio UI in **API & Model** now supports a separate chosen model for Gemini,
+Groq, and OpenRouter. Click **Lấy danh sách model từ API** to fetch models available
+to your connected key directly from the provider; select one, optionally test it
+using **Thử model với API key**, then click **Lưu model đang chọn**.
+You can choose a key number in the pool for testing without revealing the key.
+The service checks your configured model on every generation request and persists
+the choice in the local data folder as models.local.json. No API keys are returned
+by the model endpoints.
+
+- GET /api/models?provider=gemini|groq|openrouter: fetch list for an owned key.
+- POST /api/models/select: persist {provider, model}.
+- POST /api/models/test: submit {provider, model, key_position} to verify one model/key.
+- GET /api/status: expose the selected **model IDs**, never actual API keys.
+
+Gemini 2.5 Flash-Lite may return HTTP 404 for some newly created projects even
+with a valid key. Use list models to see models accessible to your key. The model
+list can include paid-only models; neither listing nor successful testing proves
+a free tier. Model test makes a real short API generation request and consumes
+some tokens. HTTP 429 causes a provider-level cooldown and must not be bypassed
+through key rotation. Each key may have different model entitlements, so test the
+keys you intend to use before producing large batches.
+
+v0.3.1 EXE is built by Windows GitHub Actions and smoke-tests that the bundled
+UI contains the model selector and that /api/status reports model configuration.
+Older local API keys and question databases are preserved on update.

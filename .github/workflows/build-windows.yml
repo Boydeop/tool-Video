@@ -79,6 +79,8 @@ jobs:
             if ($null -eq $status.questions) { throw 'EXE /api/status smoke test failed' }
             $random = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/topic/random" -TimeoutSec 5 -NoProxy
             if (-not $random.topic) { throw "EXE random topic endpoint failed" }
+            if (-not $status.models.gemini) { throw "EXE model settings missing from status" }
+            if ($homePage.Content -notmatch 'Chọn model AI') { throw 'Model selector UI missing from built EXE' }
             Write-Output "EXE HTTP + random topic smoke tests passed"
           } catch {
             $logPath = Join-Path $env:LOCALAPPDATA "TiengHanSoEasyStudio\studio.log"
@@ -100,8 +102,8 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.3.0
-          name: Tiếng Hàn So Easy Studio v0.2.1
+          tag_name: v0.3.1
+          name: Tiếng Hàn So Easy Studio v0.3.1
           target_commitish: main
           files: dist/TiengHanSoEasyStudio.exe
           make_latest: true

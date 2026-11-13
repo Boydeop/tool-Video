@@ -48,17 +48,17 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 <body>
 <div class="app">
 <aside class="sidebar">
- <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v0.3.0</small></div>
+ <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v0.3.1</small></div>
  <nav class="nav" aria-label="Điều hướng">
   <button data-nav="create" class="active"><span class="num">1</span> Tạo câu hỏi</button>
   <button data-nav="questions"><span class="num">2</span> Duyệt & Video</button>
-  <button data-nav="keys"><span class="num">3</span> API Key TXT</button>
+  <button data-nav="keys"><span class="num">3</span> API & Model</button>
   <button data-nav="publish"><span class="num">4</span> Lịch đăng Page</button>
  </nav>
  <div class="sidehelp"><b>Gợi ý bắt đầu</b><p>Đầu tiên nhập API key ở mục 3. Sau đó quay lại mục 1, bấm tạo câu hỏi ngẫu nhiên và duyệt nội dung trước khi xuất MP4.</p></div>
 </aside>
 <main class="content">
- <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Chọn ngẫu nhiên → kiểm duyệt → xuất MP4 có giọng đọc → đặt lịch Facebook.</p></div><span class="version">Bản v0.3.0</span></header>
+ <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Chọn ngẫu nhiên → kiểm duyệt → xuất MP4 có giọng đọc → đặt lịch Facebook.</p></div><span class="version">Bản v0.3.1</span></header>
  <div class="metrics">
   <div class="metric"><span class="name">Câu hỏi đã lưu</span><strong id="statQuestions">0</strong></div>
   <div class="metric"><span class="name">Câu đã duyệt</span><strong id="statApproved">0</strong></div>
@@ -75,7 +75,8 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
     <div class="field compact"><label for="level">Trình độ</label><select id="level"><option>TOPIK 1</option><option>TOPIK 2</option><option>TOPIK 3</option><option>TOPIK 4</option></select></div>
     <div class="field compact"><label for="count">Số câu / lần</label><select id="count"><option>3</option><option selected>6</option><option>10</option><option>15</option><option>20</option><option>30</option></select></div>
    </div>
-   <div class="actions"><button class="btn" id="generate">✨ Tạo câu hỏi chủ đề này</button><button class="btn secondary" id="daily">📅 Tạo chủ đề hôm nay</button></div>
+   <div class="actions"><button class="btn" id="generate">✨ Tạo câu hỏi chủ đề này</button><button class="btn secondary" id="daily">📅 Tạo chủ đề hôm nay</button><button class="btn outline" id="openModels">⚙ Chọn model AI</button></div>
+   <p class="note" id="activeModels" style="margin-top:13px">Đang tải model đã chọn…</p>
    <p class="note" style="margin-top:15px">Câu hỏi AI được lưu dưới dạng nháp để kiểm tra tiếng Hàn trước khi xuất video. Không bảo đảm mọi đáp án AI đều chính xác.</p>
   </div>
   <div class="tip" id="setupTip">💡 Chưa có API key? Chọn mục <b>API Key TXT</b> để nhập từ file văn bản hoặc dán key trực tiếp.</div>
@@ -137,6 +138,32 @@ YOUR_GROQ_KEY
 YOUR_OPENROUTER_KEY</div></details>
    <p class="keynotice">File TXT được đọc trong trình duyệt trên máy bạn, sau đó gửi đến máy chủ cục bộ 127.0.0.1. Key được lưu trong dữ liệu cá nhân của Windows dưới dạng văn bản, không đưa lên GitHub. Không chia sẻ file TXT hoặc file lưu key.</p>
   </div>
+  <div class="card" id="modelConfig">
+   <div class="sectiontitle"><h2>⚙ Chọn model AI</h2><span class="pill">Tự lấy danh sách từ nhà cung cấp</span></div>
+   <p class="note">Có API key hợp lệ chưa chắc model mặc định còn được cấp quyền. Hãy chọn dịch vụ, lấy danh sách model mà API cho phép, bấm kiểm tra và lưu. Model sẽ được nhớ cho các lần tạo video tiếp theo.</p>
+   <div class="fieldrow">
+     <div class="field compact"><label for="modelProvider">Nhà cung cấp</label>
+       <select id="modelProvider"><option value="gemini">Google Gemini</option><option value="groq">Groq</option><option value="openrouter">OpenRouter</option></select>
+     </div>
+     <button class="btn secondary" id="loadModels">↻ Lấy danh sách model từ API</button>
+   </div>
+   <p class="note" id="modelSummary">Đang tải cấu hình model…</p>
+   <div class="flexrow">
+     <div class="field"><label for="modelSearch">Tìm model theo tên</label><input id="modelSearch" type="text" placeholder="Nhập từ khóa lọc danh sách"></div>
+     <div class="field"><label for="modelSelect">Model có thể chọn</label><select id="modelSelect"><option value="">Bấm lấy danh sách model</option></select></div>
+   </div>
+   <div class="field compact" style="margin:14px 0"><label for="modelKeyIndex">Kiểm tra với key nào?</label><select id="modelKeyIndex"><option value="1">API key #1</option></select></div>
+   <div class="field" style="margin-top:14px"><label for="modelManual">Hoặc nhập model ID bạn đã kiểm tra (không bắt buộc)</label>
+     <input id="modelManual" type="text" placeholder="Ví dụ: gemini-3.5-flash-lite" autocomplete="off"></div>
+   <p class="note" id="modelCount" style="margin-top:9px">Mỗi nhà cung cấp có giới hạn và quyền model khác nhau. Danh sách có thể chứa model trả phí.</p>
+   <div class="actions">
+      <button class="btn outline" id="testModel">✓ Thử model với API key</button>
+      <button class="btn" id="saveModel">💾 Lưu model đang chọn</button>
+   </div>
+   <div class="tip" id="modelTestResult" style="margin-top:16px;display:none"></div>
+   <p class="keynotice" style="margin-top:14px">Thử model sẽ gửi một câu hỏi rất ngắn và có thể tính vào hạn mức API. Việc lấy danh sách thành công không bảo đảm mọi key trong pool đều dùng được model đó. Nếu gặp HTTP 404, hãy chọn model khác trong danh sách và thử lại.</p>
+  </div>
+
  </section>
 
  <section class="panel" id="panel-publish">
@@ -163,7 +190,7 @@ YOUR_OPENROUTER_KEY</div></details>
 (function(){
 "use strict";
 const $=id=>document.getElementById(id);
-const state={topic:"",questions:[],jobs:[],videos:[],providers:{},selection:new Set(),busy:false,autoToast:null,lastVideo:""};
+const state={topic:"",questions:[],jobs:[],videos:[],providers:{},models:{},modelLists:{},selection:new Set(),busy:false,autoToast:null,lastVideo:""};
 function make(tag,text,cls){const el=document.createElement(tag);if(text!==undefined)el.textContent=String(text);if(cls)el.className=cls;return el}
 function notice(message,type){const el=$("toast");el.textContent=message;el.className="result visible "+(type||"");if(state.autoToast)clearTimeout(state.autoToast);state.autoToast=setTimeout(()=>{el.className="result"},6500)}
 async function api(url,body){
@@ -180,6 +207,7 @@ function showPanel(name){
  window.scrollTo({top:0,behavior:"smooth"});
 }
 document.querySelectorAll("[data-nav]").forEach(el=>el.addEventListener("click",()=>showPanel(el.dataset.nav)));
+$("openModels").addEventListener("click",()=>{showPanel("keys");$("modelConfig").scrollIntoView({behavior:"smooth",block:"start"})});
 async function run(fn,success){
  if(state.busy)return;
  state.busy=true;
@@ -299,6 +327,85 @@ $("schedule").addEventListener("click",async()=>{
  const result=await run(()=>api("/api/schedule",{video_path:video,caption:$("caption").value,scheduled_at:dt.toISOString()}));
  if(result){await loadStatus();notice("Đã lên lịch. Giữ Studio chạy và cấu hình Meta Page token hợp lệ.","success")}
 });
+
+function currentModelProvider(){return $("modelProvider").value}
+function selectedModelId(){
+ const manual=$("modelManual").value.trim();
+ return manual || $("modelSelect").value;
+}
+function populateModels(){
+ const provider=currentModelProvider(),all=state.modelLists[provider]||[];
+ const current=state.models[provider]||"",term=$("modelSearch").value.trim().toLowerCase();
+ const sel=$("modelSelect"),previous=sel.value;
+ sel.replaceChildren();
+ const matching=all.filter(m=>(m.id+" "+m.label).toLowerCase().includes(term));
+ const addOption=(id,label)=>{const op=make("option",label);op.value=id;sel.append(op)};
+ if(!matching.length && !all.length && current) addOption(current,"Đang sử dụng: "+current);
+ else if(!matching.length) addOption("","Không tìm thấy model phù hợp.");
+ for(const item of matching){
+   const suffix=item.free===true?" · miễn phí theo bảng giá API":"";
+   addOption(item.id,item.id+suffix);
+ }
+ if(matching.some(m=>m.id===previous)) sel.value=previous;
+ else if(matching.some(m=>m.id===current)) sel.value=current;
+ else if(matching.length) sel.value=matching[0].id;
+ $("modelCount").textContent=all.length
+   ? "Hiển thị "+matching.length+" / "+all.length+" model · Model miễn phí có thể thay đổi quota."
+   : "Chưa tải danh sách từ API. Bạn vẫn có thể nhập ID thủ công rồi kiểm tra.";
+}
+function updateModelPanel(){
+ const provider=currentModelProvider();
+ const model=state.models[provider]||"chưa chọn";
+ const n=(state.providers[provider]||{}).keys||0;
+ $("modelSummary").textContent="Đang dùng: "+model+" · "+n+" API key đã lưu cho "+provider+".";
+ const keySelector=$("modelKeyIndex"),keep=keySelector.value;
+ keySelector.replaceChildren();
+ for(let i=1;i<=n;i++){const o=make("option","API key #"+i);o.value=String(i);keySelector.append(o)}
+ if(n && Number(keep)<=n)keySelector.value=keep;
+ if(!n){const o=make("option","Chưa có API key");o.value="";keySelector.append(o)}
+
+ $("activeModels").textContent="Model đang dùng: "+
+   ["gemini","groq","openrouter"].map(p=>p+": "+(state.models[p]||"chưa chọn")).join("  ·  ");
+ populateModels();
+}
+$("modelProvider").addEventListener("change",()=>{
+ $("modelSearch").value="";$("modelManual").value="";
+ $("modelTestResult").style.display="none";
+ updateModelPanel();
+});
+$("modelSearch").addEventListener("input",populateModels);
+$("loadModels").addEventListener("click",async()=>{
+ const provider=currentModelProvider();
+ notice("Đang đọc danh sách model từ "+provider+"…");
+ const result=await run(()=>api("/api/models?provider="+encodeURIComponent(provider)));
+ if(!result)return;
+ state.modelLists[provider]=result.models||[];
+ $("modelManual").value="";
+ updateModelPanel();
+ $("modelKeyIndex").value=String(result.key_position);
+ notice("Đã tải "+result.count+" model từ "+provider+" (kiểm tra bằng key thứ "+result.key_position+").","success");
+});
+$("testModel").addEventListener("click",async()=>{
+ const provider=currentModelProvider(),model=selectedModelId();
+ if(!model){notice("Vui lòng chọn hoặc nhập model ID.","error");return}
+ notice("Đang kiểm tra model qua API (sẽ sử dụng một ít token).");
+ const result=await run(()=>api("/api/models/test",{provider,model,key_position:Number($("modelKeyIndex").value)}));
+ const line=$("modelTestResult");line.style.display="block";
+ if(result){line.textContent="✅ "+model+" đã phản hồi thành công. Bạn có thể bấm Lưu model.";
+   notice("Model "+model+" hoạt động với key #"+result.key_position+" của "+provider+".","success")}
+ else line.textContent="Không kiểm tra được "+model+". Xem lỗi và thử model khác.";
+});
+$("saveModel").addEventListener("click",async()=>{
+ const provider=currentModelProvider(),model=selectedModelId();
+ if(!model){notice("Vui lòng chọn hoặc nhập model ID.","error");return}
+ const result=await run(()=>api("/api/models/select",{provider,model}));
+ if(!result)return;
+ state.models[provider]=result.model;
+ $("modelManual").value="";
+ updateModelPanel();
+ notice("Đã lưu "+provider+" → "+result.model+". Từ nay Studio sẽ sử dụng model này.","success");
+});
+
 function renderVideos(){
  const sel=$("videoSelect"),chosen=state.lastVideo||sel.value;sel.replaceChildren();
  const initial=make("option",state.videos.length?"Chọn video MP4…":"Chưa có video MP4");
@@ -320,6 +427,7 @@ async function loadStatus(){
  const data=await api("/api/status");
  state.questions=data.questions||[];state.jobs=data.jobs||[];state.videos=data.videos||[];
  state.providers=data.providers||{};
+ state.models=data.models||{};
  const validIds=new Set(state.questions.map(q=>q.id));
  state.selection=new Set([...state.selection].filter(id=>validIds.has(id)));
  $("statQuestions").textContent=state.questions.length;
@@ -330,7 +438,7 @@ async function loadStatus(){
    $("key"+p.charAt(0).toUpperCase()+p.slice(1)).textContent=(state.providers[p]||{}).keys||0;
  }
  $("setupTip").style.display=Number($("statKeys").textContent)?"none":"block";
- renderQuestions();renderVideos();renderJobs();
+ renderQuestions();renderVideos();renderJobs();updateModelPanel();
 }
 async function initialize(){
  try{await Promise.all([loadStatus(),chooseTopic(false)])}
