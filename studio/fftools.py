@@ -17,3 +17,8 @@ def binary(name):
     external=shutil.which(name)
     if external:return external
     raise RuntimeError(name+" not available. Install FFmpeg or use bundled Windows EXE.")
+
+def hidden_subprocess():
+    """Prevent bundled FFmpeg and FFprobe from flashing black consoles on Windows."""
+    import subprocess
+    return {"creationflags":subprocess.CREATE_NO_WINDOW} if os.name=="nt" else {}

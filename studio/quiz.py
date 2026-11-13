@@ -62,6 +62,29 @@ class Quiz:
     meaning: str = ""
     clue: str = ""
 
+    wrong1_romanization: str = ""
+    wrong1_meaning: str = ""
+    wrong2_romanization: str = ""
+    wrong2_meaning: str = ""
+    wrong3_romanization: str = ""
+    wrong3_meaning: str = ""
+
+    def answer_details(self, answer: str) -> dict:
+        """Source-aligned details for A/B/C/D regardless of shuffle order."""
+        choices=(self.correct,self.wrong1,self.wrong2,self.wrong3)
+        index=choices.index(answer)
+        if index==0:
+            return {"romanization":self.romanization.strip(),
+                    "meaning":self.vietnamese_meaning}
+        prefix="wrong"+str(index)
+        return {"romanization":getattr(self,prefix+"_romanization").strip(),
+                "meaning":getattr(self,prefix+"_meaning").strip()}
+
+    @property
+    def missing_answer_details(self):
+        return [v for v in (self.correct,self.wrong1,self.wrong2,self.wrong3)
+                if not all(self.answer_details(v).values())]
+
     @property
     def short_clue(self) -> str:
         """Short screen/audio prompt, never the original verbose question."""
@@ -113,6 +136,9 @@ class Quiz:
             raise ValueError("Đáp án phải chứa tiếng Hàn.")
         if len(self.question) > 130 or any(len(a) > 75 for a in answers) or len(self.clue)>65 or len(self.meaning)>80 or len(self.romanization)>100:
             raise ValueError("Nội dung quá dài để hiển thị trên video.")
+        for prefix in ("wrong1","wrong2","wrong3"):
+            if len(getattr(self,prefix+"_meaning"))>90 or len(getattr(self,prefix+"_romanization"))>120:
+                raise ValueError("Nghĩa/phiên âm của đáp án quá dài.")
         if self.level not in LEVELS:
             raise ValueError("Cấp độ TOPIK không hợp lệ.")
 
@@ -120,7 +146,10 @@ class Quiz:
     def parse(cls, raw: dict, topic: str = "", level: str = "TOPIK 1") -> "Quiz":
         fields = {k: str(raw.get(k) or "").strip() for k in
                   ("topic", "question", "correct", "wrong1", "wrong2",
-                   "wrong3", "romanization", "explanation", "level", "meaning", "clue")}
+                   "wrong3", "romanization", "explanation", "level", "meaning", "clue",
+                   "wrong1_romanization","wrong1_meaning",
+                   "wrong2_romanization","wrong2_meaning",
+                   "wrong3_romanization","wrong3_meaning")}
         fields["topic"] = fields["topic"] or topic
         fields["level"] = fields["level"] or level
         obj = cls(**fields)

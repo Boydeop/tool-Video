@@ -33,10 +33,11 @@ def generate(provider,topic,level,count,recent,fmt="từ vựng"):
     if not 1<=count<=30:raise ValueError("1-30 questions per request")
     prompt=("Tạo "+str(count)+" câu trắc nghiệm tiếng Hàn cho người Việt. "
       +"Chủ đề: "+json.dumps(topic,ensure_ascii=False)+"; cấp độ: "+level+"; dạng: "+fmt+". "
-      +"Trả JSON array thuần, mỗi phần tử gồm topic,question,clue,correct,wrong1,wrong2,wrong3,romanization,meaning,explanation,level. "
+      +"Trả JSON array thuần, mỗi phần tử gồm topic,question,clue,correct,wrong1,wrong2,wrong3,romanization,meaning,wrong1_romanization,wrong1_meaning,wrong2_romanization,wrong2_meaning,wrong3_romanization,wrong3_meaning,explanation,level. "
       +"Ưu tiên QUIZ TỪ VỰNG NGẮN: clue là cụm tiếng Việt 1-6 từ, tối đa 40 ký tự (ví dụ: 'Khúc xương', 'Nhân viên công ty'), không phải câu hỏi. "
       +"question giống clue, không viết câu rườm rà như 'Từ tiếng Hàn nào có nghĩa là...' hay 'Từ nào chỉ...'. "
       +"meaning là nghĩa tiếng Việt chính xác của correct, không phải lời giải dài; romanization là phiên âm tiếng Hàn theo Revised Romanization (Latin). "
+      +"BẮT BUỘC cung cấp phiên âm Revised Romanization và nghĩa tiếng Việt cho cả 4 đáp án, tương ứng đúng từng trường correct/wrong1/wrong2/wrong3. Không chuyển nghĩa đáp án sai thành nghĩa của câu hỏi. "
       +"Bốn đáp án Hangul ngắn, đồng loại ngữ pháp, phân biệt rõ, chỉ 1 đáp án đúng. explanation tối đa 1 câu ngắn. "
       +"Với hội thoại/ngữ pháp vẫn giữ thông tin cần thiết để câu hỏi không bị mơ hồ, nhưng viết ngắn gọn. "
       +"Nếu không chắc nghĩa hoặc phiên âm, không sáng tác thông tin: để trống và đánh dấu để người dùng kiểm duyệt. "

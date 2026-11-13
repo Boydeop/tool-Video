@@ -94,7 +94,7 @@ class Service:
         return output
 
     def render_approved(self,ids,theme="hanji",filename=None,width=None,
-                        with_voice=False,voice_engine="auto"):
+                        with_voice=False,voice_engine="auto",progress=None):
         questions=self.store.get_questions(ids,status="approved")
         if not questions:raise ValueError("Chọn ít nhất một câu đã duyệt.")
         config=self.production.settings()
@@ -110,19 +110,24 @@ class Service:
             voice_engine=voice_engine,transition=config["transition"],
             intro=config["intro"],sfx=config["sfx"],sfx_volume=config["sfx_volume"],
             logo_path=self.production.logo(),logo_position=config["logo_position"],
-            logo_scale=config["logo_scale"])
+            logo_scale=config["logo_scale"],logo_x=config["logo_x"],logo_y=config["logo_y"],
+            progress=progress)
+        from .metadata import overwrite_metadata
+        overwrite_metadata(completed,config)
         self.store.mark_rendered(ids,completed)
         return completed
 
-    def preview(self,question_id,theme="hanji",reveal_answer=True):
+    def preview(self,question_id,theme="hanji",reveal_answer=True,show_logo=True):
         from PIL import Image
         if theme not in ("hanji","blue","sejong"):raise ValueError("Mẫu giao diện không hợp lệ.")
         q=self.store.get_questions([question_id])[0]
         config=self.production.settings()
         elapsed=1.35+config["think"]+.6 if reveal_answer else 1.35+config["think"]-.5
         im=draw_frame(q,1,1,theme,elapsed,config["think"],540,
-            config["reveal"],config["transition"],self.production.logo(),
-            config["logo_position"],config["logo_scale"])
+            config["reveal"],config["transition"],
+            self.production.logo() if show_logo else None,
+            config["logo_position"],config["logo_scale"],
+            logo_x=config["logo_x"],logo_y=config["logo_y"])
         buf=io.BytesIO()
         im.save(buf,format="PNG")
         return buf.getvalue()
@@ -139,7 +144,7 @@ class Service:
                sfx_volume=cfg["sfx_volume"],with_voice=with_voice,
                voice_engine=voice_engine,voice_cache=cfg["cache_dir"],
                logo_path=self.production.logo(),logo_position=cfg["logo_position"],
-               logo_scale=cfg["logo_scale"])
+               logo_scale=cfg["logo_scale"],logo_x=cfg["logo_x"],logo_y=cfg["logo_y"])
         for old in sorted(folder.glob("preview_*.mp4"),
                           key=lambda x:x.stat().st_mtime,reverse=True)[20:]:
             old.unlink(missing_ok=True)
@@ -171,6 +176,34 @@ class Service:
                 return {"videos":completed,"failed_at":i,
                         "error":str(exc)[:500],"partial":True}
         return {"videos":completed,"partial":False}
+
+    def edit_answer_details(self,qid,fields):
+        return self.store.update_answer_details(qid,fields)
+
+    def enrich_answer_details(self,ids):
+        from .answer_enrichment import suggest, DETAIL_KEYS
+        if not isinstance(ids,list) or not 1<=len(ids)<=6 or len(set(ids))!=len(ids):
+            raise ValueError("Chọn tối đa 6 câu chưa xuất để bổ sung AI.")
+        result=[]
+        for qid in ids:
+            # Only unrendered questions can be edited.
+            quiz=self.store.get_questions([qid])[0]
+            improved,provider=suggest(quiz)
+            changes={k:getattr(improved,k) for k in DETAIL_KEYS}
+            outcome=self.store.update_answer_details(qid,changes)
+            result.append({"id":qid,"provider":provider,"missing":outcome["missing"]})
+        return {"updated":result,"requires_review":True}
+
+    def overwrite_video_metadata(self,name):
+        from .metadata import overwrite_metadata
+        path=self.video_path(name)
+        try:
+            existing=self.store.get_video(path)
+            if existing["status"]=="scheduled":
+                raise ValueError("Không thể ghi đè video đã lên lịch đăng.")
+        except ValueError as exc:
+            if "Không thể ghi đè" in str(exc):raise
+        return overwrite_metadata(path,self.production.settings())
 
     def seo_video(self,name):
         from .seo import draft

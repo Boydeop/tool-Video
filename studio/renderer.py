@@ -10,7 +10,7 @@ import tempfile
 import unicodedata
 
 from PIL import Image,ImageDraw,ImageFont
-from .fftools import binary
+from .fftools import binary, hidden_subprocess
 from .quiz import Quiz
 from .sfx import build_sfx
 from .timeline import build_scenes, duration as timeline_duration
@@ -115,7 +115,7 @@ def _label(d,cx,top,text,max_width,max_lines,size,color,minimum=22,line_gap=7):
         _write_center(d,cx,top+i*height,line,font_size,color)
     return len(lines)*height
 
-def _logo_overlay(img,path,position="top-right",scale=.15):
+def _logo_overlay(img,path,position="top-right",scale=.15,logo_x=0.82,logo_y=0.10):
     if not path:return img
     p=Path(path)
     if not p.is_file():return img
@@ -124,13 +124,19 @@ def _logo_overlay(img,path,position="top-right",scale=.15):
     max_width=max(28,int(img.width*scale))
     logo.thumbnail((max_width,90),Image.Resampling.LANCZOS)
     margin=24
-    x=margin if "left" in position else img.width-logo.width-margin
-    y=108 if position.startswith("top") else img.height-logo.height-62
+    if position=="custom":
+        # Coordinates are fractions of the available area (not absolute pixels).
+        x=round(max(0,min(1,logo_x))*(img.width-logo.width))
+        y=round(max(0,min(1,logo_y))*(img.height-logo.height))
+    else:
+        x=margin if "left" in position else img.width-logo.width-margin
+        y=108 if position.startswith("top") else img.height-logo.height-62
     result=img.convert("RGBA")
     result.alpha_composite(logo,(x,y))
     return result.convert("RGB")
 
-def draw_intro(theme,width=540,logo_path=None,logo_position="top-right",logo_scale=.15,progress=1):
+def draw_intro(theme,width=540,logo_path=None,logo_position="top-right",logo_scale=.15,progress=1,
+               logo_x=.82,logo_y=.10):
     bg,fg,accent=THEMES[theme]
     im=Image.new("RGB",(540,960),bg);d=ImageDraw.Draw(im)
     d.rounded_rectangle((36,225,504,630),radius=29,fill="#FFFFFF" if theme!="blue" else "#153E68")
@@ -138,21 +144,21 @@ def draw_intro(theme,width=540,logo_path=None,logo_position="top-right",logo_sca
     _label(d,270,380,"THỬ THÁCH TIẾNG HÀN",424,2,36,"#191612" if theme!="blue" else "#FFFFFF",28)
     _label(d,270,503,"Chọn đáp án đúng trước khi hết giờ!",410,2,25,"#324D63" if theme!="blue" else "#D9EBFD",21)
     _label(d,270,727,"한국어 퀴즈",410,1,41,accent,30)
-    im=_logo_overlay(im,logo_path,logo_position,logo_scale)
+    im=_logo_overlay(im,logo_path,logo_position,logo_scale,logo_x,logo_y)
     if width!=540:im=im.resize((width,width*16//9),Image.Resampling.LANCZOS)
     return im
 
 def draw_frame(quiz:Quiz,idx,total,theme,elapsed,think=5.5,width=540,
                reveal=2.8,transition=.8,logo_path=None,
                logo_position="top-right",logo_scale=.15,
-               prompt_duration=1.35,answer_duration=None):
+               prompt_duration=1.35,answer_duration=None,logo_x=.82,logo_y=.10):
     """Render a frame with three explicit stages: speaking, thinking, reveal."""
     if theme not in THEMES:
         raise ValueError("Unknown video theme")
     if width!=540:
         frame=draw_frame(quiz,idx,total,theme,elapsed,think,540,
                          reveal,transition,logo_path,logo_position,logo_scale,
-                         prompt_duration,answer_duration)
+                         prompt_duration,answer_duration,logo_x,logo_y)
         return frame.resize((width,width*16//9),Image.Resampling.LANCZOS)
 
     bg,fg,accent=THEMES[theme]
@@ -200,20 +206,27 @@ def draw_frame(quiz:Quiz,idx,total,theme,elapsed,think=5.5,width=540,
     choices=[quiz.correct,quiz.wrong1,quiz.wrong2,quiz.wrong3]
     random.Random(idx*719+sum(ord(c) for c in quiz.question)).shuffle(choices)
     for n,option in enumerate(choices):
-        top=466+n*87
+        top=463+n*88
         correct=show_answer and option==quiz.correct
-        d.rounded_rectangle((28,top,512,top+75),radius=14,
+        d.rounded_rectangle((28,top,512,top+82),radius=14,
             fill="#179662" if correct else "#FFFFFF",
             outline="#0F7F51" if correct else "#D0DADF",width=2)
-        d.ellipse((42,top+16,84,top+59),fill="#11744D" if correct else "#E7EFF3")
-        _write_center(d,63,top+24,"ABCD"[n],19,"#FFFFFF" if correct else "#0F4C81")
-        _label(d,285,top+17,option,388,1,34,
-               "#FFFFFF" if correct else "#191612",22)
+        d.ellipse((42,top+19,84,top+61),fill="#11744D" if correct else "#E7EFF3")
+        _write_center(d,63,top+27,"ABCD"[n],19,"#FFFFFF" if correct else "#0F4C81")
+        if show_answer:
+            details=quiz.answer_details(option)
+            romanization=details["romanization"].strip()
+            meaning=details["meaning"].strip()
+            _label(d,285,top+4,option,386,1,29,
+                   "#FFFFFF" if correct else "#191612",21)
+            _label(d,285,top+35,romanization or "Phiên âm: chưa có",
+                   386,1,16,"#E3FFEF" if correct else "#3B6074",13)
+            _label(d,285,top+57,meaning or "Nghĩa: cần bổ sung",
+                   390,1,17,"#FFFFFF" if correct else "#28435A",13)
+        else:
+            _label(d,285,top+24,option,386,1,33,"#191612",22)
         if correct:
-            romanization=quiz.romanization.strip() or approximate_romanization(quiz.correct)
-            if romanization:
-                _label(d,286,top+51,romanization,383,1,17,"#E5FFF0",14)
-            d.rounded_rectangle((29,top+1,511,top+74),radius=14,
+            d.rounded_rectangle((29,top+1,511,top+81),radius=14,
                                 outline="#A7EFCC",width=3)
 
     # Explanation appears only AFTER the timer, never while choosing an answer.
@@ -231,7 +244,7 @@ def draw_frame(quiz:Quiz,idx,total,theme,elapsed,think=5.5,width=540,
         _label(d,270,860,"NGHE XONG, CHỌN ĐÁP ÁN",463,1,19,fg,16)
 
     _label(d,270,929,"tienghansoeasy.io.vn",470,1,17,accent,15)
-    im=_logo_overlay(im,logo_path,logo_position,logo_scale)
+    im=_logo_overlay(im,logo_path,logo_position,logo_scale,logo_x,logo_y)
 
     # Soft transition; no hard flashes or blurred Hangul.
     fade_in=min(1,max(0,elapsed/.5))
@@ -247,12 +260,16 @@ def draw_frame(quiz:Quiz,idx,total,theme,elapsed,think=5.5,width=540,
 def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
            think=5.5,reveal=2.8,with_voice=False,voice_cache=None,
            voice_engine="auto",transition=.8,intro=1.5,sfx=True,sfx_volume=.34,
-           logo_path=None,logo_position="top-right",logo_scale=.15):
+           logo_path=None,logo_position="top-right",logo_scale=.15,
+           logo_x=.82,logo_y=.10,progress=None):
     if not questions or theme not in THEMES or width not in (540,1080) or fps not in (24,30):
         raise ValueError("Unsupported video configuration.")
     if not 4<=think<=12 or not 1.5<=reveal<=7 or not .3<=transition<=2 or not .5<=intro<=4:
         raise ValueError("Video timing outside allowed limits.")
     binary("ffmpeg")
+    def report(p,stage):
+        if progress:progress(min(98,max(0,int(p))),stage)
+    report(1,"Chuẩn bị dữ liệu")
     for quiz in questions:
         quiz.validate()
     target=Path(destination).resolve()
@@ -265,10 +282,12 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
     if with_voice:
         voice_events,scenes=prepare_events(
             questions,cache,think,reveal,engine=voice_engine,
-            intro=intro,transition=transition,fps=fps,return_scenes=True)
+            intro=intro,transition=transition,fps=fps,return_scenes=True,
+            progress=lambda current,total,phase:report(3+17*current/max(1,total),phase))
     else:
         scenes=build_scenes(len(questions),think,reveal,transition,intro,fps)
         voice_events=[]
+    report(22,"Chuẩn bị khung hình và âm thanh")
     duration=timeline_duration(scenes)
     with tempfile.TemporaryDirectory(prefix="thse_render_") as td:
         folder=Path(td)
@@ -283,19 +302,29 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
             "-f","rawvideo","-pix_fmt","rgb24","-s",f"{width}x{width*16//9}",
             "-r",str(fps),"-i","-","-an","-c:v","libx264","-preset","veryfast",
             "-pix_fmt","yuv420p","-movflags","+faststart",str(silent)
-        ],stdin=subprocess.PIPE,stderr=subprocess.PIPE)
+        ],stdin=subprocess.PIPE,stderr=subprocess.PIPE,**hidden_subprocess())
         try:
+            frames_total=int(round(scenes[0].start*fps))+sum(int(round(scene.duration*fps)) for scene in scenes)
+            frames_done=0
+            step=max(1,frames_total//75)
             for tick in range(int(round(scenes[0].start*fps))):
-                im=draw_intro(theme,width,logo_path,logo_position,logo_scale)
+                im=draw_intro(theme,width,logo_path,logo_position,logo_scale,
+                              logo_x=logo_x,logo_y=logo_y)
                 proc.stdin.write(im.tobytes())
+                frames_done+=1
+                if frames_done%step==0:report(24+65*frames_done/frames_total,"Đang vẽ khung video")
             for i,(q,scene) in enumerate(zip(questions,scenes),1):
                 frames=int(round(scene.duration*fps))
                 for tick in range(frames):
                     im=draw_frame(q,i,len(questions),theme,tick/fps,think,width,
                                   reveal,transition,logo_path,logo_position,logo_scale,
                                   prompt_duration=scene.prompt_duration,
-                                  answer_duration=scene.answer_duration)
+                                  answer_duration=scene.answer_duration,
+                                  logo_x=logo_x,logo_y=logo_y)
                     proc.stdin.write(im.tobytes())
+                    frames_done+=1
+                    if frames_done%step==0:report(24+65*frames_done/frames_total,
+                                                 "Đang dựng câu "+str(i)+"/"+str(len(questions)))
             proc.stdin.close()
             stderr=proc.stderr.read().decode("utf-8","replace")
             if proc.wait()!=0:
@@ -307,8 +336,10 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
             raise
         finally:
             proc.stderr.close()
+        report(90,"Đang ghép âm thanh")
         if events:
             mux_narration(silent,events,target,duration)
         else:
             silent.replace(target)
+        report(98,"Đã dựng MP4, đang ghi metadata")
     return str(target)

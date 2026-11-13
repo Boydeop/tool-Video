@@ -11,8 +11,13 @@ from PIL import Image
 _LOCK=threading.RLock()
 DEFAULTS={"think":5.5,"reveal":2.8,"transition":0.8,"intro":1.5,
           "fps":24,"width":540,"sfx":True,"sfx_volume":0.34,
-          "logo_position":"top-right","logo_scale":0.15}
-POSITIONS=("top-right","top-left","bottom-right","bottom-left")
+          "logo_position":"top-right","logo_scale":0.15,
+          "logo_x":0.82,"logo_y":0.10,
+          "metadata_title":"Tiếng Hàn So Easy",
+          "metadata_artist":"Tiếng Hàn So Easy",
+          "metadata_copyright":"© Tiếng Hàn So Easy. All rights reserved.",
+          "metadata_comment":"tienghansoeasy.io.vn"}
+POSITIONS=("top-right","top-left","bottom-right","bottom-left","custom")
 
 class Production:
     def __init__(self,root):
@@ -42,11 +47,12 @@ class Production:
         if "export_dir" in values and str(Path(values["export_dir"]).resolve())!=current["export_dir"]:
             history=[current["export_dir"],*current.get("export_history",[])]
             new["export_history"]=list(dict.fromkeys(history))[:20]
-        for key in ("think","reveal","transition","intro","logo_scale","sfx_volume"):
+        for key in ("think","reveal","transition","intro","logo_scale","sfx_volume","logo_x","logo_y"):
             new[key]=float(new[key])
         if not (4<=new["think"]<=12 and 1.5<=new["reveal"]<=7
                 and .3<=new["transition"]<=2 and .5<=new["intro"]<=4
-                and .06<=new["logo_scale"]<=.28 and 0<=new["sfx_volume"]<=1):
+                and .06<=new["logo_scale"]<=.28 and 0<=new["sfx_volume"]<=1
+                and 0<=new["logo_x"]<=1 and 0<=new["logo_y"]<=1):
             raise ValueError("Thời gian, kích thước logo hoặc âm lượng SFX ngoài giới hạn.")
         new["fps"]=int(new["fps"])
         new["width"]=int(new["width"])
@@ -54,6 +60,9 @@ class Production:
             raise ValueError("Chỉ hỗ trợ 540/1080p và 24/30 FPS.")
         if new["logo_position"] not in POSITIONS or not isinstance(new["sfx"],bool):
             raise ValueError("Vị trí logo hoặc SFX không hợp lệ.")
+        for field in ("metadata_title","metadata_artist","metadata_copyright","metadata_comment"):
+            if not isinstance(new[field],str) or len(new[field])>220 or any(ord(ch)<32 for ch in new[field]):
+                raise ValueError("Metadata video không hợp lệ hoặc quá dài.")
         for fld in ("export_dir","cache_dir"):
             val=Path(new[fld]).expanduser().resolve()
             if not val.is_absolute():raise ValueError("Cần đường dẫn tuyệt đối.")

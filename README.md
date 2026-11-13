@@ -261,3 +261,44 @@ upload failures are marked \`needs_review\` and never blindly retried.
   is not a dictionary: people should verify translations and romanization
   before bulk publishing.
 
+
+
+## v0.4.2: Four-choice pronunciation, MP4 copyright metadata, draggable logo, silent console and export progress
+
+- Korean quiz questions now store **romanization + Vietnamese meaning for all four choices**:
+  \`romanization\` / \`meaning\` for the correct answer, and
+  \`wrong1_romanization\` / \`wrong1_meaning\` through \`wrong3_*\` for distractors.
+  All choices show their individual reading and meaning **on reveal**, not before
+  the countdown. The currently selected correct answer remains highlighted.
+- AI-generated questions request all eight fields for the four answers.
+  Older local questions remain readable unchanged. Use **AI bổ sung nghĩa/phiên âm**
+  for up to six selected questions, review manually in **Sửa 4 đáp án**, and
+  approve them again before exporting. Missing meanings are displayed as missing;
+  the app will not invent translations from context.
+- Video production settings now hold four metadata fields: title, artist, copyright
+  statement and comment/website. New exports are tagged with FFmpeg stream copying
+  (no extra video encoding), and **Ghi đè metadata** can re-tag an existing output
+  safely after validating a temporary replacement. Scheduled videos are protected
+  from accidental re-tagging where registered. **Metadata is not DRM, platform
+  Content ID, proof of ownership or protection from downloading/re-encoding.**
+- To position the logo, upload PNG/JPEG/WebP, open the static preview and drag the
+  image anywhere in the video frame. X/Y are stored as normalized fractions of the
+  available width/height for the scaled logo. Select a preset corner at any time
+  or save the custom position. Final video and motion previews reuse this layout
+  at both 540×960 and 1080×1920.
+- **Export status:** /api/render/start creates a local single-worker job, and
+  /api/render/progress?job_id=... reports phase and monotonically increasing
+  percent. The dashboard polls and shows a progress bar, completed MP4 count,
+  and any per-job error. Progress is based on pipeline stage and encoded frame
+  count, not elapsed time, so it can advance unevenly. A job reaches 100% only
+  after the MP4 file, its metadata and its registry entry have completed.
+- On Windows every bundled FFmpeg and FFprobe child process in production
+  runs using CREATE_NO_WINDOW. No extra black terminal windows should flash
+  during export. The Studio window remains available, and one batch at a time
+  avoids output-file contention.
+- The previous synchronous /api/render and /api/render/batch endpoints remain
+  for backwards compatibility. New UI uses the asynchronous endpoints.
+- All API credentials remain in local user data. The new metadata/editor endpoints
+  never send credentials to the browser. Existing locally saved question and
+  video history is preserved.
+

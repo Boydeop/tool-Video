@@ -150,6 +150,29 @@ class Store:
                 raise ValueError("Câu hỏi phải được duyệt trước khi dựng video.")
             return [Quiz.parse(json.loads(data[i]["payload"])) for i in ids]
 
+    def update_answer_details(self,qid,fields):
+        """Update only per-answer educational data; require reapproval."""
+        from .answer_enrichment import DETAIL_KEYS
+        from dataclasses import replace
+        if not isinstance(fields,dict) or any(k not in DETAIL_KEYS for k in fields):
+            raise ValueError("Trường nghĩa/phiên âm không hợp lệ.")
+        sanitized={}
+        for key,value in fields.items():
+            if not isinstance(value,str) or len(value)>120:
+                raise ValueError("Phiên âm hoặc nghĩa vượt giới hạn.")
+            sanitized[key]=value.strip()
+        with self._lock,self.db() as c:
+            row=c.execute("SELECT payload,status FROM questions WHERE id=?",(qid,)).fetchone()
+            if not row:raise ValueError("Không tìm thấy câu hỏi.")
+            if row["status"]=="rendered":
+                raise ValueError("Không sửa câu đã xuất video. Tạo phiên bản câu mới.")
+            quiz=Quiz.parse(json.loads(row["payload"]))
+            updated=replace(quiz,**sanitized)
+            updated.validate()
+            c.execute("UPDATE questions SET payload=?,status='draft' WHERE id=?",
+                      (json.dumps(updated.to_dict(),ensure_ascii=False),qid))
+        return {"id":qid,"status":"draft","missing":updated.missing_answer_details}
+
     def approve(self, ids, status="approved"):
         if status not in ("approved","rejected","draft"):
             raise ValueError("Trạng thái không hợp lệ.")
