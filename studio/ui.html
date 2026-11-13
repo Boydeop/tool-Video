@@ -48,7 +48,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 <body>
 <div class="app">
 <aside class="sidebar">
- <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v0.3.1</small></div>
+ <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v0.3.2</small></div>
  <nav class="nav" aria-label="Điều hướng">
   <button data-nav="create" class="active"><span class="num">1</span> Tạo câu hỏi</button>
   <button data-nav="questions"><span class="num">2</span> Duyệt & Video</button>
@@ -58,7 +58,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
  <div class="sidehelp"><b>Gợi ý bắt đầu</b><p>Đầu tiên nhập API key ở mục 3. Sau đó quay lại mục 1, bấm tạo câu hỏi ngẫu nhiên và duyệt nội dung trước khi xuất MP4.</p></div>
 </aside>
 <main class="content">
- <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Chọn ngẫu nhiên → kiểm duyệt → xuất MP4 có giọng đọc → đặt lịch Facebook.</p></div><span class="version">Bản v0.3.1</span></header>
+ <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Chọn ngẫu nhiên → kiểm duyệt → xuất MP4 có giọng đọc → đặt lịch Facebook.</p></div><span class="version">Bản v0.3.2</span></header>
  <div class="metrics">
   <div class="metric"><span class="name">Câu hỏi đã lưu</span><strong id="statQuestions">0</strong></div>
   <div class="metric"><span class="name">Câu đã duyệt</span><strong id="statApproved">0</strong></div>
@@ -104,6 +104,18 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
     <label><input type="radio" name="theme" value="sejong"><span class="swatch sejong"></span> Sejong Heritage</label>
    </div>
    <label class="switchrow"><input type="checkbox" id="voice" checked> 🔊 Đọc câu hỏi tiếng Việt và đáp án đúng bằng tiếng Hàn</label>
+   <div class="fieldrow" id="voiceOptions">
+     <div class="field" style="max-width:350px"><label for="voiceEngine">Nguồn giọng đọc</label>
+       <select id="voiceEngine">
+        <option value="auto">Tự động: Edge TTS → Google dự phòng</option>
+        <option value="edge">Chỉ Edge TTS</option>
+        <option value="google">Chỉ Google TTS</option>
+       </select></div>
+     <button class="btn secondary" id="testVietnamese">▶ Thử giọng tiếng Việt</button>
+     <button class="btn secondary" id="testKorean">▶ Thử giọng tiếng Hàn</button>
+   </div>
+   <audio controls id="voicePreview" style="display:none;width:100%;max-width:560px;margin:10px 0"></audio>
+   <p class="note" id="voiceStatus">Nếu Edge TTS gặp lỗi NoAudioReceived, chế độ Tự động sẽ thử giọng khác rồi dùng Google TTS. Cần kết nối Internet.</p>
    <button class="btn" id="render" disabled>🎬 Xuất video (chọn câu đã duyệt)</button>
    <div id="videoReady" class="tip" style="display:none;margin-top:15px"></div>
    <div class="actions" style="margin-top:12px"><a id="videoDownload" class="btn secondary" style="display:none;text-decoration:none" download>↓ Tải MP4 vừa xuất</a></div>
@@ -287,7 +299,7 @@ $("render").addEventListener("click",async()=>{
  if(!ids.length){notice("Chọn ít nhất một câu đã duyệt.");return}
  const theme=document.querySelector('input[name="theme"]:checked').value;
  notice("Đang dựng video. Giữ ứng dụng mở đến khi xuất hoàn tất.");
- const result=await run(()=>api("/api/render",{ids:ids,theme:theme,with_voice:$("voice").checked}));
+ const result=await run(()=>api("/api/render",{ids:ids,theme:theme,with_voice:$("voice").checked,voice_engine:$("voiceEngine").value}));
  if(result&&result.video){
    state.lastVideo=result.video;
    const name=result.video.replace(/^.*[\\\/]/,"");
@@ -299,6 +311,27 @@ $("render").addEventListener("click",async()=>{
    notice("Video đã được xuất thành công. Có thể tải xuống hoặc chọn để lên lịch đăng.","success");
  }
 });
+
+$("voice").addEventListener("change",()=>{
+ $("voiceOptions").style.display=$("voice").checked?"flex":"none";
+ $("voicePreview").style.display="none";
+});
+async function testVoice(language){
+ const engine=$("voiceEngine").value;
+ $("voiceStatus").textContent="Đang thử giọng "+(language==="vi"?"tiếng Việt":"tiếng Hàn")+"…";
+ const result=await run(()=>api("/api/voice/test",{language,engine}));
+ if(!result){
+  $("voiceStatus").textContent="Không lấy được âm thanh. Thử chọn Google TTS hoặc kiểm tra kết nối mạng.";
+  return;
+ }
+ const player=$("voicePreview");
+ player.src=result.audio_url;
+ player.style.display="block";
+ $("voiceStatus").textContent="Đã tạo âm thanh mẫu. Bấm ▶ để nghe thử trước khi xuất MP4.";
+ try{await player.play()}catch(error){/* User interaction can be required to play audio. */}
+}
+$("testVietnamese").addEventListener("click",()=>testVoice("vi"));
+$("testKorean").addEventListener("click",()=>testVoice("ko"));
 $("keyProvider").addEventListener("change",()=>{$("fileHint").textContent="File không ghi nhóm sẽ được nhập cho "+$("keyProvider").value+". File tối đa 64 KB."});
 $("txtFile").addEventListener("change",()=>{const f=$("txtFile").files[0];$("fileHint").textContent=f?"Đã chọn: "+f.name+" ("+Math.round(f.size/1024)+" KB)":"Chưa chọn file TXT."});
 $("importFile").addEventListener("click",async()=>{

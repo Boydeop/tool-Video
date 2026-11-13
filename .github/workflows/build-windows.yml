@@ -46,7 +46,7 @@ jobs:
       - name: Build one-file GUI EXE
         shell: pwsh
         run: |
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name TiengHanSoEasyStudio --collect-all edge_tts --add-data "studio\ui.html;studio" --add-binary "bin\ffmpeg.exe;." --add-binary "bin\ffprobe.exe;." launcher.py
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name TiengHanSoEasyStudio --collect-all edge_tts --collect-all gtts --add-data "studio\ui.html;studio" --add-binary "bin\ffmpeg.exe;." --add-binary "bin\ffprobe.exe;." launcher.py
           if (-not (Test-Path dist\TiengHanSoEasyStudio.exe)) { throw 'EXE missing' }
           Get-Item dist\TiengHanSoEasyStudio.exe | Select-Object Name,Length
           Get-FileHash dist\TiengHanSoEasyStudio.exe -Algorithm SHA256
@@ -81,7 +81,9 @@ jobs:
             if (-not $random.topic) { throw "EXE random topic endpoint failed" }
             if (-not $status.models.gemini) { throw "EXE model settings missing from status" }
             if ($homePage.Content -notmatch 'Chọn model AI') { throw 'Model selector UI missing from built EXE' }
-            Write-Output "EXE HTTP + random topic smoke tests passed"
+            if ($null -eq $status.tts_engines.edge -or $null -eq $status.tts_engines.google) { throw 'Bundled TTS engines missing' }
+            if ($homePage.Content -notmatch 'Thử giọng tiếng Hàn') { throw 'Voice test UI missing' }
+            Write-Output "EXE HTTP + model + TTS UI smoke tests passed"
           } catch {
             $logPath = Join-Path $env:LOCALAPPDATA "TiengHanSoEasyStudio\studio.log"
             if (Test-Path $logPath) { Get-Content $logPath -Tail 100 }
@@ -102,8 +104,8 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.3.1
-          name: Tiếng Hàn So Easy Studio v0.3.1
+          tag_name: v0.3.2
+          name: Tiếng Hàn So Easy Studio v0.3.2
           target_commitish: main
           files: dist/TiengHanSoEasyStudio.exe
           make_latest: true

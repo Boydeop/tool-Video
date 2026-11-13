@@ -69,14 +69,14 @@ def draw_frame(quiz,idx,total,theme,elapsed,think=4,width=540):
     return image
 
 def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=15,
-           think=4,reveal=1.5,with_voice=False,voice_cache=None):
+           think=4,reveal=1.5,with_voice=False,voice_cache=None,voice_engine="auto"):
     if theme not in THEMES or width not in (540,720,1080) or not questions:
         raise ValueError("Unsupported theme, resolution or empty questions")
     binary("ffmpeg")
     for q in questions: q.validate()
     target=Path(destination).resolve()
     target.parent.mkdir(parents=True,exist_ok=True)
-    events=prepare_events(questions,voice_cache or target.parent/".voice_cache",think,reveal) if with_voice else []
+    events=prepare_events(questions,voice_cache or target.parent/".voice_cache",think,reveal,engine=voice_engine) if with_voice else []
     silent_target=target.with_name(target.stem+".silenttmp.mp4") if with_voice else target
     proc=subprocess.Popen([
       binary("ffmpeg"),"-hide_banner","-loglevel","error","-y",
