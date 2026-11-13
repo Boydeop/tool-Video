@@ -119,7 +119,7 @@ class Service:
         if theme not in ("hanji","blue","sejong"):raise ValueError("Mẫu giao diện không hợp lệ.")
         q=self.store.get_questions([question_id])[0]
         config=self.production.settings()
-        elapsed=config["think"]+.6 if reveal_answer else config["think"]-.5
+        elapsed=1.35+config["think"]+.6 if reveal_answer else 1.35+config["think"]-.5
         im=draw_frame(q,1,1,theme,elapsed,config["think"],540,
             config["reveal"],config["transition"],self.production.logo(),
             config["logo_position"],config["logo_scale"])
@@ -127,7 +127,7 @@ class Service:
         im.save(buf,format="PNG")
         return buf.getvalue()
 
-    def preview_motion(self,question_id,theme="hanji"):
+    def preview_motion(self,question_id,theme="hanji",with_voice=False,voice_engine="auto"):
         questions=self.store.get_questions([question_id])
         cfg=self.production.settings()
         folder=Path(cfg["cache_dir"])/"video_previews"
@@ -136,7 +136,8 @@ class Service:
         render(questions,path,theme=theme,width=540,fps=cfg["fps"],
                think=cfg["think"],reveal=cfg["reveal"],
                intro=cfg["intro"],transition=cfg["transition"],sfx=cfg["sfx"],
-               sfx_volume=cfg["sfx_volume"],with_voice=False,
+               sfx_volume=cfg["sfx_volume"],with_voice=with_voice,
+               voice_engine=voice_engine,voice_cache=cfg["cache_dir"],
                logo_path=self.production.logo(),logo_position=cfg["logo_position"],
                logo_scale=cfg["logo_scale"])
         for old in sorted(folder.glob("preview_*.mp4"),

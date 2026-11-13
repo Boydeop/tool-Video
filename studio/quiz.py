@@ -59,6 +59,47 @@ class Quiz:
     romanization: str = ""
     explanation: str = ""
     level: str = "TOPIK 1"
+    meaning: str = ""
+    clue: str = ""
+
+    @property
+    def short_clue(self) -> str:
+        """Short screen/audio prompt, never the original verbose question."""
+        if self.clue.strip():
+            return self.clue.strip()
+        text=self.question.strip()
+        # Existing 0.4.x quiz records often contain a quoted Vietnamese clue.
+        matches=re.findall(r"['“‘\"]([^'”’\"]{2,65})['”’\"]",text)
+        if matches:
+            return matches[-1].strip().capitalize()
+        patterns=[
+          r"(?i)^từ (?:tiếng hàn )?nào (?:có nghĩa là|chỉ|dùng để chỉ)\s+(.+?)\??$",
+          r"(?i)^từ (.+?) (?:trong|bằng) tiếng hàn (?:là gì|nói thế nào)\??$",
+          r"(?i)^(.+?) (?:trong|bằng) tiếng hàn (?:là gì|nói thế nào)\??$",
+          r"(?i)^từ nào (?:chỉ|có nghĩa là)\s+(.+?)\??$",
+        ]
+        for pattern in patterns:
+            match=re.match(pattern,text)
+            if match:
+                candidate=match.group(1).strip(" ?.,'“”‘’")
+                if 2<=len(candidate)<=65:
+                    return candidate[0].upper()+candidate[1:]
+        # For older complex grammar prompts, keep context rather than cutting mid-sentence.
+        return text
+
+    @property
+    def vietnamese_meaning(self) -> str:
+        if self.meaning.strip():
+            return self.meaning.strip()
+        if self.clue.strip():
+            return self.clue.strip()
+        clue=self.short_clue
+        # Do not relabel a full legacy question as a verified translation.
+        if clue!=self.question and not clue.endswith("…"):
+            return clue
+        match=re.search(r"nghĩa là\s+['“‘]?(.+?)['”’]?(?:\.|$)",self.explanation,re.I)
+        return match.group(1).strip(" .'“”‘’") if match else ""
+
 
     def validate(self) -> None:
         if not self.topic.strip() or not self.question.strip():
@@ -70,7 +111,7 @@ class Quiz:
             raise ValueError("Có hai đáp án giống nhau.")
         if not any(re.search(r"[\uac00-\ud7a3]", a) for a in answers):
             raise ValueError("Đáp án phải chứa tiếng Hàn.")
-        if len(self.question) > 130 or any(len(a) > 75 for a in answers):
+        if len(self.question) > 130 or any(len(a) > 75 for a in answers) or len(self.clue)>65 or len(self.meaning)>80 or len(self.romanization)>100:
             raise ValueError("Nội dung quá dài để hiển thị trên video.")
         if self.level not in LEVELS:
             raise ValueError("Cấp độ TOPIK không hợp lệ.")
@@ -79,7 +120,7 @@ class Quiz:
     def parse(cls, raw: dict, topic: str = "", level: str = "TOPIK 1") -> "Quiz":
         fields = {k: str(raw.get(k) or "").strip() for k in
                   ("topic", "question", "correct", "wrong1", "wrong2",
-                   "wrong3", "romanization", "explanation", "level")}
+                   "wrong3", "romanization", "explanation", "level", "meaning", "clue")}
         fields["topic"] = fields["topic"] or topic
         fields["level"] = fields["level"] or level
         obj = cls(**fields)
