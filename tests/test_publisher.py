@@ -31,9 +31,9 @@ class PublisherTests(unittest.TestCase):
                     vid=publish_reel(video,"Mô tả #TiengHan","Tiêu đề SEO")
             self.assertEqual(vid,"12345678")
             self.assertEqual(len(requests),3)
-            self.assertIn("Tiêu đề SEO",
-                __import__("urllib.parse",fromlist=["unquote"]).unquote(
-                    requests[2].data.decode("utf-8")))
+            from urllib.parse import parse_qs
+            form=parse_qs(requests[2].data.decode("utf-8"))
+            self.assertEqual(form["title"][0],"Tiêu đề SEO")
             self.assertNotIn("FAKE_TOKEN",str(vid))
 
 if __name__=="__main__":unittest.main()
