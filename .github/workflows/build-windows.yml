@@ -100,7 +100,7 @@ jobs:
             if ($homePage.Content -notmatch 'Ghi đè metadata' -or $homePage.Content -notmatch 'Sửa nghĩa') {
               throw 'Copyright metadata or four-answer editing UI missing'
             }
-            if (-not $status.youtube -or -not $status.instagram -or -not $status.production_runs) {
+            if ($null -eq $status.youtube -or $null -eq $status.instagram -or $null -eq $status.production_runs) {
               throw "Multi-platform or durable production metadata missing"
             }
             if ($homePage.Content -notmatch 'autoStart' -or $homePage.Content -notmatch 'cacheClear' -or $homePage.Content -notmatch 'crossPlatform') {
