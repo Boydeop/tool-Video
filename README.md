@@ -513,3 +513,9 @@ không đạt trước khi dựng video. Sửa được cả từ Hàn, nghĩa v
 đối chiếu và lấy từ KRDict, rồi chạy lại QA strict. Lưu lịch sử trước/sau và chỉ ghi
 bản sửa đạt; thiếu bằng chứng thì giữ nguyên nội dung cũ. Cần key KRDict và ít nhất
 một provider AI đã cấu hình.
+
+## v1.3.1 · Duyệt và làm video từ câu đạt QA
+
+Sửa nút duyệt bị khóa đối với câu đã kiểm tra máy. Có thể duyệt tay những câu này
+và bấm **Làm video từ câu đã chọn** ngay trong ngân hàng; các nút xuất không còn
+bị giấu trong mục đóng. Chi tiết: [AUDIT_V131.md](AUDIT_V131.md).

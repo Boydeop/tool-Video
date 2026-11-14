@@ -72,7 +72,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 <body>
 <div class="app">
 <aside class="sidebar">
- <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.3.0</small></div>
+ <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.3.1</small></div>
  <nav class="nav" aria-label="Điều hướng">
   <button data-nav="autopilot" class="active"><span class="num">1</span> Sản xuất tự động</button>
   <button data-nav="create"><span class="num">2</span> Tạo câu thủ công</button>
@@ -84,7 +84,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
  <div class="sidehelp"><b>Gợi ý bắt đầu</b><p>Nhập API key ở mục 4, rồi vào mục 1 chọn số video. Autopilot tạo nhiều chủ đề và kiểm tra cấu trúc trước khi xuất; nội dung AI vẫn cần kiểm tra độ chính xác.</p></div>
 </aside>
 <main class="content">
- <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.3.0</span></header>
+ <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.3.1</span></header>
  <div class="metrics">
   <div class="metric"><span class="name">Câu hỏi đã lưu</span><strong id="statQuestions">0</strong></div>
   <div class="metric"><span class="name">Câu đã duyệt</span><strong id="statApproved">0</strong></div>
@@ -180,7 +180,8 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
     <button class="btn secondary small" id="selectDrafts">Chọn tất cả câu chờ duyệt</button>
     <button class="btn secondary small" id="selectApproved">Chọn câu đã duyệt</button>
     <button class="btn outline small" id="clearSelected">Bỏ chọn</button>
-    <button class="btn small" id="approve" disabled>✓ Duyệt câu đã chọn</button>
+    <button class="btn small" id="approve" disabled>✓ Duyệt tay câu đã chọn</button>
+    <button class="btn small" id="makeSelectedVideo" disabled>🎬 Làm video từ câu đã chọn</button>
    </div>
    <div class="actions" style="margin-bottom:12px">
       <button class="btn secondary small" id="enrichAnswers">✨ AI bổ sung nghĩa/phiên âm cho câu đã chọn (tối đa 6)</button>
@@ -266,7 +267,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
      </div>
    </div>
    <video id="motionPreview" controls playsinline style="display:none;max-height:520px;max-width:100%;margin:10px auto;border-radius:12px"></video>
-   <details id="manualExportDetails"><summary>🎬 Tùy chọn xuất thủ công câu đã duyệt</summary>
+   <details id="manualExportDetails" open><summary>🎬 Xuất video từ câu đã chọn</summary>
    <div class="actions" style="margin-top:12px">
     <button class="btn" id="render" disabled>🎬 Xuất video (chọn câu đã duyệt)</button>
     <div class="field compact"><label for="perVideo">Câu / MP4</label>
@@ -566,11 +567,17 @@ function selectedApproved(){
  return state.questions.filter(q=>state.selection.has(q.id)&&
            (q.status==="approved"||q.status==="auto_approved")).map(q=>q.id)
 }
+function selectedForApproval(){
+ return state.questions.filter(q=>state.selection.has(q.id)&&
+          ["draft","rejected","auto_approved"].includes(q.status)).map(q=>q.id);
+}
 function updateSelection(){
  const ids=state.selection,approved=selectedApproved().length;
- const canApprove=state.questions.some(q=>ids.has(q.id)&&(q.status==="draft"||q.status==="rejected"));
+ const canApprove=selectedForApproval().length>0;
  $("selectedCount").textContent="Đã chọn "+ids.size+" câu · "+approved+" sẵn sàng xuất";
- $("approve").disabled=state.busy||!canApprove;
+ $("approve").disabled=state.busy||state.activeRender||!canApprove;
+ $("makeSelectedVideo").disabled=state.busy||state.activeRender||approved===0||approved>120;
+ $("makeSelectedVideo").textContent=approved?"🎬 Làm video từ "+approved+" câu đã chọn":"🎬 Làm video từ câu đã chọn";
  $("render").disabled=state.busy||state.activeRender||approved===0||approved>30;
  $("renderBatch").disabled=state.busy||state.activeRender||approved===0||approved>120;
  $("render").textContent=approved?"🎬 Xuất video từ "+approved+" câu chưa xuất":"🎬 Xuất video (chọn câu đã duyệt)";
@@ -740,21 +747,28 @@ function selectStage(stage){
  state.questionPage=1;renderQuestions();
 }
 $("selectDrafts").addEventListener("click",()=>selectStage("draft"));
-$("selectApproved").addEventListener("click",()=>selectStage("approved"));
+function selectReadyQuestions(){
+ $("questionFilter").value="all";
+ state.selection=new Set(filteredQuestions().filter(q=>["approved","auto_approved"].includes(q.status))
+                         .slice(0,120).map(q=>q.id));
+ state.questionPage=1;renderQuestions();
+}
+$("selectApproved").addEventListener("click",selectReadyQuestions);
 $("clearSelected").addEventListener("click",()=>{state.selection.clear();renderQuestions()});
-$("approve").addEventListener("click",async()=>{
- const ids=state.questions.filter(q=>state.selection.has(q.id)&&
-            (q.status==="draft"||q.status==="rejected")).map(q=>q.id);
+async function approveSelectedQuestions(){
+ const ids=selectedForApproval();
+ const selectedBefore=new Set(state.selection);
  if(!ids.length){notice("Chọn câu chờ duyệt trước.");return}
  const result=await run(()=>api("/api/approve",{ids}),"Đã duyệt "+ids.length+" câu.");
  if(result){
-   state.selection=new Set(ids);
+   state.selection=selectedBefore;
    $("questionFilter").value="approved";
    state.questionPage=1;
    await loadStatus();
    showPanel("questions");
  }
-});
+}
+$("approve").addEventListener("click",approveSelectedQuestions);
 
 async function startExport(batch){
  if(state.activeRender){notice("Đang xuất video. Chờ lượt hiện tại hoàn thành.","error");return}
@@ -769,6 +783,8 @@ async function startExport(batch){
  if(!result)return;
  state.activeRender=true;updateSelection();
  $("renderProgressPanel").style.display="block";
+ $("manualExportDetails").open=true;
+ $("renderProgressPanel").scrollIntoView({behavior:"smooth",block:"center"});
  $("renderProgressBar").value=0;
  $("renderProgressPercent").textContent="0%";
  $("renderProgressPhase").textContent="Đang bắt đầu xuất…";
@@ -813,6 +829,7 @@ async function startExport(batch){
 }
 $("render").addEventListener("click",()=>startExport(false));
 $("renderBatch").addEventListener("click",()=>startExport(true));
+$("makeSelectedVideo").addEventListener("click",()=>startExport(true));
 $("voice").addEventListener("change",()=>{
  $("voiceOptions").style.display=$("voice").checked?"flex":"none";
  $("voicePreview").style.display="none";
