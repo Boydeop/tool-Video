@@ -41,7 +41,15 @@ jobs:
           & bin\ffprobe.exe -version | Select-Object -First 1
 
       - name: Run Python tests
-        run: python -m unittest discover -s tests -v
+        shell: pwsh
+        run: |
+          python -m unittest discover -s tests -v 2>&1 | Tee-Object -FilePath test-output.log
+          if ($LASTEXITCODE -ne 0) {
+            $detail = (Get-Content test-output.log -Tail 85) -join "`n"
+            $detail = $detail.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Output "::error title=Python test failure::$detail"
+            exit 1
+          }
 
       - name: Build one-file GUI EXE
         shell: pwsh
