@@ -57,6 +57,38 @@ class Service:
         return {"accepted":accepted,"requested":count,"batch_id":batch_id,
                 "errors":errors,"message":"Review each Korean answer before rendering."}
 
+    def verify_generated(self,qid,mode="strict"):
+        from .review import verify_quiz
+        question=self.store.get_questions([qid])[0]
+        origin=self.store.get_question_provider(qid)
+        report=verify_quiz(question,self.store,origin,mode=mode)
+        self.store.set_question_qa(qid,report["outcome"],report)
+        return {"id":qid,"status":report["outcome"],
+                "tier":report.get("tier","needs_review"),
+                "issues":report.get("issues",[]),
+                "dictionary":report.get("dictionary",{}),
+                "reviewer":report.get("reviewer",{})}
+
+    def verify_pending_questions(self,limit=8,mode="strict"):
+        if not isinstance(limit,int) or not 1<=limit<=12:
+            raise ValueError("Chỉ kiểm tra tối đa 12 câu mỗi lượt")
+        # Also re-verify pre-v1.2 auto-approved questions lacking an audit.
+        drafts=[row for row in self.store.list_questions(limit=100)
+                if row.get("provider")!="manual" and
+                   (row["status"]=="draft" or
+                    (row["status"]=="auto_approved" and
+                     row.get("qa_outcome") in ("not_checked","stale")))]
+        results=[]
+        for row in drafts[:limit]:
+            try:results.append(self.verify_generated(row["id"],mode))
+            except Exception as exc:
+                explanation=type(exc).__name__
+                self.store.set_question_qa(row["id"],"unavailable",{"issues":[explanation]})
+                results.append({"id":row["id"],"status":"unavailable",
+                                "issues":[explanation]})
+        return {"processed":len(results),"verified":sum(x["status"]=="verified" for x in results),
+                "results":results,"mode":mode}
+
     def daily(self,day=None,count=6,providers=None):
         current=day or date.today();plan=daily_plan(current,self.store.topic_counts())
         if self.store.daily_exists(current.isoformat()):
@@ -93,11 +125,46 @@ class Service:
         output=[]
         for file in sorted_files[:limit]:
             item=registry.get(str(file.resolve())) or {}
+            from .thumbnails import thumbnail_path
+            thumb=thumbnail_path(file)
             output.append({"name":file.name,"path":str(file.resolve()),
                 "size_mb":round(file.stat().st_size/1048576,1),
                 "status":item.get("status","legacy"),"seo_title":item.get("seo_title",""),
-                "seo_caption":item.get("seo_caption",""),"topic":item.get("topic","")})
+                "seo_caption":item.get("seo_caption",""),"topic":item.get("topic",""),
+                "thumbnail_available":thumb.is_file(),
+                "thumbnail_name":thumb.name if thumb.is_file() else ""})
         return output
+
+    def thumbnail_for_video(self,name):
+        from .thumbnails import thumbnail_path
+        video=self.video_path(name)
+        thumb=thumbnail_path(video)
+        if not thumb.is_file():
+            raise ValueError("Thumbnail chưa được tạo cho MP4 này")
+        return thumb
+
+    def generate_legacy_thumbnails(self,limit=20,theme="hanji"):
+        from .thumbnails import ensure_thumbnail,thumbnail_path
+        if not 1<=int(limit)<=20:raise ValueError("Tối đa 20 video")
+        registry={str(Path(row["path"]).resolve()):row
+                  for row in self.store.list_videos(limit=1000)}
+        results={"made":[],"existing":[],"errors":[]}
+        for video in self.list_videos(limit=limit):
+            name=video["name"]
+            path=Path(video["path"])
+            if thumbnail_path(path).is_file():
+                results["existing"].append(name);continue
+            info=registry.get(str(path.resolve()),{})
+            try:
+                records=json.loads(info.get("question_ids","[]"))
+                questions=self.store.get_questions(records) if records else []
+                level=questions[0].level if questions else "TOPIK"
+                thumbnail=ensure_thumbnail(path,video.get("topic") or "Bài học tiếng Hàn",
+                                  level,theme,self.production.settings(),self.production.logo())
+                results["made"].append(thumbnail.name)
+            except Exception as exc:
+                results["errors"].append({"video":name,"reason":type(exc).__name__})
+        return results
 
     def render_approved(self,ids,theme="hanji",filename=None,width=None,
                         with_voice=False,voice_engine="auto",progress=None):
@@ -132,6 +199,13 @@ class Service:
         tags=self._branding_for_video(topic_label,level_label)
         overwrite_metadata(completed,tags)
         self.store.mark_rendered(ids,completed)
+        try:
+            from .thumbnails import ensure_thumbnail
+            actual_cfg={**config,"width":width or config["width"]}
+            ensure_thumbnail(completed,topic_label,level_label,theme,
+                             actual_cfg,self.production.logo())
+        except Exception as exc:
+            self.store.log("thumbnail_error",type(exc).__name__)
         return completed
 
     def preview(self,question_id,theme="hanji",reveal_answer=True,show_logo=True):

@@ -72,7 +72,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 <body>
 <div class="app">
 <aside class="sidebar">
- <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.1.2</small></div>
+ <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.2.0</small></div>
  <nav class="nav" aria-label="Điều hướng">
   <button data-nav="autopilot" class="active"><span class="num">1</span> Sản xuất tự động</button>
   <button data-nav="create"><span class="num">2</span> Tạo câu thủ công</button>
@@ -84,7 +84,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
  <div class="sidehelp"><b>Gợi ý bắt đầu</b><p>Nhập API key ở mục 4, rồi vào mục 1 chọn số video. Autopilot tạo nhiều chủ đề và kiểm tra cấu trúc trước khi xuất; nội dung AI vẫn cần kiểm tra độ chính xác.</p></div>
 </aside>
 <main class="content">
- <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.1.2</span></header>
+ <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.2.0</span></header>
  <div class="metrics">
   <div class="metric"><span class="name">Câu hỏi đã lưu</span><strong id="statQuestions">0</strong></div>
   <div class="metric"><span class="name">Câu đã duyệt</span><strong id="statApproved">0</strong></div>
@@ -127,7 +127,17 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
       </div>
       <p class="event-description" id="eventDetails">Không tự phỏng đoán ngày lễ theo âm lịch.</p>
     </div>
-    <p class="note">Autopilot tự duyệt **cấu trúc** nếu đủ phiên âm/nghĩa cho cả A/B/C/D. Nó không thay thế người kiểm tra tiếng Hàn. Video chỉ được đăng khi bạn lên lịch và cấp quyền riêng cho từng nền tảng. Tối đa 12 video/lượt để kiểm soát chi phí và quota API.</p>
+    <div class="fieldrow" style="margin:16px 0">
+      <div class="field compact" style="max-width:390px">
+        <label for="autoQaMode">Độ nghiêm ngặt kiểm chứng câu hỏi</label>
+        <select id="autoQaMode">
+          <option value="strict" selected>🔒 KRDict + AI hỏi ngược (ưu tiên chính xác)</option>
+          <option value="assisted">⚖ AI hỏi ngược nếu từ điển không có cụm từ</option>
+        </select>
+      </div>
+      <div class="note" style="align-self:center">Tự sinh câu, tra KRDict, đổi vị trí đáp án cho AI chọn ngược. Những câu thiếu bằng chứng giữ ở mục Cần QA, không coi là đã duyệt.</div>
+    </div>
+    <p class="note">Autopilot chỉ duyệt máy khi kiểm tra cấu trúc, KRDict và AI hỏi ngược đạt yêu cầu. Nó không thay thế người kiểm tra tiếng Hàn. Video chỉ được đăng khi bạn lên lịch và cấp quyền riêng cho từng nền tảng. Tối đa 12 video/lượt để kiểm soát chi phí và quota API.</p>
     <div class="actions"><button class="btn" id="autoStart">🚀 Tạo nhiều chủ đề và dựng tất cả</button>
       <span class="pill" id="autoStatus">Chưa có lượt sản xuất</span></div>
     <div id="autoProgress" style="display:none;margin-top:15px;padding:16px;background:#f4f8fd;border-radius:14px">
@@ -161,7 +171,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
   <div class="card">
    <div class="sectiontitle"><h2>Ngân hàng câu hỏi</h2><span class="pill" id="selectedCount">Đã chọn 0 câu</span></div>
    <div class="toolbar">
-    <select id="questionFilter" aria-label="Lọc câu hỏi"><option value="draft" selected>Chưa làm · Chờ duyệt</option><option value="approved">Đã duyệt tay · Chưa xuất</option><option value="auto_approved">Đã kiểm tra máy · Chưa xuất</option><option value="rendered">Đã xuất video</option><option value="rejected">Đã từ chối</option><option value="all">Tất cả trạng thái</option></select>
+    <select id="questionFilter" aria-label="Lọc câu hỏi"><option value="draft" selected>AI cần QA / câu chưa duyệt</option><option value="approved">Đã duyệt tay · Chưa xuất</option><option value="auto_approved">Đã kiểm tra máy · Chưa xuất</option><option value="rendered">Đã xuất video</option><option value="rejected">Đã từ chối</option><option value="all">Tất cả trạng thái</option></select>
     <select id="batchFilter" aria-label="Lọc lô"><option value="all">Tất cả lô nội dung</option></select>
     <button class="btn secondary small" id="selectDrafts">Chọn tất cả câu chờ duyệt</button>
     <button class="btn secondary small" id="selectApproved">Chọn câu đã duyệt</button>
@@ -170,6 +180,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
    </div>
    <div class="actions" style="margin-bottom:12px">
       <button class="btn secondary small" id="enrichAnswers">✨ AI bổ sung nghĩa/phiên âm cho câu đã chọn (tối đa 6)</button>
+      <button class="btn secondary small" id="bulkVerifyAI">🛡️ Kiểm chứng 8 câu AI mới bằng KRDict + hỏi ngược (không tick)</button>
       <span class="note">Nội dung AI cần duyệt. Các câu đã xuất không sửa trực tiếp.</span>
    </div>
    <div class="card" id="answerEditor" style="display:none;background:#f8fbff;border:1px solid #b7d0eb">
@@ -299,7 +310,11 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
      <span class="note">Cấu hình tự áp dụng cho MP4 mới. Chỉ dùng chức năng này cho MP4 cũ cần cập nhật.</span></div>
    </details>
    <div style="margin-top:24px"><div class="sectiontitle"><h2 style="font-size:17px">Kho video đã sản xuất</h2><span class="pill" id="libraryCount">0 video</span></div>
-    <div class="tablewrap"><table class="table"><thead><tr><th>Video</th><th>Chủ đề</th><th>Trạng thái</th><th>Tải xuống</th></tr></thead><tbody id="videoLibrary"></tbody></table></div></div>
+    <div class="tablewrap"><table class="table"><thead><tr><th>Thumbnail</th><th>Video</th><th>Chủ đề</th><th>Trạng thái</th><th>Tải xuống</th></tr></thead><tbody id="videoLibrary"></tbody></table></div></div>
+   <div class="actions" style="margin-top:12px">
+      <button class="btn secondary small" id="generateOldThumbnails">🖼️ Tạo thumbnail cho MP4 cũ (tối đa 20)</button>
+      <span class="note">Thumbnail JPG lấy từ khung mở đầu, lưu cùng MP4. Video cũ có thể không còn lưu template ban đầu.</span>
+    </div>
    <div class="actions" style="margin-top:12px"><a id="videoDownload" class="btn secondary" style="display:none;text-decoration:none" download>↓ Tải MP4 vừa xuất</a></div>
   </div>
  </section>
@@ -312,10 +327,15 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
     <div class="keybox"><strong>Gemini</strong><em id="keyGemini">0</em><small>key đã nhận</small></div>
     <div class="keybox"><strong>Groq</strong><em id="keyGroq">0</em><small>key đã nhận</small></div>
     <div class="keybox"><strong>OpenRouter</strong><em id="keyOpenrouter">0</em><small>key đã nhận</small></div>
+    <div class="keybox"><strong>KRDict</strong><em id="keyKrdict">0</em><small>key từ điển</small></div>
    </div>
-   <div class="fieldrow"><div class="field"><label for="keyProvider">File chỉ có key thuộc dịch vụ nào?</label><select id="keyProvider"><option value="gemini">Gemini</option><option value="groq">Groq</option><option value="openrouter">OpenRouter</option></select></div></div>
-   <div class="upload"><strong>📄 Chọn file .TXT chứa API key</strong><input id="txtFile" type="file" accept=".txt,text/plain"><small id="fileHint">Mỗi dòng một key. File tối đa 64 KB. Có thể chứa nhiều nhóm [gemini], [groq], [openrouter].</small></div>
+   <div class="fieldrow"><div class="field"><label for="keyProvider">File chỉ có key thuộc dịch vụ nào?</label><select id="keyProvider"><option value="gemini">Gemini</option><option value="groq">Groq</option><option value="openrouter">OpenRouter</option><option value="krdict">KRDict Hàn–Việt</option></select></div></div>
+   <div class="upload"><strong>📄 Chọn file .TXT chứa API key</strong><input id="txtFile" type="file" accept=".txt,text/plain"><small id="fileHint">Mỗi dòng một key. File tối đa 64 KB. Có thể chứa nhiều nhóm [gemini], [groq], [openrouter], [krdict].</small></div>
    <div class="actions" style="margin-top:16px"><button class="btn" id="importFile">↑ Nhập key từ TXT</button><span class="note" style="margin:0">Key đã tồn tại sẽ không bị thêm trùng. Giữ nguyên các key khác.</span></div>
+   <div class="actions" style="margin-top:12px">
+     <button class="btn secondary small" id="testKrdict">🔎 Test KRDict bằng từ 물</button>
+     <span class="note" id="krdictResult">Chọn KRDict và nhập key riêng của bạn. Không gửi key vào chat/GitHub.</span>
+   </div>
    <div class="divider"></div>
    <div class="sectiontitle"><h2 style="font-size:17px">Hoặc thêm thủ công</h2></div>
    <div class="field"><label for="manualKeys">Dán một hoặc nhiều key (dấu phẩy hoặc xuống dòng)</label><input id="manualKeys" type="password" placeholder="Nhập key tại đây, không hiển thị công khai" autocomplete="off"></div>
@@ -329,8 +349,11 @@ YOUR_GEMINI_KEY_2
 YOUR_GROQ_KEY
 
 [openrouter]
-YOUR_OPENROUTER_KEY</div></details>
-   <p class="keynotice">File TXT được đọc trong trình duyệt trên máy bạn, sau đó gửi đến máy chủ cục bộ 127.0.0.1. Key được lưu trong dữ liệu cá nhân của Windows dưới dạng văn bản, không đưa lên GitHub. Không chia sẻ file TXT hoặc file lưu key.</p>
+YOUR_OPENROUTER_KEY
+
+[krdict]
+YOUR_32_HEX_DICTIONARY_KEY</div></details>
+   <p class="keynotice">File TXT được đọc trong trình duyệt trên máy bạn, sau đó gửi đến máy chủ cục bộ 127.0.0.1. Key được mã hóa bằng Windows DPAPI theo tài khoản Windows, không đưa lên GitHub. Không chia sẻ file TXT hoặc file lưu key.</p>
   </div>
   <div class="card" id="modelConfig">
    <div class="sectiontitle"><h2>⚙ Chọn model AI</h2><span class="pill">Tự lấy danh sách từ nhà cung cấp</span></div>
@@ -417,6 +440,13 @@ YOUR_OPENROUTER_KEY</div></details>
       <div class="field compact"><label for="crossPlatform">Nền tảng</label>
         <select id="crossPlatform"><option value="youtube">YouTube Shorts</option><option value="instagram">Instagram Reels</option></select></div>
       <div class="field compact"><label for="crossAt">Ngày giờ địa phương</label><input id="crossAt" type="datetime-local"></div>
+    </div>
+    <div style="display:flex;gap:15px;align-items:center;margin:15px 0;background:#f5f8fd;padding:12px;border-radius:12px">
+      <img id="crossThumbnail" alt="Thumbnail tự tạo từ khung mở đầu" style="width:68px;height:121px;object-fit:cover;border-radius:7px;display:none">
+      <div><strong>Ảnh bìa tự động</strong>
+        <p class="note">YouTube: đợi xử lý video xong rồi gửi thumbnail qua API riêng, không đăng lại MP4. Instagram/Facebook: file JPG dùng thủ công khi API chưa hỗ trợ gắn ảnh bìa.</p>
+        <a id="crossThumbDownload" class="btn secondary small" style="display:none;text-decoration:none" download>↓ Tải JPG</a>
+      </div>
     </div>
     <div class="field"><label for="crossTitle">Tiêu đề video</label><input id="crossTitle" type="text" maxlength="100"></div>
     <div class="field"><label for="crossCaption">Mô tả, hashtag</label><textarea id="crossCaption" rows="4"></textarea></div>
@@ -572,9 +602,18 @@ function renderQuestions(){
    });
    selection.append(cb);tr.append(selection);
    const status=make("td");
-   const translated={draft:"Chờ duyệt",approved:"Đã duyệt tay",auto_approved:"Máy kiểm tra · chưa xuất",
-                     rendered:"Đã xuất video",rejected:"Đã từ chối"};
-   status.append(make("span",translated[q.status]||q.status,"status "+q.status));tr.append(status);
+   const labels={draft:q.provider==="manual"?"Chờ duyệt tay":
+       q.qa_outcome==="needs_review"?"AI tạo · Cần kiểm chứng":
+       q.qa_outcome==="unavailable"?"AI tạo · API kiểm chứng lỗi":
+       q.qa_outcome==="stale"?"Đã chỉnh sửa · Cần kiểm chứng":"AI tạo · Chưa kiểm chứng",
+       approved:"Đã duyệt tay",auto_approved:q.qa_outcome==="verified"?"AI kiểm chứng · Chưa xuất":
+         "Máy cũ · Chưa kiểm chứng",
+       rendered:"Đã xuất video",rejected:"Đã từ chối"};
+   status.append(make("span",labels[q.status]||q.status,"status "+q.status));
+   const reason=(q.qa_report?.issues||q.qa_report?.structural_issues||[]).slice(0,2).join("; ");
+   if(reason)status.append(make("small","QA: "+reason));
+   if(q.qa_report?.tier)status.append(make("small","Bằng chứng: "+q.qa_report.tier));
+   tr.append(status);
    const topic=make("td");
    topic.append(make("strong",q.topic),make("small",q.level+" · Lô "+(q.batch_id||"cũ").slice(0,8)));
    tr.append(topic);
@@ -896,11 +935,27 @@ function renderVideos(){
    const option=make("option",video.name+" · "+video.status);
    option.value=video.path;meta.append(option);
    const row=make("tr");
-   row.append(make("td",video.name),make("td",video.topic||"Video cũ"),
+   const cover=make("td");
+   if(video.thumbnail_available){
+     const img=make("img");
+     img.src="/api/thumbnails/"+encodeURIComponent(video.name);
+     img.alt="Khung mở đầu · "+(video.topic||video.name);
+     img.style.cssText="width:52px;height:92px;object-fit:cover;border-radius:6px";
+     cover.append(img);
+   }else cover.append(make("small","Chưa có"));
+   row.append(cover,make("td",video.name),make("td",video.topic||"Video cũ"),
               make("td",video.status==="rendered"?"Đã xuất":video.status==="scheduled"?"Đã lên lịch":video.status));
-   const last=make("td"),a=make("a","↓ Tải MP4");
+   const last=make("td"),a=make("a","↓ MP4");
    a.href="/api/videos/"+encodeURIComponent(video.name);a.download=video.name;
-   last.append(a);row.append(last);library.append(row);
+   last.append(a);
+   if(video.thumbnail_available){
+     const coverLink=make("a","↓ Thumbnail JPG");
+     coverLink.href="/api/thumbnails/"+encodeURIComponent(video.name);
+     coverLink.download=video.thumbnail_name;
+     coverLink.style.cssText="display:block;margin-top:7px";
+     last.append(coverLink);
+   }
+   row.append(last);library.append(row);
  }
  if(state.videos.some(v=>v.path===chosen))sel.value=chosen;
  if(state.videos.some(v=>v.path===crossChosen))cross.value=crossChosen;
@@ -1294,7 +1349,7 @@ $("autoStart").addEventListener("click",async()=>{
    levels,formats,theme:$("autoTheme").value,
    with_voice:$("autoVoice").checked,voice_engine:$("voiceEngine").value,
    width:Number($("autoWidth").value),auto_seo:$("autoSeo").checked,
-  event_mode:$("autoEventMode").value
+  event_mode:$("autoEventMode").value,qa_mode:$("autoQaMode").value
  }));
  if(data)watchAutopilot(data.job_id);
 });
@@ -1318,9 +1373,15 @@ function updatePlatforms(){
  const rows=$("crossJobs");rows.replaceChildren();
  for(const post of state.outbound||[]){
    const tr=make("tr");
+   const thumbJob=(state.youtubeThumbJobs||[]).find(x=>x.video_path===post.video_path);
+   const coverState=post.platform==="youtube"?
+     (thumbJob?" · Thumbnail: "+({completed:"Đã gắn",pending:"Đang chờ",
+       processing:"Đang xử lý",needs_review:"Cần kiểm tra"}[thumbJob.status]||thumbJob.status):
+       (post.status==="submitted"?" · Thumbnail chưa có hoặc chưa tạo hàng đợi":"")):
+     (post.platform==="instagram"?" · JPG lưu để dùng riêng":"");
    tr.append(make("td",post.platform),make("td",post.video_path.split(/[\\/]/).pop()),
              make("td",new Date(post.publish_at).toLocaleString("vi-VN")),
-             make("td",post.status+(post.error?" · "+post.error:"")));
+             make("td",post.status+coverState+(post.error?" · "+post.error:"")));
    rows.append(tr);
  }
 }
@@ -1375,9 +1436,16 @@ function crossPlatformUI(){
 $("crossPlatform").addEventListener("change",crossPlatformUI);
 $("crossVideo").addEventListener("change",()=>{
  const item=state.videos.find(v=>v.path===$("crossVideo").value);
+ const cover=$("crossThumbnail"),link=$("crossThumbDownload");
+ cover.style.display="none";link.style.display="none";
  if(!item)return;
  $("crossTitle").value=(item.seo_title||item.topic||"Từ vựng tiếng Hàn").slice(0,100);
  $("crossCaption").value=item.seo_caption||"Học tiếng Hàn cùng Tiếng Hàn So Easy! #tienghansoeasy #shorts";
+ if(item.thumbnail_available){
+   const uri="/api/thumbnails/"+encodeURIComponent(item.name);
+   cover.src=uri;cover.style.display="block";
+   link.href=uri;link.download=item.thumbnail_name;link.style.display="inline-block";
+ }
 });
 $("crossSchedule").addEventListener("click",async()=>{
  const video=$("crossVideo").value,when=$("crossAt").value;
@@ -1398,6 +1466,34 @@ $("copyTikTokCaption").addEventListener("click",async()=>{
      notice("Đã sao chép mô tả TikTok. Dùng MP4 trong kho video.","success")}
  catch(_){notice("Không truy cập được clipboard. Sao chép mô tả thủ công.","error")}
 });
+$("testKrdict").addEventListener("click",async()=>{
+ const data=await run(()=>api("/api/krdict/test",{}));
+ if(!data)return;
+ $("krdictResult").textContent=data.connected?
+   ("KRDict hoạt động · tìm thấy 물 · "+(data.entries[0]?.meanings||[]).slice(0,2).join(", ")):
+   "KRDict không tìm được mục từ thử. Kiểm tra lại API key.";
+ notice(data.connected?"Đã kết nối từ điển KRDict":"KRDict chưa phản hồi đúng",
+        data.connected?"success":"error");
+});
+$("bulkVerifyAI").addEventListener("click",async()=>{
+ if(state.activeRender){notice("Không kiểm duyệt trong lúc đang render.","error");return}
+ if(!confirm("Kiểm tra tối đa 8 câu AI chưa duyệt gần đây bằng KRDict và AI hỏi ngược? "+
+             "Các câu không đạt sẽ giữ ở trạng thái Cần QA."))return;
+ const report=await run(()=>api("/api/qa/verify_pending",{limit:8,mode:"strict"}));
+ if(!report)return;
+ await loadStatus();
+ notice("KRDict + AI: "+report.verified+"/"+report.processed+
+        " câu đủ bằng chứng. Các câu còn lại vẫn lưu để sửa.",
+        report.verified?"success":"error");
+});
+$("generateOldThumbnails").addEventListener("click",async()=>{
+ const answer=await run(()=>api("/api/thumbnails/legacy",{limit:20,theme:$("autoTheme").value}));
+ if(!answer)return;
+ await loadStatus();
+ notice("Đã tạo "+answer.made.length+" JPG · Đã có "+answer.existing.length+
+        " · Lỗi "+answer.errors.length,
+        answer.errors.length?"error":"success");
+});
 function renderJobs(){
  const body=$("jobRows");body.replaceChildren();$("emptyJobs").style.display=state.jobs.length?"none":"block";
  for(const job of state.jobs){
@@ -1417,6 +1513,7 @@ async function loadStatus(){
  state.productionRuns=data.production_runs||[];state.outbound=data.outbound_posts||[];
  state.upcomingEvents=data.upcoming_events||[];
  state.youtube=data.youtube||{};state.instagram=data.instagram||{};
+ state.youtubeThumbJobs=data.youtube_thumbnails||[];
  state.jobs=data.jobs||[];state.videos=data.videos||[];
  state.production=data.production||{};state.facebook=data.facebook||{};
  state.providers=data.providers||{};
@@ -1427,8 +1524,9 @@ async function loadStatus(){
  $("statApproved").textContent=state.questions.filter(q=>q.status==="approved"||
                         q.status==="auto_approved").length;
  $("statVideos").textContent=state.videos.length;
- $("statKeys").textContent=Object.values(state.providers).reduce((sum,p)=>sum+(p.keys||0),0);
- for(const p of ["gemini","groq","openrouter"]){
+ $("statKeys").textContent=["gemini","groq","openrouter"].reduce(
+   (sum,p)=>sum+(state.providers[p]?.keys||0),0);
+ for(const p of ["gemini","groq","openrouter","krdict"]){
    $("key"+p.charAt(0).toUpperCase()+p.slice(1)).textContent=(state.providers[p]||{}).keys||0;
  }
  $("setupTip").style.display=Number($("statKeys").textContent)?"none":"block";

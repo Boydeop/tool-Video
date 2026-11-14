@@ -30,12 +30,32 @@ class Scheduler:
                 else:
                     raise RuntimeError("Unknown outbound platform")
                 self.store.finish_outbound(job["id"],"submitted",remote_id=remote)
+                if job["platform"]=="youtube":
+                    self.store.enqueue_youtube_thumbnail(job["video_path"],remote)
                 self.store.log("platform_submitted",job["platform"]+" "+job["id"])
             except Exception as exc:
                 # It is unsafe to repeat an uncertain remote upload automatically.
                 self.store.finish_outbound(job["id"],"needs_review",
                                            error=type(exc).__name__+": "+str(exc)[:500])
                 self.store.log("platform_needs_review",job["platform"]+" "+job["id"])
+        # Separate from MP4 upload. A failed cover image never uploads the
+        # same video twice. YouTube Shorts allow thumbnails after processing.
+        for thumbnail in self.store.claim_youtube_thumbnails(limit=1):
+            try:
+                stage=self.youtube.processing_status(thumbnail["video_id"])
+                if stage=="succeeded":
+                    self.youtube.set_thumbnail(thumbnail["video_id"],thumbnail["image_path"])
+                    self.store.update_youtube_thumbnail(thumbnail["video_id"],success=True)
+                elif stage=="failed":
+                    self.store.update_youtube_thumbnail(thumbnail["video_id"],
+                        error="YouTube processing failed",retry=False)
+                else:
+                    self.store.update_youtube_thumbnail(thumbnail["video_id"],
+                        error="YouTube video processing: "+stage,retry=True)
+            except Exception as exc:
+                # Only image is retried; MP4 is not touched.
+                self.store.update_youtube_thumbnail(thumbnail["video_id"],
+                    error=type(exc).__name__+": "+str(exc)[:130],retry=True)
     def run(self):
         while not self.stopped.is_set():
             try: self.tick()

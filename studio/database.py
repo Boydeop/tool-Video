@@ -70,6 +70,29 @@ class Store:
                 seo_caption TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS question_qa(
+                question_id TEXT PRIMARY KEY,
+                outcome TEXT NOT NULL,
+                report_json TEXT NOT NULL,
+                reviewed_at TEXT NOT NULL,
+                FOREIGN KEY(question_id) REFERENCES questions(id)
+            );
+            CREATE TABLE IF NOT EXISTS youtube_thumbnail_jobs(
+                video_id TEXT PRIMARY KEY,
+                video_path TEXT NOT NULL,
+                image_path TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                attempts INTEGER NOT NULL DEFAULT 0,
+                next_attempt TEXT NOT NULL,
+                error TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS yt_thumb_due ON youtube_thumbnail_jobs(status,next_attempt);
+            CREATE TABLE IF NOT EXISTS krdict_cache(
+                query TEXT PRIMARY KEY,
+                payload_json TEXT NOT NULL,
+                fetched_unix INTEGER NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS counters(
                 name TEXT PRIMARY KEY,value INTEGER NOT NULL
             );
@@ -109,6 +132,53 @@ class Store:
             job_cols={row["name"] for row in c.execute("PRAGMA table_info(jobs)")}
             if "title" not in job_cols:
                 c.execute("ALTER TABLE jobs ADD COLUMN title TEXT NOT NULL DEFAULT ''")
+
+    def krdict_cache_get(self,query,max_age_seconds=2592000):
+        import time
+        with self.db() as c:
+            row=c.execute("SELECT payload_json,fetched_unix FROM krdict_cache WHERE query=?",
+                          (str(query),)).fetchone()
+            if not row or (time.time()-row["fetched_unix"])>max_age_seconds:
+                return None
+            return json.loads(row["payload_json"])
+
+    def krdict_cache_put(self,query,payload):
+        import time
+        with self._lock,self.db() as c:
+            c.execute("""INSERT OR REPLACE INTO krdict_cache(query,payload_json,fetched_unix)
+                         VALUES(?,?,?)""",
+                      (str(query),json.dumps(payload,ensure_ascii=False),int(time.time())))
+
+    def set_question_qa(self,qid,outcome,report):
+        """Keep QA outcome independent of production and manual approvals."""
+        if outcome not in ("verified","needs_review","unavailable","stale"):
+            raise ValueError("Invalid QA outcome")
+        with self._lock,self.db() as c:
+            row=c.execute("SELECT status FROM questions WHERE id=?",(qid,)).fetchone()
+            if not row:raise ValueError("Question does not exist")
+            if row["status"]=="rendered":
+                raise ValueError("Cannot modify QA of an already rendered question")
+            c.execute("""INSERT OR REPLACE INTO question_qa
+                 (question_id,outcome,report_json,reviewed_at) VALUES(?,?,?,?)""",
+                (qid,outcome,json.dumps(report,ensure_ascii=False),utcnow()))
+            if outcome=="verified" and row["status"]=="draft":
+                c.execute("UPDATE questions SET status='auto_approved' WHERE id=?",(qid,))
+            elif outcome!="verified" and row["status"]=="auto_approved":
+                c.execute("UPDATE questions SET status='draft' WHERE id=?",(qid,))
+
+    def get_question_provider(self,qid):
+        with self.db() as c:
+            row=c.execute("SELECT provider FROM questions WHERE id=?",(qid,)).fetchone()
+            if not row:raise ValueError("Question does not exist")
+            return row["provider"]
+
+    def get_question_qa(self,qid):
+        with self.db() as c:
+            r=c.execute("SELECT outcome,report_json,reviewed_at FROM question_qa WHERE question_id=?",
+                        (qid,)).fetchone()
+            return ({"outcome":r["outcome"],"report":json.loads(r["report_json"]),
+                     "reviewed_at":r["reviewed_at"]} if r else
+                    {"outcome":"not_checked","report":{},"reviewed_at":""})
 
     def allocate_video_number(self):
         """Atomic monotonically increasing sequence; gaps after failures are fine."""
@@ -156,8 +226,55 @@ class Store:
                       (utcnow(),))
             c.execute("UPDATE outbound_posts SET status='needs_review',error='App restarted during upload; check the platform before trying again',updated_at=? WHERE status='publishing'",
                       (utcnow(),))
+            c.execute("UPDATE youtube_thumbnail_jobs SET status='pending',updated_at=? WHERE status='processing'",
+                      (utcnow(),))
             c.execute("UPDATE jobs SET status='needs_review',error='App restarted during Page upload; check Page before retry',updated_at=? WHERE status='publishing'",
                       (utcnow(),))
+
+    def enqueue_youtube_thumbnail(self,video_path,video_id):
+        from .thumbnails import thumbnail_path
+        file=thumbnail_path(video_path)
+        if not file.is_file():return False
+        with self._lock,self.db() as c:
+            c.execute("""INSERT OR IGNORE INTO youtube_thumbnail_jobs
+                (video_id,video_path,image_path,status,next_attempt,updated_at)
+                VALUES(?,?,?,'pending',?,?)""",
+                (str(video_id),str(Path(video_path).resolve()),str(file),utcnow(),utcnow()))
+        return True
+
+    def claim_youtube_thumbnails(self,limit=1):
+        with self._lock,self.db() as c:
+            rows=c.execute("""SELECT * FROM youtube_thumbnail_jobs
+                WHERE status='pending' AND next_attempt<=?
+                ORDER BY next_attempt LIMIT ?""",(utcnow(),limit)).fetchall()
+            for row in rows:
+                c.execute("UPDATE youtube_thumbnail_jobs SET status='processing',updated_at=? WHERE video_id=?",
+                          (utcnow(),row["video_id"]))
+            return [dict(row) for row in rows]
+
+    def update_youtube_thumbnail(self,video_id,success=False,error="",retry=False):
+        from datetime import timedelta
+        if success:
+            status="completed"
+            next_date=utcnow()
+        elif retry:
+            status="pending"
+            row=next((r for r in self.list_youtube_thumbnails() if r["video_id"]==video_id),None)
+            tries=int(row["attempts"]) if row else 0
+            if tries>=8:status="needs_review"
+            next_date=(datetime.now(timezone.utc)+timedelta(seconds=min(3600,30*2**min(tries,6)))).isoformat()
+        else:
+            status="needs_review";next_date=utcnow()
+        with self._lock,self.db() as c:
+            c.execute("""UPDATE youtube_thumbnail_jobs
+                SET status=?,attempts=attempts+1,next_attempt=?,error=?,updated_at=?
+                WHERE video_id=?""",
+                (status,next_date,str(error)[:240],utcnow(),video_id))
+
+    def list_youtube_thumbnails(self):
+        with self.db() as c:
+            return [dict(row) for row in c.execute(
+                "SELECT * FROM youtube_thumbnail_jobs ORDER BY updated_at DESC LIMIT 80")]
 
     def schedule_outbound(self,video_path,platform,title,caption,when,
                           public_url="",privacy="private"):
@@ -258,6 +375,10 @@ class Store:
                 item=dict(id=r["id"],status=r["status"],provider=r["provider"],
                     created_at=r["created_at"],batch_id=r["batch_id"],
                     last_video=r["last_video"],**payload)
+                qa=c.execute("SELECT outcome,report_json FROM question_qa WHERE question_id=?",
+                             (r["id"],)).fetchone()
+                item["qa_outcome"]=qa["outcome"] if qa else "not_checked"
+                item["qa_report"]=json.loads(qa["report_json"]) if qa else {}
                 item["short_clue"]=quiz.short_clue
                 item["meaning"]=quiz.vietnamese_meaning
                 result.append(item)
@@ -297,6 +418,8 @@ class Store:
             quiz=Quiz.parse(json.loads(row["payload"]))
             updated=replace(quiz,**sanitized)
             updated.validate()
+            c.execute("""INSERT OR REPLACE INTO question_qa(question_id,outcome,report_json,reviewed_at)
+                         VALUES(?,'stale','{}',?)""",(qid,utcnow()))
             c.execute("UPDATE questions SET payload=?,status='draft' WHERE id=?",
                       (json.dumps(updated.to_dict(),ensure_ascii=False),qid))
         return {"id":qid,"status":"draft","missing":updated.missing_answer_details}

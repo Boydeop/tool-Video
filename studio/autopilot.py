@@ -21,6 +21,7 @@ class Plan:
     width:int=1080
     seo:bool=False
     event_mode:str="random"
+    qa_mode:str="strict"
 
     @classmethod
     def parse(cls,raw:dict):
@@ -33,7 +34,8 @@ class Plan:
                  voice=raw.get("with_voice") is True,
                  engine=str(raw.get("voice_engine","auto")),
                  width=int(raw.get("width",1080)),seo=raw.get("auto_seo") is True,
-                 event_mode=str(raw.get("event_mode","random")))
+                 event_mode=str(raw.get("event_mode","random")),
+                 qa_mode=str(raw.get("qa_mode","strict")))
         if not 1<=plan.videos<=12 or not 1<=plan.per_video<=6:
             raise ValueError("Maximum 12 videos per run, 1-6 questions/video")
         if not plan.levels or not all(x in LEVELS for x in plan.levels):
@@ -44,6 +46,8 @@ class Plan:
             raise ValueError("Invalid video preset")
         if plan.event_mode not in ("random","mix","events"):
             raise ValueError("Chế độ chủ đề sự kiện không hợp lệ")
+        if plan.qa_mode not in ("strict","assisted"):
+            raise ValueError("Chế độ kiểm chứng không hợp lệ")
         if plan.engine not in ("auto","edge","google"):
             raise ValueError("Invalid voice engine")
         return plan
@@ -54,7 +58,8 @@ class Plan:
                 "theme":self.theme,"with_voice":self.voice,
                 "voice_engine":self.engine,"width":self.width,
                 "review_policy":"strict machine check, NOT human verified",
-                "auto_seo":self.seo,"event_mode":self.event_mode}
+                "auto_seo":self.seo,"event_mode":self.event_mode,
+                "qa_mode":self.qa_mode}
 
 def choose_distinct_topics(counts,number,rng=None):
     if number>len(TOPICS):raise ValueError("Too many distinct topics")
@@ -92,7 +97,7 @@ def run_pipeline(service,plan:Plan,update,on_result=None):
             for attempt in range(2):
                 if len(good)>=plan.per_video:break
                 remaining=plan.per_video-len(good)
-                count=min(30,max(remaining+3,remaining*2))
+                count=min(12,max(remaining+2,remaining))
                 try:
                     generated=service.generate(topic,level,count,fmt=fmt)
                     generation_errors.extend(generated.get("errors",[]))
@@ -106,12 +111,9 @@ def run_pipeline(service,plan:Plan,update,on_result=None):
                     inspected.add(qid)
                     quiz=service.store.get_questions([qid])[0]
                     issues=inspect_quiz(quiz)
-                    # Enrich ONLY missing dictionary fields with user's own
-                    # approved AI provider. Never fabricate translations.
-                    if (quiz.missing_answer_details and len(good)<plan.per_video
-                            and repairs<plan.per_video+1):
+                    if (quiz.missing_answer_details and
+                            repairs<plan.per_video+2):
                         repairs+=1
-
                         try:
                             service.enrich_answer_details([qid])
                             quiz=service.store.get_questions([qid])[0]
@@ -120,10 +122,22 @@ def run_pipeline(service,plan:Plan,update,on_result=None):
                             generation_errors.append("Bổ sung "+qid[:6]+": "+
                                 type(exc).__name__)
                     if issues:
+                        service.store.set_question_qa(qid,"needs_review",
+                            {"issues":issues,"stage":"structure","version":1})
                         problems.append({"id":qid,"issues":issues})
-                    else:
-                        good.append(qid)
-                    if len(good)>=plan.per_video:break
+                        continue
+                    try:
+                        verdict=service.verify_generated(qid,mode=plan.qa_mode)
+                        if verdict["status"]=="verified":
+                            # Unrendered verified spare candidates remain ready.
+                            if len(good)<plan.per_video:good.append(qid)
+                        else:
+                            problems.append({"id":qid,"issues":
+                                  verdict.get("issues") or ["Chưa đủ bằng chứng từ KRDict/AI"]})
+                    except Exception as exc:
+                        service.store.set_question_qa(qid,"unavailable",
+                          {"issues":[type(exc).__name__],"stage":"verification"})
+                        problems.append({"id":qid,"issues":["Lỗi kiểm chứng: "+type(exc).__name__]})
             item["accepted"]=len(good)
             item["requires_review"]=problems
             item["generation_errors"]=generation_errors[-4:]
@@ -145,7 +159,6 @@ def run_pipeline(service,plan:Plan,update,on_result=None):
                 update(100*(index+1)/plan.videos,item["reason"])
                 continue
             good=good[:plan.per_video]
-            service.store.auto_approve(good)
             def frame_progress(percent,phase):
                 update((index+max(0,min(1,percent/100)))*100/plan.videos,phase)
             output=service.render_approved(good,theme=plan.theme,width=plan.width,

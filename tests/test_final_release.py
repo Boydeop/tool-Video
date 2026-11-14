@@ -123,6 +123,11 @@ class QualityAndAutopilotTests(unittest.TestCase):
                 return str(target)
             service.generate=generate
             service.render_approved=render
+            def verify(qid,mode="strict"):
+                service.store.set_question_qa(qid,"verified",
+                    {"outcome":"verified","tier":"test_mock"})
+                return {"status":"verified","tier":"test_mock","issues":[]}
+            service.verify_generated=verify
             changes=[]
             result=run_pipeline(service,Plan.parse({"videos":2,"per_video":1}),
                            lambda x,y:changes.append((x,y)))
@@ -144,6 +149,11 @@ class QualityAndAutopilotTests(unittest.TestCase):
                 return str(path)
             service.generate=generate
             service.render_approved=render
+            def verify(qid,mode="strict"):
+                service.store.set_question_qa(qid,"verified",
+                    {"outcome":"verified","tier":"test_mock"})
+                return {"status":"verified","tier":"test_mock","issues":[]}
+            service.verify_generated=verify
             service.auto_seo_for_video=lambda path:(_ for _ in ()).throw(RuntimeError("No API"))
             result=run_pipeline(service,Plan.parse({"videos":1,"per_video":1,"auto_seo":True}),
                                 lambda a,b:None)
