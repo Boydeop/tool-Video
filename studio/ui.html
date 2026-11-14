@@ -1373,9 +1373,15 @@ function updatePlatforms(){
  const rows=$("crossJobs");rows.replaceChildren();
  for(const post of state.outbound||[]){
    const tr=make("tr");
+   const thumbJob=(state.youtubeThumbJobs||[]).find(x=>x.video_path===post.video_path);
+   const coverState=post.platform==="youtube"?
+     (thumbJob?" · Thumbnail: "+({completed:"Đã gắn",pending:"Đang chờ",
+       processing:"Đang xử lý",needs_review:"Cần kiểm tra"}[thumbJob.status]||thumbJob.status):
+       (post.status==="submitted"?" · Thumbnail chưa có hoặc chưa tạo hàng đợi":"")):
+     (post.platform==="instagram"?" · JPG lưu để dùng riêng":"");
    tr.append(make("td",post.platform),make("td",post.video_path.split(/[\\/]/).pop()),
              make("td",new Date(post.publish_at).toLocaleString("vi-VN")),
-             make("td",post.status+(post.error?" · "+post.error:"")));
+             make("td",post.status+coverState+(post.error?" · "+post.error:"")));
    rows.append(tr);
  }
 }
