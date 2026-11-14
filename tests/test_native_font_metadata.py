@@ -21,6 +21,16 @@ def q():
                 wrong2="신용카드",wrong3="엽서",level="TOPIK 1",
                 clue="Thiệp Giáng sinh",meaning="Thiệp Giáng sinh")
 
+def _korean_and_vietnamese_fonts_available():
+    try:
+        font(24,bold=True,korean=True)
+        font(24,bold=True,korean=False)
+        return True
+    except RuntimeError:
+        return False
+
+@unittest.skipUnless(_korean_and_vietnamese_fonts_available(),
+                     "System Korean/Vietnamese fonts unavailable in CI runner")
 class KoreanFontTests(unittest.TestCase):
     def test_native_font_is_two_times_logical_size(self):
         image=Image.new("RGB",(1080,1920),"white")
