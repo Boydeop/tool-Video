@@ -72,7 +72,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 <body>
 <div class="app">
 <aside class="sidebar">
- <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.1.0</small></div>
+ <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.1.2</small></div>
  <nav class="nav" aria-label="Điều hướng">
   <button data-nav="autopilot" class="active"><span class="num">1</span> Sản xuất tự động</button>
   <button data-nav="create"><span class="num">2</span> Tạo câu thủ công</button>
@@ -84,7 +84,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
  <div class="sidehelp"><b>Gợi ý bắt đầu</b><p>Nhập API key ở mục 4, rồi vào mục 1 chọn số video. Autopilot tạo nhiều chủ đề và kiểm tra cấu trúc trước khi xuất; nội dung AI vẫn cần kiểm tra độ chính xác.</p></div>
 </aside>
 <main class="content">
- <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.1.0</span></header>
+ <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.1.2</span></header>
  <div class="metrics">
   <div class="metric"><span class="name">Câu hỏi đã lưu</span><strong id="statQuestions">0</strong></div>
   <div class="metric"><span class="name">Câu đã duyệt</span><strong id="statApproved">0</strong></div>
@@ -271,6 +271,20 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
    <div class="sectiontitle"><h2 style="font-size:17px">© Metadata bản quyền tự động</h2></div>
    <div class="brand-auto"><label class="switchrow" style="margin:0"><input id="autoMetadata" type="checkbox" checked> Tự gắn tác giả, năm bản quyền, website và chủ đề vào mọi MP4 khi xuất</label>
      <small>Không cần nhập từng video. Metadata không phải DRM hay Content ID.</small></div>
+   <div style="margin:13px 0;padding:15px;border-radius:14px;background:#f4f8fd;border:1px solid #dce7f4">
+    <strong style="color:#0f4c81">🔍 Kiểm tra metadata MP4 & sửa tương thích Windows</strong>
+    <p class="note" style="margin-top:7px">Bản trước ghi thẻ mdta: FFprobe có thể đọc nhưng Windows Properties thường bỏ qua. Bản mới dùng thẻ MP4 ilst. Windows không bảo đảm hiện mọi trường, đặc biệt là Copyright.</p>
+   <div class="fieldrow"><div class="field">
+     <label for="metadataVideoSelect">Video MP4 cần ghi lại metadata</label>
+     <select id="metadataVideoSelect"><option value="">Chọn MP4 đã xuất…</option></select>
+   </div></div>
+
+    <div class="actions">
+      <button class="btn secondary" id="inspectMetadata">🔎 Kiểm tra thẻ trong MP4</button>
+      <button class="btn" id="repairMetadataBulk">🛠 Tự sửa metadata video cũ (tối đa 20)</button>
+    </div>
+    <p class="note" id="metadataReport" style="white-space:pre-wrap;margin-top:12px">Mỗi MP4 mới được xác minh metadata tự động khi render. Video cũ không tự đổi nếu chưa bấm sửa.</p>
+   </div>
    <details id="metadataAdvanced"><summary>⚙ Nâng cao: sửa metadata riêng hoặc cập nhật video cũ</summary>
    <p class="note">Thông tin này được ghi vào thẻ MP4 (title / artist / copyright / comment). Nó giúp nhận diện nguồn, nhưng KHÔNG phải DRM, Content ID hay bằng chứng pháp lý chống sao chép.</p>
    <div class="fieldrow">
@@ -281,10 +295,6 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
      <div class="field"><label for="metadataCopyright">Tuyên bố bản quyền</label><input id="metadataCopyright" type="text" maxlength="220"></div>
      <div class="field"><label for="metadataComment">Ghi chú / website</label><input id="metadataComment" type="text" maxlength="220"></div>
    </div>
-   <div class="fieldrow"><div class="field">
-     <label for="metadataVideoSelect">Video MP4 cần ghi lại metadata</label>
-     <select id="metadataVideoSelect"><option value="">Chọn MP4 đã xuất…</option></select>
-   </div></div>
    <div class="actions"><button class="btn secondary" id="overwriteMetadata">© Ghi đè metadata MP4 đã chọn</button>
      <span class="note">Cấu hình tự áp dụng cho MP4 mới. Chỉ dùng chức năng này cho MP4 cũ cần cập nhật.</span></div>
    </details>
@@ -895,6 +905,7 @@ function renderVideos(){
  if(state.videos.some(v=>v.path===chosen))sel.value=chosen;
  if(state.videos.some(v=>v.path===crossChosen))cross.value=crossChosen;
  if(state.videos.some(v=>v.path===metaChosen))meta.value=metaChosen;
+ else if(state.videos.length)meta.value=state.videos[0].path;
 }
 function productionPayload(){
  return {
@@ -1028,13 +1039,54 @@ $("logoSprite").addEventListener("pointerup",event=>{
  saveProduction();
 });
 $("logoSprite").addEventListener("pointercancel",()=>{logoPointer=null});
+$("inspectMetadata").addEventListener("click",async()=>{
+ const chosen=$("metadataVideoSelect").value;
+ if(!chosen){notice("Chọn video MP4 để kiểm tra.","error");return}
+ const name=chosen.replace(/^.*[\\/]/,"");
+ const info=await run(()=>api("/api/videos/metadata/inspect",{video_name:name}));
+ if(!info)return;
+ const t=info.tags||{};
+ $("metadataReport").textContent=
+  (info.verified?"✓ MP4 có đầy đủ các trường quan trọng":"⚠ MP4 thiếu metadata")+
+  " · Kiểu thẻ: "+info.layout+
+  "\nTiêu đề: "+(t.title||"(chưa có)")+
+  "\nTác giả: "+(t.artist||"(chưa có)")+
+  "\nCopyright: "+(t.copyright||"(chưa có)")+
+  "\nWebsite / Ghi chú: "+(t.comment||"(chưa có)")+
+  "\nNăm: "+(t.date||"(chưa có)")+
+  "\nWindows Explorer có thể không hiện ô Copyright dù FFprobe đọc được.";
+});
+$("repairMetadataBulk").addEventListener("click",async()=>{
+ if(state.activeRender){notice("Đang render, không sửa metadata lúc này.","error");return}
+ if(!confirm("Sửa metadata MP4 cũ trong kho video (tối đa 20 file mỗi lượt)? "+
+             "Chỉ sửa file thiếu metadata/đang dùng thẻ mdta; bỏ qua file đang có lịch đăng. "+
+             "Hãy đóng video trong trình phát trước khi thực hiện."))return;
+ const result=await run(()=>api("/api/videos/metadata/repair_bulk",{
+   confirmed:true,limit:20
+ }));
+ if(!result)return;
+ $("metadataReport").textContent=
+   "Đã quét: "+result.checked+
+   " · Đã sửa: "+result.repaired.length+
+   " · Đã tương thích: "+result.already_compatible.length+
+   " · Bỏ qua: "+result.skipped.length+
+   " · Lỗi: "+result.errors.length+
+   (result.errors.length?"\n"+result.errors.map(x=>x.video+": "+x.reason).join("\n"):"");
+ notice("Đã rà soát và sửa thẻ MP4 cũ. Bạn có thể kiểm tra lại một video.", 
+        result.errors.length?"error":"success");
+ await loadStatus();
+});
 $("overwriteMetadata").addEventListener("click",async()=>{
  const video=$("metadataVideoSelect").value;
  if(!video){notice("Chọn MP4 cần ghi đè metadata trước.","error");return}
  if(!await saveProduction())return;
  const name=video.replace(/^.*[\\\/]/,"");
  const result=await run(()=>api("/api/videos/metadata",{video_name:name}));
- if(result)notice("Đã ghi đè MP4: title, artist, copyright và comment. Kiểm tra bằng ffprobe.","success");
+ if(result){
+   $("metadataReport").textContent="✓ Đã ghi thẻ MP4 ilst và đọc lại bằng FFprobe: "+
+      result.tags.title+" | "+result.tags.artist+" | "+result.tags.copyright;
+   notice("Đã ghi và xác minh metadata MP4.","success");
+ }
 });
 
 let previewObjectUrl="";

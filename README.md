@@ -373,3 +373,17 @@ Lịch đăng trên từng nền tảng được lưu độc lập trong SQLite,
 - Nhóm xuất thủ công được thu gọn, không trộn với Autopilot. Bố cục form dùng CSS grid đáp ứng màn hình lớn/nhỏ.
 
 Cách cập nhật: đóng Studio cũ; sao lưu thư mục LOCALAPPDATA/TiengHanSoEasyStudio, rồi mở EXE mới. Dữ liệu hỏi đáp và kho video cũ được giữ lại. Meta/YouTube/TikTok vẫn phải tuân thủ quyền API như báo cáo v1.0.0.
+
+
+## v1.1.2: Sửa font Hàn và metadata Windows
+
+Báo cáo nguyên nhân & kiểm chứng: [AUDIT_V112.md](AUDIT_V112.md).
+
+- **Hangul rõ nét:** Studio rasterize chữ ngay tại độ phân giải xuất 1080×1920, không còn vẽ chữ 540p rồi phóng lớn. Căn baseline chung cho dòng trộn Hangul và chữ Việt, giữ bố cục Shorts và vị trí logo.
+- **MP4 metadata tương thích rộng:** Ghi các thẻ ilst tiêu chuẩn (title, artist, copyright, comment, date, description, genre), không dùng use_metadata_tags / mdta. FFprobe kiểm tra được từng giá trị trước khi ghi đè file gốc.
+- **Kiểm tra MP4 trực tiếp:** Ngân hàng & video → Metadata → chọn MP4 → Kiểm tra thẻ trong MP4. Màn hình hiển thị nội dung thật đọc từ file và loại thẻ.
+- **Sửa video cũ:** Nút “Tự sửa metadata video cũ (tối đa 20)” sửa thẻ mdta/thiếu thẻ trong MP4 đã xuất trước đây, bỏ qua những video đang có lịch đăng. Nút cần xác nhận và đóng video trước khi thao tác.
+- **Giới hạn Windows:** File Explorer → Properties → Details không luôn hiển thị Copyright/Author của MP4 kể cả khi thẻ chuẩn đã tồn tại. Hãy dùng công cụ kiểm tra metadata của Studio để xác minh. Metadata không phải DRM hoặc Content ID.
+- **Lưu ý:** Sửa metadata chỉ đổi thẻ container, không làm video cũ nét hơn. Chỉ những video dựng lại ở v1.1.2 mới có chữ Hàn ở độ sắc nét mới.
+
+Đóng bản cũ, sao lưu thư mục %LOCALAPPDATA%/TiengHanSoEasyStudio, rồi mở EXE cập nhật. Không cần nhập lại API keys.
