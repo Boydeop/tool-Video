@@ -121,6 +121,8 @@ def create_server(service, host="127.0.0.1", port=8765):
                     self.respond(200,export_queue.status(jid))
                 elif url.path == "/api/render/active":
                     self.respond(200,export_queue.active())
+                elif url.path == "/api/answers/history":
+                    self.respond(200,{'history':service.store.repair_history(parse_qs(url.query).get('id',[''])[0])})
                 elif url.path == "/api/events/upcoming":
                     self.respond(200,{"events":service.upcoming_events()})
                 elif url.path == "/api/cache/status":
@@ -226,7 +228,7 @@ def create_server(service, host="127.0.0.1", port=8765):
                       "/api/production/settings", "/api/production/choose", "/api/logo/upload",
                       "/api/facebook/connect", "/api/facebook/disconnect", "/api/seo",
                       "/api/render/batch", "/api/preview/clip", "/api/render/start",
-                      "/api/answers/enrich", "/api/answers/save", "/api/videos/metadata",
+                      "/api/answers/enrich", "/api/answers/save", "/api/answers/repair", "/api/videos/metadata",
                       "/api/videos/metadata/inspect", "/api/videos/metadata/repair_bulk",
                       "/api/autopilot/start", "/api/autopilot/cancel", "/api/cache/clear",
                       "/api/qa/verify_pending", "/api/krdict/test",
@@ -343,6 +345,8 @@ def create_server(service, host="127.0.0.1", port=8765):
                         voice_engine=str(raw.get("voice_engine","auto")))
                 elif route == "/api/answers/enrich":
                     result=service.enrich_answer_details(raw.get("ids",[]))
+                elif route == "/api/answers/repair":
+                    result=export_queue.start_repair(raw.get('ids'))
                 elif route == "/api/answers/save":
                     result=service.edit_answer_details(str(raw.get("id","")),
                            raw.get("details",{}))

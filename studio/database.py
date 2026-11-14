@@ -72,6 +72,12 @@ class Store:
                 reviewed_at TEXT NOT NULL,
                 FOREIGN KEY(question_id) REFERENCES questions(id)
             );
+            CREATE TABLE IF NOT EXISTS question_revisions(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,question_id TEXT NOT NULL,
+                before_json TEXT NOT NULL,after_json TEXT NOT NULL,
+                report_json TEXT NOT NULL,created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS revisions_question ON question_revisions(question_id,id);
             CREATE TABLE IF NOT EXISTS youtube_thumbnail_jobs(
                 video_id TEXT PRIMARY KEY,
                 video_path TEXT NOT NULL,
@@ -427,6 +433,46 @@ class Store:
             c.execute("UPDATE questions SET payload=?,status='draft' WHERE id=?",
                       (json.dumps(updated.to_dict(),ensure_ascii=False),qid))
         return {"id":qid,"status":"draft","missing":updated.missing_answer_details}
+
+    def repair_source(self,qid):
+        with self.db() as c:
+            row=c.execute("SELECT payload,status FROM questions WHERE id=?",(qid,)).fetchone()
+            if row is None or row['status'] not in ('draft','auto_approved','approved'):
+                raise ValueError('Chỉ sửa câu chưa xuất, chưa bị loại; không sửa MP4 đã dựng.')
+            return Quiz.parse(json.loads(row['payload']))
+
+    def apply_repair(self,qid,before,after,report):
+        after.validate()
+        if report.get('outcome')!='verified' or report.get('mode')!='strict':
+            raise ValueError('Bản sửa chưa vượt qua kiểm chứng KRDict + AI strict')
+        if (before.topic,before.question,before.clue,before.level)!=(after.topic,after.question,after.clue,after.level):
+            raise ValueError('Không đổi câu hỏi khi sửa đáp án')
+        with self._lock,self.db(immediate=True) as c:
+            row=c.execute('SELECT payload,status FROM questions WHERE id=?',(qid,)).fetchone()
+            if row is None or row['status'] not in ('draft','auto_approved','approved'):
+                raise ValueError('Câu hỏi đã xuất hoặc đã đổi trạng thái; không ghi đè')
+            if Quiz.parse(json.loads(row['payload']))!=before:
+                raise ValueError('Câu đã được chỉnh sửa trong lúc tra từ; không ghi đè')
+            ahash=fingerprint(after.correct)
+            if c.execute('SELECT 1 FROM questions WHERE answer_hash=? AND id!=?',(ahash,qid)).fetchone():
+                raise DuplicateQuestion('Đáp án sửa trùng câu đã lưu; giữ nguyên câu cũ')
+            for other in c.execute('SELECT correct FROM questions WHERE id!=?',(qid,)):
+                if len(normalize(after.correct))>8 and similar(other['correct'],after.correct)>=.94:
+                    raise DuplicateQuestion('Đáp án sửa gần trùng câu đã lưu; giữ nguyên câu cũ')
+            old=json.dumps(before.to_dict(),ensure_ascii=False)
+            new=json.dumps(after.to_dict(),ensure_ascii=False)
+            qa=json.dumps(report,ensure_ascii=False)
+            c.execute('INSERT INTO question_revisions(question_id,before_json,after_json,report_json,created_at) VALUES(?,?,?,?,?)',
+                      (qid,old,new,qa,utcnow()))
+            c.execute("UPDATE questions SET correct=?,answer_hash=?,payload=?,status='auto_approved' WHERE id=?",
+                      (after.correct,ahash,new,qid))
+            c.execute('INSERT OR REPLACE INTO question_qa VALUES(?,?,?,?)',(qid,'verified',qa,utcnow()))
+
+    def repair_history(self,qid):
+        with self.db() as c:
+            return [{**dict(row),'before':json.loads(row['before_json']),
+                     'after':json.loads(row['after_json'])}
+                    for row in c.execute('SELECT * FROM question_revisions WHERE question_id=? ORDER BY id DESC LIMIT 10',(qid,))]
 
     def approve(self, ids, status="approved"):
         if status not in ("approved","rejected","draft"):

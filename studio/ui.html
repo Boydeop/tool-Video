@@ -72,7 +72,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 <body>
 <div class="app">
 <aside class="sidebar">
- <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.2.3</small></div>
+ <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.3.0</small></div>
  <nav class="nav" aria-label="Điều hướng">
   <button data-nav="autopilot" class="active"><span class="num">1</span> Sản xuất tự động</button>
   <button data-nav="create"><span class="num">2</span> Tạo câu thủ công</button>
@@ -84,7 +84,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
  <div class="sidehelp"><b>Gợi ý bắt đầu</b><p>Nhập API key ở mục 4, rồi vào mục 1 chọn số video. Autopilot tạo nhiều chủ đề và kiểm tra cấu trúc trước khi xuất; nội dung AI vẫn cần kiểm tra độ chính xác.</p></div>
 </aside>
 <main class="content">
- <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.2.3</span></header>
+ <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.3.0</span></header>
  <div class="metrics">
   <div class="metric"><span class="name">Câu hỏi đã lưu</span><strong id="statQuestions">0</strong></div>
   <div class="metric"><span class="name">Câu đã duyệt</span><strong id="statApproved">0</strong></div>
@@ -129,13 +129,13 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
     </div>
     <div class="fieldrow" style="margin:16px 0">
       <div class="field compact" style="max-width:390px">
-        <label for="autoQaMode">Độ nghiêm ngặt kiểm chứng câu hỏi</label>
+        <label for="autoQaMode">Tự sửa câu lỗi và kiểm chứng lại</label>
         <select id="autoQaMode">
           <option value="strict" selected>🔒 KRDict + AI hỏi ngược (ưu tiên chính xác)</option>
           <option value="assisted">⚖ AI hỏi ngược nếu từ điển không có cụm từ</option>
         </select>
       </div>
-      <div class="note" style="align-self:center">Tự sinh câu, tra KRDict, đổi vị trí đáp án cho AI chọn ngược. Những câu thiếu bằng chứng giữ ở mục Cần QA, không coi là đã duyệt.</div>
+      <div class="note" style="align-self:center">Tự sinh câu, tra KRDict và tự sửa từ/nghĩa sai, rồi đổi vị trí đáp án cho AI kiểm tra lại. Câu sửa đạt được dựng video; câu chưa sửa được giữ ở Cần QA.</div>
     </div>
     <p class="note">Autopilot chỉ duyệt máy khi kiểm tra cấu trúc, KRDict và AI hỏi ngược đạt yêu cầu. Nó không thay thế người kiểm tra tiếng Hàn. Video chỉ được đăng khi bạn lên lịch và cấp quyền riêng cho từng nền tảng. Tối đa 12 video/lượt để kiểm soát chi phí và quota API.</p>
     <div class="actions"><button class="btn" id="autoStart">🚀 Tạo nhiều chủ đề và dựng tất cả</button>
@@ -184,9 +184,11 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
    </div>
    <div class="actions" style="margin-bottom:12px">
       <button class="btn secondary small" id="enrichAnswers">✨ AI bổ sung nghĩa/phiên âm cho câu đã chọn (tối đa 6)</button>
-      <button class="btn secondary small" id="bulkVerifyAI">🛡️ Kiểm chứng 8 câu AI mới bằng KRDict + hỏi ngược (không tick)</button>
+      <button class="btn secondary small" id="bulkVerifyAI">🔧 Kiểm tra & tự sửa 6 câu AI mới bằng KRDict + hỏi ngược (không tick)</button>
+      <button class="btn small" id="repairSelected">🔧 Tự sửa câu đã chọn bằng KRDict + AI</button>
       <span class="note">Nội dung AI cần duyệt. Các câu đã xuất không sửa trực tiếp.</span>
    </div>
+   <p class="note" id="repairStatus" aria-live="polite"></p>
    <div class="card" id="answerEditor" style="display:none;background:#f8fbff;border:1px solid #b7d0eb">
      <div class="sectiontitle"><h2 style="font-size:17px">Sửa nghĩa và phiên âm của cả 4 đáp án</h2>
        <button class="btn outline small" id="closeAnswerEditor">Đóng</button></div>
@@ -195,7 +197,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
      <p class="note">Lưu nội dung sẽ đưa câu về “Chờ duyệt”, kể cả câu trước đó đã duyệt, để bạn xác nhận lại trước khi xuất.</p>
      <button class="btn" id="saveAnswerEditor">💾 Lưu 4 đáp án và chờ duyệt lại</button>
    </div>
-   <div id="emptyQuestions" class="empty"><span style="font-size:28px">🗂️</span><strong>Chưa có câu hỏi</strong>Vào mục “Tạo câu hỏi” để tạo bộ câu hỏi đầu tiên.</div>
+   <div id="emptyQuestions" class="empty"><span style="font-size:28px">🗂️</span><strong>Chưa có câu hỏi</strong><span id="emptyQuestionHint">Vào mục “Tạo câu hỏi” để tạo bộ câu hỏi đầu tiên.</span></div>
    <div class="tablewrap"><table class="table"><thead><tr><th>Chọn</th><th>Trạng thái</th><th>Lô · Chủ đề / Cấp độ</th><th>Câu hỏi</th><th>Đáp án đúng</th><th>Giải thích</th></tr></thead><tbody id="questionRows"></tbody></table></div>
    <div class="actions" style="margin-top:14px"><button class="btn small secondary" id="prevQuestions">← Trước</button><span class="pill" id="questionPageInfo">Trang 1</span><button class="btn small secondary" id="nextQuestions">Tiếp →</button></div>
   </div>
@@ -597,6 +599,9 @@ function renderQuestions(){
  $("emptyQuestions").style.display=display.length?"none":"block";
  $("emptyQuestions").querySelector("strong").textContent=
    state.questions.length?"Không có câu ở trạng thái/lô này":"Chưa có câu hỏi";
+ $("emptyQuestionHint").textContent=state.questions.length?
+   "Đổi bộ lọc sang Đã duyệt để xem câu đã đạt QA hoặc đã tự sửa.":
+   "Vào mục Tạo câu hỏi để tạo bộ câu hỏi đầu tiên.";
  for(const q of display){
    const tr=make("tr"),selection=make("td"),cb=make("input");
    cb.type="checkbox";cb.value=q.id;
@@ -619,6 +624,12 @@ function renderQuestions(){
    const reason=(q.qa_report?.issues||q.qa_report?.structural_issues||[]).slice(0,2).join("; ");
    if(reason)status.append(make("small","QA: "+reason));
    if(q.qa_report?.tier)status.append(make("small","Bằng chứng: "+q.qa_report.tier));
+   if(q.qa_report?.repair?.changes){
+     const changes=make("details");changes.append(make("summary","Đã tự sửa · xem trước/sau"));
+     for(const change of q.qa_report.repair.changes)
+       changes.append(make("div",change.field+": "+change.before+" → "+change.after));
+     status.append(changes);
+   }
    tr.append(status);
    const topic=make("td");
    topic.append(make("strong",q.topic),make("small",q.level+" · Lô "+(q.batch_id||"cũ").slice(0,8)));
@@ -642,6 +653,17 @@ function renderQuestions(){
      edit.addEventListener("click",()=>openAnswerEditor(q.id));
      detailsCell.append(edit);
    }
+   const history=make("button","Lịch sử tự sửa","btn secondary small");
+   history.addEventListener("click",async()=>{
+     const result=await run(()=>api("/api/answers/history?id="+encodeURIComponent(q.id)));
+     if(!result)return;
+     $("repairStatus").textContent=result.history.length?
+       result.history.map(row=>new Date(row.created_at).toLocaleString("vi-VN")+": "+
+         ANSWER_FIELDS.map(key=>row.before[key]!==row.after[key]?
+            row.before[key]+" → "+row.after[key]:"").filter(Boolean).join("; ")).join(" | "):
+       "Câu này chưa có lần tự sửa đã lưu.";
+   });
+   detailsCell.append(history);
    tr.append(clueCell,answerCell,detailsCell);
    rows.append(tr);
  }
@@ -1252,10 +1274,13 @@ function updateAutopilotHistory(){
  for(const run of recent.slice(0,15)){
    const panel=make("div");
    panel.style.cssText="margin:8px 0;padding:10px;border:1px solid #dce8f2;border-radius:10px";
-   const mode=(run.plan||{}).mode==="autopilot"?"Autopilot":"Xuất từ ngân hàng";
+   const mode=({autopilot:"Autopilot",repair:"Tự sửa KRDict + AI"})[(run.plan||{}).mode]||"Xuất từ ngân hàng";
    panel.append(make("strong",mode+" · "+run.status+" · "+
       new Date(run.created_at).toLocaleString("vi-VN")));
    const results=run.results||[];
+   const repaired=results.reduce((count,item)=>count+(item.repaired===true?1:
+                   Array.isArray(item.repaired)?item.repaired.length:0),0);
+   if(repaired)panel.append(make("small","Đã tự sửa "+repaired+" câu; xem trước/sau trong ngân hàng."));
    for(const item of results.slice(0,12)){
      const label=item.topic||((item.video||"").split(/[\\/]/).pop())||"Câu hỏi";
      const line=make("small",label+": "+(item.status||"")+
@@ -1383,6 +1408,7 @@ async function recoverActiveExport(){
  try{
    const report=await api("/api/render/active");
    if(report.job_id && !state.activeRender){
+     if(report.mode==="repair"){showPanel("questions");watchRepair(report.job_id);return}
      showPanel("autopilot");
      watchAutopilot(report.job_id);
    }
@@ -1502,17 +1528,39 @@ $("testKrdict").addEventListener("click",async()=>{
  $("krdictResult").textContent=data.message;
  notice(data.message,data.has_vietnamese?"success":"error");
 });
-$("bulkVerifyAI").addEventListener("click",async()=>{
- if(state.activeRender){notice("Không kiểm duyệt trong lúc đang render.","error");return}
- if(!confirm("Kiểm tra tối đa 8 câu AI chưa duyệt gần đây bằng KRDict và AI hỏi ngược? "+
-             "Các câu không đạt sẽ giữ ở trạng thái Cần QA."))return;
- const report=await run(()=>api("/api/qa/verify_pending",{limit:8,mode:"strict"}));
- if(!report)return;
- await loadStatus();
- notice("KRDict + AI: "+report.verified+"/"+report.processed+
-        " câu đủ bằng chứng. Các câu còn lại vẫn lưu để sửa.",
-        report.verified?"success":"error");
-});
+$("bulkVerifyAI").addEventListener("click",()=>startRepair(false));
+async function watchRepair(id){
+ state.activeRender=true;updateSelection();
+ try{
+  for(;;){
+   const report=await api("/api/render/progress?job_id="+encodeURIComponent(id));
+   $("repairStatus").textContent=report.phase||"Đang tự sửa câu…";
+   if(["completed","failed"].includes(report.status)){
+    await loadStatus();
+    const lines=(report.results||[]).map(row=>{
+     const changes=(row.changes||[]).filter(change=>ANSWER_FIELDS.includes(change.field));
+     return changes.length?changes.map(change=>change.before+" → "+change.after).join("; "):
+       (row.repair_issues||row.issues||[]).join("; ");
+    }).filter(Boolean);
+    $("repairStatus").textContent=(report.phase||report.error)+". "+lines.join(" | ")+
+       " · Câu đạt nằm trong bộ lọc Đã duyệt; câu chưa sửa được giữ nguyên.";
+    notice(report.phase||report.error,(report.results||[]).some(row=>row.status==="verified")?"success":"error");break;
+   }
+   await new Promise(resolve=>setTimeout(resolve,1000));
+  }
+ }catch(error){$("repairStatus").textContent="Mất kết nối: "+error.message+". Tác vụ vẫn chạy; tải lại trang để kết nối lại."}
+ finally{state.activeRender=false;updateSelection()}
+}
+async function startRepair(selected){
+ if(state.activeRender){notice("Đang có tác vụ khác.","error");return}
+ const ids=Array.from(state.selection).filter(id=>{
+  const q=state.questions.find(row=>row.id===id);return q&&["draft","auto_approved","approved"].includes(q.status);
+ });
+ if(selected&&(!ids.length||ids.length>6)){notice("Chọn 1–6 câu chưa xuất để tự sửa.","error");return}
+ const reply=await run(()=>api("/api/answers/repair",selected?{ids}:{}));
+ if(reply)watchRepair(reply.job_id);
+}
+$("repairSelected").addEventListener("click",()=>startRepair(true));
 $("generateOldThumbnails").addEventListener("click",async()=>{
  const answer=await run(()=>api("/api/thumbnails/legacy",{limit:20,theme:$("autoTheme").value}));
  if(!answer)return;

@@ -152,13 +152,14 @@ def run_pipeline(service,plan:Plan,update,on_result=None,cancel=None):
                                 except Exception as exc:
                                     generation_errors.append("Bổ sung "+qid[:6]+
                                         ": "+type(exc).__name__)
-                            if issues:
-                                service.store.set_question_qa(qid,"needs_review",
-                                    {"issues":issues,"stage":"structure","version":1})
-                                problems.append({"id":qid,"issues":issues})
-                                continue
                             try:
                                 verdict=service.verify_generated(qid,mode=plan.qa_mode)
+                                if verdict["status"]!="verified":
+                                    stage("Tự sửa bằng KRDict + AI, câu "+str(number),.55)
+                                    verdict=service.repair_generated(qid,initial=verdict,
+                                        progress=lambda message:stage(message,.60))
+                                    if verdict.get("repaired"):
+                                        item.setdefault("repaired",[]).append({"id":qid,"changes":verdict["changes"]})
                                 if verdict["status"]=="verified":
                                     good.append(qid)
                                 else:

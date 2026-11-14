@@ -60,6 +60,56 @@ class ExportQueue:
         with self._lock:
             return self._running is not None
 
+    def start_repair(self,ids=None):
+        if ids is None:ids=[row['id'] for row in self.service.store.pending_verification(6)]
+        if (not isinstance(ids,list) or not 1<=len(ids)<=6 or
+                any(not isinstance(qid,str) for qid in ids) or len(set(ids))!=len(ids)):
+            raise ValueError('Chọn 1–6 câu chưa xuất để tự sửa')
+        for qid in ids:self.service.store.repair_source(qid)
+        with self._lock:
+            if self._running is not None:raise ValueError('Đang có tác vụ sản xuất hoặc sửa câu khác')
+            jid=uuid.uuid4().hex
+            self.service.store.create_production_run(jid,{'mode':'repair','ids':ids})
+            self._started_at[jid]=self._phase_at[jid]=time.monotonic()
+            self._jobs[jid]={'job_id':jid,'mode':'repair','status':'queued','percent':0,
+                            'phase':'Chờ tự sửa bằng KRDict + AI','videos':[],
+                            'results':[],'error':None,'total_videos':0}
+            self._running=jid
+        threading.Thread(target=self._run_repair,args=(jid,ids),daemon=True,
+                         name='thse-repair-'+jid[:8]).start()
+        return {'job_id':jid,'mode':'repair','status':'queued'}
+
+    def _run_repair(self,jid,ids):
+        from .run_limits import BudgetExpired
+        from .krdict import KRDictError
+        results=[]
+        try:
+            for number,qid in enumerate(ids):
+                def progress(phase):
+                    self._update(jid,status='running',percent=number*100//len(ids),
+                                 phase=f'Câu {number+1}/{len(ids)} · '+phase)
+                progress('Kiểm tra và tìm từ để sửa')
+                try:result=self.service.repair_generated(qid,progress=progress)
+                except Exception as exc:
+                    result={'id':qid,'status':'needs_review','repaired':False,
+                            'repair_issues':[str(exc)[:300] if isinstance(exc,(ValueError,BudgetExpired,KRDictError))
+                                             else type(exc).__name__]}
+                results.append(result)
+                self.service.store.update_production_run(jid,'running',results)
+                self._update(jid,results=list(results),percent=(number+1)*100//len(ids))
+            repaired=sum(bool(row.get('repaired')) for row in results)
+            verified=sum(row['status']=='verified' for row in results)
+            self.service.store.update_production_run(jid,'completed',results)
+            self._update(jid,status='completed',percent=100,results=results,
+                         phase=f'Đã sửa {repaired}/{len(ids)} câu · {verified} câu đạt QA')
+        except Exception as exc:
+            self.service.store.update_production_run(jid,'failed',results,type(exc).__name__)
+            self._update(jid,status='failed',error=type(exc).__name__,results=results)
+        finally:
+            with self._lock:
+                if self._running==jid:self._running=None
+                self._finish(jid)
+
     def start_autopilot(self,config):
         from .autopilot import Plan
         plan=Plan.parse(config)

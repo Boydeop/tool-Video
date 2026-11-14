@@ -504,3 +504,12 @@ Chi tiết: [AUDIT_V123.md](AUDIT_V123.md). KRDict tách bản dịch mục từ
 mô tả để không coi mùa xuân/mùa thu đồng nghĩa với mùa đông chỉ vì định nghĩa có nhắc
 tới mùa đông. Cache tự làm mới; sau khi mở EXE mới, kiểm chứng lại các câu đang cần QA.
 Tên riêng Rudolph (`루돌프`) không thay thế từ chung “tuần lộc” (`순록`).
+
+## v1.3.0 · KRDict + AI tự sửa câu lỗi
+
+[Thiết kế và kiểm chứng](AUDIT_V130.md). Ngân hàng có **Tự sửa câu đã chọn**;
+nút kiểm chứng cũ được nâng thành **Kiểm tra & tự sửa**. Autopilot tự thử sửa câu
+không đạt trước khi dựng video. Sửa được cả từ Hàn, nghĩa và phiên âm; nghĩa được
+đối chiếu và lấy từ KRDict, rồi chạy lại QA strict. Lưu lịch sử trước/sau và chỉ ghi
+bản sửa đạt; thiếu bằng chứng thì giữ nguyên nội dung cũ. Cần key KRDict và ít nhất
+một provider AI đã cấu hình.

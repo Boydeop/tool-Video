@@ -104,6 +104,25 @@ class Service:
         return {"processed":len(results),"verified":sum(x["status"]=="verified" for x in results),
                 "results":results,"mode":mode}
 
+    @media_operation
+    def repair_generated(self,qid,initial=None,progress=None):
+        from .repair import repair_quiz
+        from .run_limits import topic_budget,budget_active
+        from contextlib import nullcontext
+        before=self.store.repair_source(qid)
+        with (nullcontext() if budget_active() else topic_budget(120)):
+            initial=initial or self.verify_generated(qid,mode='strict')
+            if initial['status']=='verified':
+                return {**initial,'repaired':False}
+            candidate,report,failures=repair_quiz(before,self.store,
+                self.store.get_question_provider(qid),progress=progress)
+            if candidate is None:
+                return {**initial,'repaired':False,'repair_issues':failures}
+            self.store.apply_repair(qid,before,candidate,report)
+            return {'id':qid,'status':'verified','repaired':True,
+                    'changes':report['repair']['changes'],'issues':[],
+                    'tier':report['tier']}
+
     def daily(self,day=None,count=6,providers=None):
         current=day or date.today();plan=daily_plan(current,self.store.topic_counts())
         if self.store.daily_exists(current.isoformat()):

@@ -62,7 +62,7 @@ jobs:
               if ($process.HasExited) { throw 'Packaged Studio process terminated before ready' }
               try {
                 $health = Invoke-RestMethod -Uri "http://127.0.0.1:8765/health" -TimeoutSec 3 -NoProxy
-                if ($health.status -eq 'ok' -and $health.app -eq 'TiengHanSoEasyStudio' -and $health.version -eq 'v1.2.3') {
+                if ($health.status -eq 'ok' -and $health.app -eq 'TiengHanSoEasyStudio' -and $health.version -eq 'v1.3.0') {
                   $ready = $true
                   break
                 }
@@ -92,7 +92,7 @@ jobs:
             if ($homePage.Content -notmatch 'Kết nối Facebook Page') { throw 'Meta Page connection UI missing' }
             if ($homePage.Content -notmatch 'Đếm ngược sau khi đọc xong') { throw 'Audio-first countdown UI missing' }
             if ($homePage.Content -notmatch 'phiên âm Latin' -and $homePage.Content -notmatch 'phiên âm') { throw 'Pronunciation UI missing' }
-            if ($null -eq $status.production.logo_x -or $null -eq $status.production.metadata_artist) { throw 'v1.2.3 production settings missing' }
+            if ($null -eq $status.production.logo_x -or $null -eq $status.production.metadata_artist) { throw 'v1.3.0 production settings missing' }
             if ($homePage.Content -notmatch 'renderProgressBar' -or $homePage.Content -notmatch 'logoSprite') {
               throw 'Drag logo or export progress UI missing'
             }
@@ -127,6 +127,11 @@ jobs:
             if (-not ($status.providers.krdict)) {
               throw "KRDict key integration missing"
             }
+            if ($homePage.Content -notmatch 'repairSelected' -or $homePage.Content -notmatch 'repairStatus') {
+              throw "Dictionary repair controls missing from packaged EXE"
+            }
+            $repairCheck = Invoke-WebRequest -Uri "http://127.0.0.1:8765/api/answers/repair" -Method Post -ContentType "application/json" -Body '{"ids":[]}' -NoProxy -SkipHttpErrorCheck
+            if ($repairCheck.StatusCode -ne 400) { throw "Packaged repair route validation failed" }
             if ($status.providers.krdict.keys -eq 0) {
               $dictionaryTest = Invoke-WebRequest -Uri "http://127.0.0.1:8765/api/krdict/test" -Method Post -ContentType "application/json" -Body '{}' -NoProxy -SkipHttpErrorCheck
               $dictionaryError = $dictionaryTest.Content | ConvertFrom-Json
@@ -134,7 +139,7 @@ jobs:
                 throw "Packaged EXE KRDict missing-key diagnostic failed"
               }
             }
-            Write-Output "Studio v1.2.3 dictionary QA, auto thumbnails and durable YouTube cover smoke passed"
+            Write-Output "Studio v1.3.0 dictionary QA, auto thumbnails and durable YouTube cover smoke passed"
           } catch {
             $logPath = Join-Path $env:LOCALAPPDATA "TiengHanSoEasyStudio\studio.log"
             if (Test-Path $logPath) { Get-Content $logPath -Tail 100 }
@@ -155,8 +160,8 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.2.3-build.${{ github.run_number }}
-          name: Tiếng Hàn So Easy Studio v1.2.3 (build ${{ github.run_number }})
+          tag_name: v1.3.0-build.${{ github.run_number }}
+          name: Tiếng Hàn So Easy Studio v1.3.0 (build ${{ github.run_number }})
           target_commitish: ${{ github.sha }}
           files: dist/TiengHanSoEasyStudio.exe
           make_latest: true
