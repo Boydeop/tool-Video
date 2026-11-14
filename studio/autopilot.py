@@ -108,13 +108,13 @@ def run_pipeline(service,plan:Plan,update,on_result=None,cancel=None):
             # more than 30 minutes without a stage update.
             with topic_budget(210,cancel):
                 try:
-                    for attempt in range(2):
+                    for attempt in range(3):
                         check_budget()
                         if len(good)>=plan.per_video:
                             break
                         remaining=plan.per_video-len(good)
                         count=min(10,remaining+2)
-                        stage("AI tạo câu (lượt "+str(attempt+1)+"/2)",.03+.10*attempt)
+                        stage("AI tạo câu (lượt "+str(attempt+1)+"/3)",.03+.10*attempt)
                         try:
                             generated=service.generate(topic,level,count,fmt=fmt)
                             generation_errors.extend(generated.get("errors",[]))
@@ -127,7 +127,8 @@ def run_pipeline(service,plan:Plan,update,on_result=None,cancel=None):
                         incoming=[qid for qid in generated.get("accepted",[])
                                   if qid not in inspected]
                         if not incoming:
-                            break
+                            if generated.get("errors"):break
+                            continue
                         for number,qid in enumerate(incoming,1):
                             check_budget()
                             if len(good)>=plan.per_video:
@@ -164,7 +165,7 @@ def run_pipeline(service,plan:Plan,update,on_result=None,cancel=None):
                                     good.append(qid)
                                 else:
                                     problems.append({"id":qid,"issues":
-                                        verdict.get("issues") or
+                                        (verdict.get("repair_issues",[])+verdict.get("issues",[])) or
                                         ["Chưa đủ bằng chứng từ KRDict/AI"]})
                             except (BudgetExpired,RunCancelled):
                                 raise

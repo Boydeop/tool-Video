@@ -519,3 +519,10 @@ một provider AI đã cấu hình.
 Sửa nút duyệt bị khóa đối với câu đã kiểm tra máy. Có thể duyệt tay những câu này
 và bấm **Làm video từ câu đã chọn** ngay trong ngân hàng; các nút xuất không còn
 bị giấu trong mục đóng. Chi tiết: [AUDIT_V131.md](AUDIT_V131.md).
+
+## v1.3.2 · QA cụm danh từ và bổ sung đủ câu
+
+Hỗ trợ so “chuông/cái chuông” và kiểm tra cụm 2–3 danh từ theo từng thành phần
+KRDict kết hợp AI hỏi ngược, thay vì đòi mọi cụm phải có nguyên mục từ. Báo rõ bằng
+chứng thành phần và nghĩa KRDict trả về khi lệch. Autopilot thêm lượt bổ sung khi
+chưa đủ câu, vẫn giữ ngân sách thời gian. Chi tiết: [AUDIT_V132.md](AUDIT_V132.md).

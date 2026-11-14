@@ -99,6 +99,8 @@ def fallback(topic,level,count,recent,fmt="từ vựng",providers=None):
         candidate_list=[p for p in candidate_list if
                        (p=="ollama" and os.getenv("ENABLE_OLLAMA")=="1")
                        or (p!="ollama" and get_keys(p))][:2]
+    if not candidate_list:
+        raise ProviderError("Chưa có provider AI khả dụng. Kiểm tra key AI trong mục API & Model.")
     for provider in candidate_list:
         check_budget()
         try:return provider,generate(provider,topic,level,count,recent,fmt)

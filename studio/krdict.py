@@ -15,6 +15,7 @@ import urllib.parse
 import urllib.request
 import urllib.error
 import xml.etree.ElementTree as ET
+from itertools import product
 
 from .keys import get_keys
 from .run_limits import network_timeout, check_budget
@@ -39,7 +40,45 @@ def normalize_vi(text):
 def _tokens(value):
     skips={"là","một","của","và","ở","có","những","cho","từ","nào","tiếng","hàn",
            "đây","được","để","với","nhiều"}
-    return {v for v in normalize_vi(value).split() if v not in skips}
+    words=normalize_vi(value).split()
+    if len(words)>1 and words[0] in ('cái','chiếc') and words[1] not in ('tôi','gì','này','kia'):
+        words=words[1:]
+    return {v for v in words if v not in skips}
+
+
+def lookup_evidence(client,word,*,fresh=False):
+    """Recognize spaced noun phrases, without claiming an exact headword.
+
+    Component coverage is lexical evidence only; strict QA must also obtain
+    blind AI agreement for the meaning of the complete phrase.
+    """
+    result=client.lookup(word,fresh=True) if fresh else client.lookup(word)
+    if result.get('exact') or result.get('reason')=='key_missing':return result
+    parts=word.split()
+    if not 2<=len(parts)<=3 or any(not re.fullmatch(r'[가-힣]{1,20}',p) for p in parts):
+        return result
+    units=[];choices=[]
+    for part in parts:
+        check_budget()
+        data=client.lookup(part,fresh=True) if fresh else client.lookup(part)
+        glosses=[]
+        for entry in data.get('entries',[]):
+            if entry.get('pos') and entry['pos']!='명사':continue
+            for gloss in entry.get('glosses',[]):
+                for variant in re.split(r'[,;/]+',gloss):
+                    variant=variant.strip()
+                    if variant and len(variant)<=45 and variant not in glosses:glosses.append(variant)
+        if not data.get('exact') or not glosses:return result
+        units.append({'word':part,'glosses':glosses[:6],
+                      'headword_codes':[e.get('target_code','') for e in data.get('entries',[])][:5]})
+        choices.append(glosses[:6])
+    # Vietnamese noun/modifier order differs from Korean. Token matching is
+    # order independent; AI reverse review checks the actual composed meaning.
+    meanings=[' '.join(values) for values in product(*choices)]
+    return {**result,'supported':True,'compound':True,'components':units,
+            'entries':[{'word':word,'glosses':meanings,'meanings':meanings,
+                        'target_code':'','definitions':[]}],
+            'reason':'component_evidence'}
 
 def sense_overlap(vietnamese,translations):
     """Conservative lexical evidence; NOT a semantic equivalence classifier."""

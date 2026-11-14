@@ -13,7 +13,7 @@ import re
 from .ai import post,ProviderError
 from .models import get_model
 from .keys import next_key,get_keys
-from .krdict import KRDict,KRDictError,sense_overlap
+from .krdict import KRDict,KRDictError,sense_overlap,lookup_evidence
 from .quality import inspect_quiz
 from .run_limits import (check_budget, budget_active, BudgetExpired, RunCancelled)
 
@@ -104,7 +104,7 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
                 dictionary=None,reviewer=None):
     if mode not in ("strict","assisted"):raise ValueError("Invalid QA mode")
     problems=inspect_quiz(quiz)
-    report={"version":2,"mode":mode,"outcome":"needs_review",
+    report={"version":3,"mode":mode,"outcome":"needs_review",
             "structural_issues":problems,"dictionary":{},"reviewer":{},
             "issues":[],"provenance":["KRDict headword and Vietnamese senses",
                                      "blind AI reverse choice"]}
@@ -121,14 +121,16 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
             entries[word]=dict(dictionary_failure)
             continue
         try:
-            data=dict_client.lookup(word)
+            data=lookup_evidence(dict_client,word)
             exact=data.get("exact",False)
             # Definitions can mention other choices: spring is described as
             # the season after winter. Only translated headword glosses count
             # as evidence of equivalence, never words inside definitions.
             meanings=[v for entry in data.get("entries",[])
                       for v in entry.get("glosses",entry.get("meanings",[]))]
-            entries[word]={"exact":exact,"translations":meanings[:12],
+            entries[word]={"exact":exact,"supported":data.get("supported",exact),
+                           "compound":data.get("compound",False),"components":data.get("components",[]),
+                           "translations":meanings[:12],
                            "definitions":[v for entry in data.get("entries",[])
                                           for v in entry.get("definitions",[])][:12],
                            "headword_codes":[x.get("target_code","") for x in data.get("entries",[])][:5],
@@ -150,21 +152,22 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
         report["issues"].append(answer["message"])
     elif answer.get("reason")=="key_missing":
         report["issues"].append("Chưa nhập KRDict API key trong mục API & Model")
-    if not answer["exact"]:
+    if not answer.get("supported",answer["exact"]):
         report["issues"].append("KRDict không tìm được nguyên mục từ của đáp án đúng")
     elif not answer["translations"]:
         report["issues"].append("KRDict không trả nghĩa tiếng Việt của đáp án đúng")
     elif answer["match_to_clue"]<0.6:
-        report["issues"].append("Nghĩa KRDict chưa đủ trùng với cụm hỏi tiếng Việt")
+        report["issues"].append("Nghĩa KRDict chưa khớp “"+quiz.short_clue+"”: "+
+                                "; ".join(answer["translations"][:2])[:90])
     for word in (quiz.wrong1,quiz.wrong2,quiz.wrong3):
         item=entries[word]
-        if mode=="strict" and (not item["exact"] or not item["translations"]):
+        if mode=="strict" and (not item.get("supported",item["exact"]) or not item["translations"]):
             report["issues"].append("Chưa đủ bằng chứng KRDict cho đáp án nhiễu: "+word)
-        if item["exact"] and item["match_to_clue"]>=0.7:
+        if item.get("supported",item["exact"]) and item["match_to_clue"]>=0.7:
             report["issues"].append("Đáp án nhiễu có thể cũng đúng: "+word)
     # Strict mode can never approve a word with no dictionary evidence or
     # a distractor also matching the clue. Avoid long, futile AI requests.
-    if mode=="strict" and (not answer["exact"] or
+    if mode=="strict" and (not answer.get("supported",answer["exact"]) or
            not answer["translations"] or answer["match_to_clue"]<0.6 or
            any("Đáp án nhiễu" in issue or "bằng chứng KRDict" in issue
                for issue in report["issues"])):
@@ -187,7 +190,7 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
         report["reverse_overlap"]=reverse
         if reverse<0.55:
             report["issues"].append("Dịch ngược chưa khớp cụm hỏi")
-    strict_dict_ok=(answer["exact"] and answer["translations"] and
+    strict_dict_ok=(answer.get("supported",answer["exact"]) and answer["translations"] and
                     answer["match_to_clue"]>=0.6)
     ai_ok=(blind.get("available") and not blind.get("ambiguous") and
            not blind.get("conflicting_choices") and
@@ -198,7 +201,8 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
         # A phrase not covered by KRDict can be AI-assisted, but no false claim
         # that the dictionary verified its exact lexical meaning.
         report["outcome"]="verified"
-        report["tier"]="dictionary+blind_ai" if strict_dict_ok else "blind_ai_only"
+        report["tier"]=("dictionary_components+blind_ai" if any(item.get("compound") for item in entries.values())
+                        else "dictionary+blind_ai") if strict_dict_ok else "blind_ai_only"
         report["issues"]=[i for i in report["issues"]
                           if not i.startswith("KRDict") and not i.startswith("Nghĩa KRDict")]
     else:
