@@ -19,6 +19,7 @@ class ExportQueue:
         self._cancel_events={}
         self._started_at={}
         self._phase_at={}
+        self._finished_at={}
 
     def start(self,ids,theme="hanji",per_video=6,with_voice=False,voice_engine="auto"):
         if not isinstance(ids,list) or not 1<=len(ids)<=120 or len(set(ids))!=len(ids):
@@ -29,7 +30,7 @@ class ExportQueue:
             raise ValueError("Mẫu video không hợp lệ.")
         if voice_engine not in ("auto","edge","google"):
             raise ValueError("Nguồn giọng đọc không hợp lệ.")
-        self.service.store.get_questions(ids,status="approved")
+        self.service.store.get_questions(ids,status=("approved","auto_approved"))
         with self._lock:
             if self._running is not None:
                 raise ValueError("Đang xuất video khác. Hãy để lượt hiện tại hoàn thành.")
@@ -119,6 +120,7 @@ class ExportQueue:
             with self._lock:
                 if self._running==jid:self._running=None
                 self._cancel_events.pop(jid,None)
+                self._finish(jid)
 
     def cancel_autopilot(self,jid):
         with self._lock:
@@ -140,10 +142,19 @@ class ExportQueue:
         with self._lock:
             job=self._jobs.get(jid)
             if job is None:raise ValueError("Không tìm thấy lượt xuất video.")
-            now=time.monotonic()
+            now=self._finished_at.get(jid,time.monotonic())
             return {**job,"videos":list(job["videos"]),
                     "elapsed_seconds":int(now-self._started_at.get(jid,now)),
                     "phase_elapsed_seconds":int(now-self._phase_at.get(jid,now))}
+
+    def _finish(self,jid):
+        """Bound both job history and its timing/cancellation metadata."""
+        self._finished_at[jid]=time.monotonic()
+        for old in list(self._jobs)[:-30]:
+            if old!=self._running:
+                for mapping in (self._jobs,self._started_at,self._phase_at,
+                                self._finished_at,self._cancel_events):
+                    mapping.pop(old,None)
 
     def _update(self,jid,**changes):
         with self._lock:
@@ -193,7 +204,4 @@ class ExportQueue:
         finally:
             with self._lock:
                 if self._running==jid:self._running=None
-                # Keep only the most recent jobs, without removing active job.
-                if len(self._jobs)>30:
-                    for old in list(self._jobs)[:-30]:
-                        if old!=self._running:self._jobs.pop(old,None)
+                self._finish(jid)

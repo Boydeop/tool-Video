@@ -21,7 +21,7 @@ import urllib.request
 import webbrowser
 
 from studio.service import Service
-from studio.webapp import serve
+from studio.webapp import serve,APP_VERSION
 
 URL = "http://127.0.0.1:8765"
 
@@ -41,7 +41,8 @@ def healthcheck() -> bool:
     try:
         with opener.open(URL + "/health", timeout=0.5) as response:
             data = json.load(response)
-        return data.get("app") == "TiengHanSoEasyStudio" and data.get("status") == "ok"
+        return (data.get("app") == "TiengHanSoEasyStudio" and
+                data.get("status") == "ok" and data.get("version")==APP_VERSION)
     except (OSError, ValueError, TimeoutError, urllib.error.URLError):
         return False
 
@@ -91,7 +92,8 @@ def main() -> None:
                 events.put(("bound","Existing Studio process"))
             else:
                 logger.exception("Could not bind Studio server")
-                events.put(("error","Không mở được cổng 8765: "+str(exc)))
+                events.put(("error","Không mở được Studio "+APP_VERSION+
+                            ". Hãy đóng hoàn toàn Studio/EXE cũ đang dùng cổng 8765 rồi mở lại. "+str(exc)))
         except Exception as exc:
             logger.exception("Studio server crashed on launch")
             events.put(("error",type(exc).__name__+": "+str(exc)))

@@ -132,7 +132,7 @@ class Quiz:
             raise ValueError("Cần đủ bốn đáp án.")
         if len({normalize(a) for a in answers}) != 4:
             raise ValueError("Có hai đáp án giống nhau.")
-        if not any(re.search(r"[\uac00-\ud7a3]", a) for a in answers):
+        if not all(re.search(r"[\uac00-\ud7a3]", a) for a in answers):
             raise ValueError("Đáp án phải chứa tiếng Hàn.")
         if len(self.question) > 130 or any(len(a) > 75 for a in answers) or len(self.clue)>65 or len(self.meaning)>80 or len(self.romanization)>100:
             raise ValueError("Nội dung quá dài để hiển thị trên video.")

@@ -8,6 +8,8 @@ API calls use only user-owned keys and are cached; never log credentials.
 """
 from __future__ import annotations
 import re
+import socket
+import ssl
 import unicodedata
 import urllib.parse
 import urllib.request
@@ -20,17 +22,24 @@ from .run_limits import network_timeout, check_budget
 ENDPOINT="https://krdict.korean.go.kr/api/search"
 UA="TiengHanSoEasyStudio/1.2 (dictionary evidence)"
 MAX_XML_BYTES=512_000
+CACHE_VERSION=2
+
+class KRDictError(RuntimeError):
+    """A safe diagnostic; never includes the request URL or API key."""
+    def __init__(self,code,message):
+        self.code=code
+        super().__init__(message)
 
 def normalize_vi(text):
-    stripped=unicodedata.normalize("NFKD",str(text or "").casefold())
-    stripped="".join("d" if char=="đ" else char for char in stripped
-                     if not unicodedata.combining(char))
-    return re.sub(r"\s+"," ",re.sub(r"[^a-z0-9]+"," ",stripped)).strip()
+    # Vietnamese tones distinguish meanings (cá/cà, đắt/đặt). Never erase
+    # them when deciding whether dictionary evidence matches an answer.
+    text=unicodedata.normalize("NFC",str(text or "").casefold())
+    return re.sub(r"[\W_]+"," ",text).strip()
 
 def _tokens(value):
-    skips={"la","mot","cua","va","o","co","nhung","cho","tu","nao","tieng","han",
-           "day","duoc","de","voi","nhieu"}
-    return {v for v in normalize_vi(value).split() if len(v)>1 and v not in skips}
+    skips={"là","một","của","và","ở","có","những","cho","từ","nào","tiếng","hàn",
+           "đây","được","để","với","nhiều"}
+    return {v for v in normalize_vi(value).split() if v not in skips}
 
 def sense_overlap(vietnamese,translations):
     """Conservative lexical evidence; NOT a semantic equivalence classifier."""
@@ -51,10 +60,21 @@ def parse_search(xml_bytes,expected):
     if not isinstance(xml_bytes,bytes) or len(xml_bytes)>MAX_XML_BYTES:
         raise ValueError("KRDict response too large")
     try:root=ET.fromstring(xml_bytes)
-    except ET.ParseError as exc:raise ValueError("KRDict XML invalid") from exc
-    if root.tag=="error":
-        code=root.findtext("error_code","unknown")
-        raise RuntimeError("KRDict error "+str(code)+"; check key/quota")
+    except ET.ParseError:
+        raise KRDictError("invalid_response","KRDict trả dữ liệu không phải XML hợp lệ; kiểm tra proxy hoặc dịch vụ.") from None
+    # Handle both standalone errors and errors wrapped in an API response.
+    for node in root.iter():
+        if node.tag=="error_code":
+            code=(node.text or "").strip()
+            code=code if re.fullmatch(r"[A-Za-z0-9_-]{1,24}",code) else "unknown"
+            raise KRDictError("api_error","KRDict từ chối yêu cầu (mã "+code+
+                              "). Kiểm tra trạng thái key và hạn mức trên trang KRDict.")
+    if root.tag!="channel":
+        raise KRDictError("invalid_response","KRDict trả cấu trúc không hợp lệ; chưa thể xác nhận API key.")
+    try:
+        if int(root.findtext("total",""))<0:raise ValueError
+    except ValueError:
+        raise KRDictError("invalid_response","KRDict thiếu tổng số kết quả hợp lệ.") from None
     found=[]
     for entry in root.findall("./item"):
         word=(entry.findtext("word") or "").strip()
@@ -75,7 +95,7 @@ def parse_search(xml_bytes,expected):
                       "pos":(entry.findtext("pos") or "").strip(),
                       "meanings":meanings,
                       "link":(entry.findtext("link") or "").strip()})
-    return {"exact":bool(found),"entries":found[:5]}
+    return {"exact":bool(found),"entries":found}
 
 class KRDict:
     def __init__(self,store,transport=None):
@@ -85,7 +105,7 @@ class KRDict:
     def _request(self,word,key):
         query=urllib.parse.urlencode({
             "key":key,"q":word,"translated":"y","trans_lang":"7",
-            "part":"word","num":"10"})
+            "part":"word","num":"100"})
         req=urllib.request.Request(ENDPOINT+"?"+query,headers={"User-Agent":UA})
         try:
             if self.transport:
@@ -97,21 +117,46 @@ class KRDict:
                     raw=handle.read(MAX_XML_BYTES+1)
             return parse_search(raw,word)
         except urllib.error.HTTPError as exc:
-            raise RuntimeError("KRDict HTTP "+str(exc.code)+"; key/quota issue") from None
+            hint=("Kiểm tra key và quyền API." if exc.code in (401,403) else
+                  "Đã chạm giới hạn yêu cầu; thử lại sau." if exc.code==429 else
+                  "Kiểm tra trạng thái dịch vụ KRDict.")
+            raise KRDictError("http_error","KRDict HTTP "+str(exc.code)+". "+hint) from None
         except (urllib.error.URLError,TimeoutError) as exc:
-            raise RuntimeError("KRDict unavailable; try later") from None
+            reason=getattr(exc,"reason",exc)
+            if isinstance(reason,ssl.SSLError):
+                message="Không xác minh được TLS của KRDict. Kiểm tra chứng chỉ Windows/proxy; không tắt xác minh TLS."
+                code="tls_error"
+            elif isinstance(reason,(TimeoutError,socket.timeout)):
+                message="KRDict hết thời gian chờ. Kiểm tra mạng và thử lại."
+                code="timeout"
+            else:
+                message="Không kết nối được krdict.korean.go.kr. Kiểm tra DNS, proxy hoặc tường lửa."
+                code="network_error"
+            raise KRDictError(code,message) from None
 
-    def lookup(self,word):
+    def lookup(self,word,*,fresh=False):
         word=unicodedata.normalize("NFC",str(word).strip())
         if not 1<=len(word)<=60 or not re.search(r"[\uac00-\ud7a3]",word):
             return {"exact":False,"entries":[],"reason":"not_a_lexical_headword"}
         check_budget()
-        cached=self.store.krdict_cache_get(word)
-        if cached is not None:return {**cached,"cache_hit":True}
         keys=get_keys("krdict")
         if not keys:
             return {"exact":False,"entries":[],"reason":"key_missing"}
+        cached=None if fresh else self.store.krdict_cache_get(word)
+        if isinstance(cached,dict) and cached.get("cache_version")==CACHE_VERSION:
+            return {**cached,"cache_hit":True}
         # Do not rotate on rate-limit to evade provider's quota.
-        result=self._request(word,keys[0])
+        result={**self._request(word,keys[0]),"cache_version":CACHE_VERSION}
         self.store.krdict_cache_put(word,result)
         return {**result,"cache_hit":False}
+
+    def test_connection(self):
+        """Always authenticate against the service, even with a warm cache."""
+        result=self.lookup("물",fresh=True)
+        if result.get("reason")=="key_missing":
+            raise KRDictError("key_missing","Chưa nhập KRDict API key trong mục API & Model.")
+        vietnamese=any(entry.get("meanings") for entry in result["entries"])
+        return {"connected":True,"word":"물","entries":result["entries"][:2],
+                "has_vietnamese":vietnamese,"cache_hit":False,
+                "message":("KRDict đã nhận key và trả nghĩa tiếng Việt." if vietnamese else
+                           "KRDict đã nhận yêu cầu nhưng chưa trả nghĩa Việt cho mục từ thử; chưa đủ bằng chứng để QA strict.")}

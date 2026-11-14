@@ -40,7 +40,7 @@ def publish_reel(video_path,caption,title=""):
             with urllib.request.urlopen(req,timeout=900) as r: response=json.load(r)
         except (urllib.error.HTTPError,urllib.error.URLError) as exc:
             raise PublishingError("Upload uncertain; check Page before retry") from exc
-    if response.get("success") is False: raise PublishingError("Meta did not confirm upload")
+    if response.get("success") is not True: raise PublishingError("Meta did not confirm upload")
     finish=urllib.request.Request(base,data=form({"upload_phase":"finish","video_id":video_id,
         "video_state":"PUBLISHED","description":caption[:2000],
         "title":str(title)[:160]}))

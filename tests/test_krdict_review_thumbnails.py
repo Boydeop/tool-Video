@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from studio.krdict import parse_search,sense_overlap,KRDict
+from studio.krdict import parse_search,sense_overlap,KRDict,KRDictError
 from studio.review import verify_quiz,blind_review
 from studio.quiz import Quiz
 from studio.database import Store
@@ -56,7 +56,7 @@ class KRDictTests(unittest.TestCase):
         self.assertIn("nước",value["entries"][0]["meanings"])
         self.assertFalse(parse_search(XML,"불")["exact"])
         self.assertGreaterEqual(sense_overlap("Nước",["nước"]),1)
-        with self.assertRaises(ValueError):parse_search(b"not xml","물")
+        with self.assertRaises(KRDictError):parse_search(b"not xml","물")
     def test_transport_cache_and_no_key_in_history(self):
         with tempfile.TemporaryDirectory() as td:
             store=Store(Path(td)/"studio.sqlite3")

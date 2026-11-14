@@ -72,7 +72,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 <body>
 <div class="app">
 <aside class="sidebar">
- <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.2.1</small></div>
+ <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.2.2</small></div>
  <nav class="nav" aria-label="Điều hướng">
   <button data-nav="autopilot" class="active"><span class="num">1</span> Sản xuất tự động</button>
   <button data-nav="create"><span class="num">2</span> Tạo câu thủ công</button>
@@ -84,7 +84,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
  <div class="sidehelp"><b>Gợi ý bắt đầu</b><p>Nhập API key ở mục 4, rồi vào mục 1 chọn số video. Autopilot tạo nhiều chủ đề và kiểm tra cấu trúc trước khi xuất; nội dung AI vẫn cần kiểm tra độ chính xác.</p></div>
 </aside>
 <main class="content">
- <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.2.1</span></header>
+ <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.2.2</span></header>
  <div class="metrics">
   <div class="metric"><span class="name">Câu hỏi đã lưu</span><strong id="statQuestions">0</strong></div>
   <div class="metric"><span class="name">Câu đã duyệt</span><strong id="statApproved">0</strong></div>
@@ -335,7 +335,9 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
    </div>
    <div class="fieldrow"><div class="field"><label for="keyProvider">File chỉ có key thuộc dịch vụ nào?</label><select id="keyProvider"><option value="gemini">Gemini</option><option value="groq">Groq</option><option value="openrouter">OpenRouter</option><option value="krdict">KRDict Hàn–Việt</option></select></div></div>
    <div class="upload"><strong>📄 Chọn file .TXT chứa API key</strong><input id="txtFile" type="file" accept=".txt,text/plain"><small id="fileHint">Mỗi dòng một key. File tối đa 64 KB. Có thể chứa nhiều nhóm [gemini], [groq], [openrouter], [krdict].</small></div>
-   <div class="actions" style="margin-top:16px"><button class="btn" id="importFile">↑ Nhập key từ TXT</button><span class="note" style="margin:0">Key đã tồn tại sẽ không bị thêm trùng. Giữ nguyên các key khác.</span></div>
+   <label><input id="replaceImportedKeys" type="checkbox"> Thay bộ key của các dịch vụ có trong nội dung nhập (giữ các dịch vụ khác)</label>
+   <p class="note">KRDict dùng key đầu tiên trong bộ. Nếu key cũ đã hết hiệu lực, chọn thay bộ key rồi nhập key mới; thêm vào cuối bộ không đổi key đang dùng.</p>
+   <div class="actions" style="margin-top:16px"><button class="btn" id="importFile">↑ Nhập key từ TXT</button><span class="note" style="margin:0">Mặc định thêm key và loại trùng. Chỉ thay bộ key khi bạn bật tùy chọn phía trên.</span></div>
    <div class="actions" style="margin-top:12px">
      <button class="btn secondary small" id="testKrdict">🔎 Test KRDict bằng từ 물</button>
      <span class="note" id="krdictResult">Chọn KRDict và nhập key riêng của bạn. Không gửi key vào chat/GitHub.</span>
@@ -356,7 +358,7 @@ YOUR_GROQ_KEY
 YOUR_OPENROUTER_KEY
 
 [krdict]
-YOUR_32_HEX_DICTIONARY_KEY</div></details>
+YOUR_KRDICT_API_KEY</div></details>
    <p class="keynotice">File TXT được đọc trong trình duyệt trên máy bạn, sau đó gửi đến máy chủ cục bộ 127.0.0.1. Key được mã hóa bằng Windows DPAPI theo tài khoản Windows, không đưa lên GitHub. Không chia sẻ file TXT hoặc file lưu key.</p>
   </div>
   <div class="card" id="modelConfig">
@@ -417,7 +419,7 @@ YOUR_32_HEX_DICTIONARY_KEY</div></details>
   </div>
   <div class="card">
     <div class="sectiontitle"><h2>▶ YouTube Shorts · OAuth chính thức</h2><span class="pill" id="ytStatus">Chưa kết nối</span></div>
-    <p class="note">Tải file JSON OAuth Desktop client từ Google Cloud Console, không phải API key Gemini. Đăng nhập trình duyệt sẽ xin quyền <code>youtube.upload</code>. Shorts được nhận diện từ MP4 dọc 9:16; không có API Shorts riêng.</p>
+    <p class="note">Tải file JSON OAuth Desktop client từ Google Cloud Console, không phải API key Gemini. Đăng nhập trình duyệt sẽ xin quyền <code>youtube.upload</code> và <code>youtube.readonly</code>. Shorts được nhận diện từ MP4 dọc 9:16; không có API Shorts riêng.</p>
     <div class="fieldrow"><div class="field"><label for="ytClientFile">File OAuth Desktop client JSON</label>
       <input type="file" id="ytClientFile" accept="application/json,.json"></div>
       <button class="btn secondary" id="ytImport">Lưu OAuth client</button></div>
@@ -811,22 +813,27 @@ $("testVietnamese").addEventListener("click",()=>testVoice("vi"));
 $("testKorean").addEventListener("click",()=>testVoice("ko"));
 $("keyProvider").addEventListener("change",()=>{$("fileHint").textContent="File không ghi nhóm sẽ được nhập cho "+$("keyProvider").value+". File tối đa 64 KB."});
 $("txtFile").addEventListener("change",()=>{const f=$("txtFile").files[0];$("fileHint").textContent=f?"Đã chọn: "+f.name+" ("+Math.round(f.size/1024)+" KB)":"Chưa chọn file TXT."});
+async function readKeyFile(file){
+ const bytes=new Uint8Array(await file.arrayBuffer());
+ const encoding=bytes[0]===0xff&&bytes[1]===0xfe?"utf-16le":
+                bytes[0]===0xfe&&bytes[1]===0xff?"utf-16be":"utf-8";
+ return new TextDecoder(encoding,{fatal:true}).decode(bytes);
+}
 $("importFile").addEventListener("click",async()=>{
  const file=$("txtFile").files[0];
  if(!file){notice("Chọn file .txt trước khi nhập key.");return}
  if(!file.name.toLowerCase().endsWith(".txt")){notice("Chỉ hỗ trợ file .txt","error");return}
  if(file.size>65536){notice("File lớn hơn 64 KB. Hãy chia nhỏ file.","error");return}
- const text=await file.text();
- const result=await run(()=>api("/api/keys/import",{text:text,provider:$("keyProvider").value,replace:false}));
- if(result){await loadStatus();$("txtFile").value="";
-   notice("Nhập TXT thành công: "+Object.entries(result.imported).map(x=>x[0]+": "+x[1]+" key").join(", ")+". Đã loại key trùng.","success");
+ const result=await run(async()=>api("/api/keys/import",{text:await readKeyFile(file),provider:$("keyProvider").value,replace:$("replaceImportedKeys").checked}));
+ if(result){await loadStatus();$("txtFile").value="";$("replaceImportedKeys").checked=false;
+   notice((result.mode==="replace"?"Đã thay bộ key: ":"Đã thêm key: ")+Object.entries(result.imported).map(x=>x[0]+": "+x[1]+" key").join(", "),"success");
  }
 });
 $("saveManual").addEventListener("click",async()=>{
  const input=$("manualKeys");const text=input.value.trim();
  if(!text){notice("Nhập ít nhất một key hoặc chọn file TXT.");return}
- const result=await run(()=>api("/api/keys/import",{text:text,provider:$("keyProvider").value,replace:false}));
- if(result){input.value="";await loadStatus();notice("Đã lưu key vào máy của bạn.","success")}
+ const result=await run(()=>api("/api/keys/import",{text:text,provider:$("keyProvider").value,replace:$("replaceImportedKeys").checked}));
+ if(result){input.value="";$("replaceImportedKeys").checked=false;await loadStatus();notice(result.mode==="replace"?"Đã thay bộ key trên máy của bạn.":"Đã thêm key vào máy của bạn.","success")}
 });
 $("schedule").addEventListener("click",async()=>{
  const video=$("videoSelect").value,time=$("scheduledAt").value;
@@ -1386,7 +1393,7 @@ function updatePlatforms(){
  $("ytStatus").textContent=yt.connected?"Đã lưu OAuth":yt.oauth_status==="authorizing"?
       "Đang xác thực":yt.client_configured?"Đã nhập client JSON":"Chưa kết nối";
  $("ytInfo").textContent=yt.error||yt.note||
-                         "Yêu cầu Google OAuth quyền youtube.upload.";
+                         "Yêu cầu Google OAuth quyền youtube.upload và youtube.readonly.";
  $("igStatus").textContent=ig.connected?"Đã xác minh: "+(ig.username||ig.ig_id):"Chưa kết nối";
  $("igInfo").textContent=ig.note||"Cần Instagram Professional và URL video công khai";
  const rows=$("crossJobs");rows.replaceChildren();
@@ -1417,7 +1424,7 @@ $("ytConnect").addEventListener("click",async()=>{
  const result=await run(()=>api("/api/youtube/connect",{}));
  if(!result)return;
  state.youtube=result;updatePlatforms();
- notice("Google OAuth đang mở trong trình duyệt. Hoàn tất quyền youtube.upload.");
+ notice("Google OAuth đang mở trong trình duyệt. Hoàn tất quyền youtube.upload và youtube.readonly.");
  for(let i=0;i<120;i++){
    await new Promise(resolve=>setTimeout(resolve,1500));
    let info;
@@ -1486,13 +1493,14 @@ $("copyTikTokCaption").addEventListener("click",async()=>{
  catch(_){notice("Không truy cập được clipboard. Sao chép mô tả thủ công.","error")}
 });
 $("testKrdict").addEventListener("click",async()=>{
- const data=await run(()=>api("/api/krdict/test",{}));
+ $("krdictResult").textContent="Đang gọi trực tiếp KRDict để kiểm tra key và nghĩa Việt…";
+ const data=await run(async()=>{
+  try{return await api("/api/krdict/test",{})}
+  catch(err){$("krdictResult").textContent=err.message;throw err}
+ });
  if(!data)return;
- $("krdictResult").textContent=data.connected?
-   ("KRDict hoạt động · tìm thấy 물 · "+(data.entries[0]?.meanings||[]).slice(0,2).join(", ")):
-   "KRDict không tìm được mục từ thử. Kiểm tra lại API key.";
- notice(data.connected?"Đã kết nối từ điển KRDict":"KRDict chưa phản hồi đúng",
-        data.connected?"success":"error");
+ $("krdictResult").textContent=data.message;
+ notice(data.message,data.has_vietnamese?"success":"error");
 });
 $("bulkVerifyAI").addEventListener("click",async()=>{
  if(state.activeRender){notice("Không kiểm duyệt trong lúc đang render.","error");return}

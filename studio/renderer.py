@@ -179,11 +179,11 @@ def _logo_overlay(img,path,position="top-right",scale=.15,logo_x=0.82,logo_y=0.1
     if not path:return img
     p=Path(path)
     if not p.is_file():return img
-    with Image.open(p) as file:
-        logo=file.convert("RGBA")
     max_width=max(28,int(img.width*scale))
     native=img.width/540
-    logo.thumbnail((max_width,round(90*native)),Image.Resampling.LANCZOS)
+    stat=p.stat()
+    logo=_prepared_logo(str(p.resolve()),stat.st_mtime_ns,stat.st_size,
+                        max_width,round(90*native))
     margin=round(24*native)
     if position=="custom":
         # Coordinates are fractions of the available area (not absolute pixels).
@@ -195,6 +195,14 @@ def _logo_overlay(img,path,position="top-right",scale=.15,logo_x=0.82,logo_y=0.1
     result=img.convert("RGBA")
     result.alpha_composite(logo,(x,y))
     return result.convert("RGB")
+
+
+@lru_cache(maxsize=8)
+def _prepared_logo(path,modified,size,width,height):
+    with Image.open(path) as file:
+        logo=file.convert("RGBA")
+    logo.thumbnail((width,height),Image.Resampling.LANCZOS)
+    return logo
 
 
 @lru_cache(maxsize=4)
@@ -430,11 +438,11 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
     target=Path(destination).resolve()
     target.parent.mkdir(parents=True,exist_ok=True)
     cache=Path(voice_cache or target.parent/".voice_cache")
-    cache.mkdir(parents=True,exist_ok=True)
 
     # Only TTS input tells us real speech length. A silent preview uses a
     # brief fixed 'reading' stage followed by the same full countdown.
     if with_voice:
+        cache.mkdir(parents=True,exist_ok=True)
         voice_events,scenes=prepare_events(
             questions,cache,think,reveal,engine=voice_engine,
             intro=intro,transition=transition,fps=fps,return_scenes=True,
@@ -444,8 +452,10 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
         voice_events=[]
     report(22,"Chuẩn bị khung hình và âm thanh")
     duration=timeline_duration(scenes)
-    with tempfile.TemporaryDirectory(prefix="thse_render_") as td:
+    # Keep staging on the destination filesystem for an atomic final rename.
+    with tempfile.TemporaryDirectory(prefix=".thse_render_",dir=target.parent) as td:
         folder=Path(td)
+        staged=folder/"final.mp4"
         events=list(voice_events)
         if sfx:
             track=build_sfx(folder/"sfx.wav",len(questions),think,reveal,
@@ -462,13 +472,13 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
             frames_total=int(round(scenes[0].start*fps))+sum(int(round(scene.duration*fps)) for scene in scenes)
             frames_done=0
             step=max(1,frames_total//75)
+            video_topic=questions[0].topic if len({q.topic for q in questions})==1 else "Tổng hợp tiếng Hàn"
+            video_level=questions[0].level if len({q.level for q in questions})==1 else "TOPIK MIX"
+            intro_bytes=draw_intro(theme,width,logo_path,logo_position,logo_scale,
+                                  logo_x=logo_x,logo_y=logo_y,shorts_safe=shorts_safe,
+                                  topic=video_topic,level=video_level).tobytes()
             for tick in range(int(round(scenes[0].start*fps))):
-                video_topic=questions[0].topic if len({q.topic for q in questions})==1 else "Tổng hợp tiếng Hàn"
-                video_level=questions[0].level if len({q.level for q in questions})==1 else "TOPIK MIX"
-                im=draw_intro(theme,width,logo_path,logo_position,logo_scale,
-                              logo_x=logo_x,logo_y=logo_y,shorts_safe=shorts_safe,
-                              topic=video_topic,level=video_level)
-                proc.stdin.write(im.tobytes())
+                proc.stdin.write(intro_bytes)
                 frames_done+=1
                 if frames_done%step==0:report(24+65*frames_done/frames_total,"Đang vẽ khung video")
             for i,(q,scene) in enumerate(zip(questions,scenes),1):
@@ -496,7 +506,7 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
             proc.stderr.close()
         report(90,"Đang ghép âm thanh")
         if events:
-            mux_narration(silent,events,target,duration)
+            mux_narration(silent,events,staged,duration)
         else:
             # Even silent export must contain an AAC stereo stream for Reels.
             command=[binary("ffmpeg"),"-hide_banner","-loglevel","error","-y",
@@ -504,11 +514,12 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
                     "anullsrc=channel_layout=stereo:sample_rate=48000",
                     "-map","0:v:0","-map","1:a:0","-c:v","copy",
                     "-c:a","aac","-b:a","128k","-t",f"{duration:.4f}",
-                    "-movflags","+faststart",str(target)]
+                    "-movflags","+faststart",str(staged)]
             result=subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                                   timeout=max(90,int(duration*10)),check=False,**hidden_subprocess())
             if result.returncode:
                 raise RuntimeError("Silent AAC mux failed: "+
                                    result.stderr.decode("utf-8","replace")[-500:])
+        staged.replace(target)
         report(98,"Đã dựng MP4, đang ghi metadata")
     return str(target)

@@ -30,9 +30,12 @@ class CacheManager:
                     yield candidate
 
     def stats(self):
-        items=list(self._files())
-        size=sum(p.stat().st_size for p in items)
-        return {"files":len(items),"bytes":size,"mb":round(size/1048576,2),
+        count=size=0
+        for path in self._files():
+            try:length=path.stat().st_size
+            except FileNotFoundError:continue  # TTS atomically replaced a working file.
+            count+=1;size+=length
+        return {"files":count,"bytes":size,"mb":round(size/1048576,2),
                 "directory":str(self.folder)}
 
     def clear(self,older_than_days=0,dry_run=True):

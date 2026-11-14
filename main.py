@@ -27,6 +27,7 @@ def main():
         from studio.webapp import serve
         serve(service);return
     if args.command=="worker":
+        service.store.recover_incomplete_runs()
         Scheduler(service.store).run();return
     if args.command=="daily": result=service.daily(count=args.count)
     elif args.command=="generate": result=service.generate(args.topic,args.level,args.count)

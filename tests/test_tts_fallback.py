@@ -66,7 +66,7 @@ class VoiceFallbackTests(unittest.TestCase):
                     path.parent.mkdir(parents=True,exist_ok=True)
                     path.write_bytes(b"FAKEAUDIO"*32)
                     return path
-                with patch("studio.webapp.test_speech",side_effect=fake_test):
+                with patch("studio.voice.test_speech",side_effect=fake_test):
                     req=urllib.request.Request(base+"/api/voice/test",
                         data=json.dumps({"language":"ko","engine":"auto"}).encode(),
                         headers={"Content-Type":"application/json"},method="POST")

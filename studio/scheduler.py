@@ -30,14 +30,19 @@ class Scheduler:
                 else:
                     raise RuntimeError("Unknown outbound platform")
                 self.store.finish_outbound(job["id"],"submitted",remote_id=remote)
-                if job["platform"]=="youtube":
-                    self.store.enqueue_youtube_thumbnail(job["video_path"],remote)
-                self.store.log("platform_submitted",job["platform"]+" "+job["id"])
             except Exception as exc:
                 # It is unsafe to repeat an uncertain remote upload automatically.
                 self.store.finish_outbound(job["id"],"needs_review",
                                            error=type(exc).__name__+": "+str(exc)[:500])
                 self.store.log("platform_needs_review",job["platform"]+" "+job["id"])
+                continue
+            self.store.log("platform_submitted",job["platform"]+" "+job["id"])
+            if job["platform"]=="youtube":
+                try:
+                    self.store.enqueue_youtube_thumbnail(job["video_path"],remote)
+                except Exception as exc:
+                    # A local thumbnail problem must not relabel a confirmed upload.
+                    self.store.log("thumbnail_enqueue_error",type(exc).__name__)
         # Separate from MP4 upload. A failed cover image never uploads the
         # same video twice. YouTube Shorts allow thumbnails after processing.
         for thumbnail in self.store.claim_youtube_thumbnails(limit=1):

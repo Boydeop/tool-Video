@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 import uuid
+import threading
+from functools import wraps
 
 from .ai import fallback
 from .database import DuplicateQuestion,Store
@@ -15,10 +17,23 @@ from .renderer import render,draw_frame
 from .naming import video_name
 from .cache_manager import CacheManager
 
+def media_operation(method):
+    """Exclude cleanup/metadata/preview while media files are being written."""
+    @wraps(method)
+    def guarded(self,*args,**kwargs):
+        if not self._media_lock.acquire(blocking=False):
+            raise ValueError("Đang xử lý video hoặc giọng đọc. Hãy chờ tác vụ hiện tại hoàn thành.")
+        try:
+            return method(self,*args,**kwargs)
+        finally:
+            self._media_lock.release()
+    return guarded
+
 class Service:
     def __init__(self,root="data"):
         self.root=Path(root).resolve()
         self.root.mkdir(parents=True,exist_ok=True)
+        self._media_lock=threading.RLock()
         os.environ["THSE_KEYS_FILE"]=str(self.root/"keys.local.json")
         os.environ["THSE_MODELS_FILE"]=str(self.root/"models.local.json")
         os.environ["THSE_FACEBOOK_PATH"]=str(self.root/"facebook.local.json")
@@ -77,11 +92,7 @@ class Service:
         if not isinstance(limit,int) or not 1<=limit<=12:
             raise ValueError("Chỉ kiểm tra tối đa 12 câu mỗi lượt")
         # Also re-verify pre-v1.2 auto-approved questions lacking an audit.
-        drafts=[row for row in self.store.list_questions(limit=100)
-                if row.get("provider")!="manual" and
-                   (row["status"]=="draft" or
-                    (row["status"]=="auto_approved" and
-                     row.get("qa_outcome") in ("not_checked","stale")))]
+        drafts=self.store.pending_verification(limit)
         results=[]
         for row in drafts[:limit]:
             try:results.append(self.verify_generated(row["id"],mode))
@@ -147,6 +158,7 @@ class Service:
             raise ValueError("Thumbnail chưa được tạo cho MP4 này")
         return thumb
 
+    @media_operation
     def generate_legacy_thumbnails(self,limit=20,theme="hanji"):
         from .thumbnails import ensure_thumbnail,thumbnail_path
         if not 1<=int(limit)<=20:raise ValueError("Tối đa 20 video")
@@ -170,6 +182,7 @@ class Service:
                 results["errors"].append({"video":name,"reason":type(exc).__name__})
         return results
 
+    @media_operation
     def render_approved(self,ids,theme="hanji",filename=None,width=None,
                         with_voice=False,voice_engine="auto",progress=None):
         questions=self.store.get_questions(ids,status=("approved","auto_approved"))
@@ -228,6 +241,7 @@ class Service:
         im.save(buf,format="PNG")
         return buf.getvalue()
 
+    @media_operation
     def preview_motion(self,question_id,theme="hanji",with_voice=False,voice_engine="auto"):
         questions=self.store.get_questions([question_id])
         cfg=self.production.settings()
@@ -311,6 +325,7 @@ class Service:
         from .metadata import inspect_metadata
         return inspect_metadata(self.video_path(name))
 
+    @media_operation
     def repair_legacy_video_metadata(self,limit=20):
         """One-click repair for older outputs; skip scheduled videos."""
         from .metadata import inspect_metadata,overwrite_metadata
@@ -337,6 +352,7 @@ class Service:
                 result["errors"].append({"video":name,"reason":str(exc)[:180]})
         return result
 
+    @media_operation
     def overwrite_video_metadata(self,name):
         from .metadata import overwrite_metadata
         path=self.video_path(name)
@@ -355,6 +371,7 @@ class Service:
                 "mb":round((media["bytes"]+samples["bytes"])/1048576,2),
                 "media":media,"voice_samples":samples}
 
+    @media_operation
     def clear_cache(self,days=0):
         if not isinstance(days,int):raise ValueError("Invalid retention setting")
         media=CacheManager(self.production.settings()["cache_dir"]).clear(
@@ -365,6 +382,15 @@ class Service:
                 "freed_mb":round((media["bytes"]+samples["bytes"])/1048576,2),
                 "errors":media["errors"]+samples["errors"],
                 "remaining":self.cache_stats()}
+
+    @media_operation
+    def test_voice(self,language,engine):
+        from .voice import test_speech
+        return test_speech(language,engine,self.root/"tts_samples")
+
+    @media_operation
+    def set_logo(self,content):
+        return self.production.set_logo(content)
 
     def auto_seo_for_video(self,path):
         """Generate optional AI metadata; never lose rendered MP4 if the AI fails."""

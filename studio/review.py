@@ -13,7 +13,7 @@ import re
 from .ai import post,ProviderError
 from .models import get_model
 from .keys import next_key,get_keys
-from .krdict import KRDict,normalize_vi,sense_overlap
+from .krdict import KRDict,KRDictError,sense_overlap
 from .quality import inspect_quiz
 from .run_limits import (check_budget, budget_active, BudgetExpired, RunCancelled)
 
@@ -93,6 +93,8 @@ def blind_review(quiz,generation_provider="",call=None):
                     "ambiguous":ambiguous,
                     "conflicting_choices":[x for x in other if x in options][:4],
                     "reason":str(answer.get("reason",""))[:160]}
+        except (BudgetExpired,RunCancelled):
+            raise
         except (RuntimeError,ValueError,KeyError,TypeError) as exc:
             errors.append(provider+": "+type(exc).__name__)
     return {"available":False,"reason":"Không có AI reviewer trả kết quả hợp lệ",
@@ -112,8 +114,12 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
     dict_client=dictionary or KRDict(store)
     # Only standalone lexical words are directly certifiable by dictionary.
     entries={}
+    dictionary_failure=None
     for word in (quiz.correct,quiz.wrong1,quiz.wrong2,quiz.wrong3):
         check_budget()
+        if dictionary_failure is not None:
+            entries[word]=dict(dictionary_failure)
+            continue
         try:
             data=dict_client.lookup(word)
             exact=data.get("exact",False)
@@ -122,14 +128,22 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
                            "headword_codes":[x.get("target_code","") for x in data.get("entries",[])][:5],
                            "match_to_clue":sense_overlap(quiz.short_clue,meanings),
                            "source":"KRDict","reason":data.get("reason","")}
+            if data.get("reason")=="key_missing":dictionary_failure=entries[word]
         except (BudgetExpired,RunCancelled):
             raise
         except Exception as exc:
             entries[word]={"exact":False,"translations":[],
-                           "match_to_clue":0,"reason":type(exc).__name__,
+                           "match_to_clue":0,
+                           "reason":exc.code if isinstance(exc,KRDictError) else type(exc).__name__,
+                           "message":str(exc) if isinstance(exc,KRDictError) else "Lỗi xử lý từ điển",
                            "source":"KRDict"}
+            if isinstance(exc,KRDictError):dictionary_failure=entries[word]
     report["dictionary"]=entries
     answer=entries[quiz.correct]
+    if answer.get("message"):
+        report["issues"].append(answer["message"])
+    elif answer.get("reason")=="key_missing":
+        report["issues"].append("Chưa nhập KRDict API key trong mục API & Model")
     if not answer["exact"]:
         report["issues"].append("KRDict không tìm được nguyên mục từ của đáp án đúng")
     elif not answer["translations"]:
@@ -138,13 +152,16 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
         report["issues"].append("Nghĩa KRDict chưa đủ trùng với cụm hỏi tiếng Việt")
     for word in (quiz.wrong1,quiz.wrong2,quiz.wrong3):
         item=entries[word]
+        if mode=="strict" and (not item["exact"] or not item["translations"]):
+            report["issues"].append("Chưa đủ bằng chứng KRDict cho đáp án nhiễu: "+word)
         if item["exact"] and item["match_to_clue"]>=0.7:
             report["issues"].append("Đáp án nhiễu có thể cũng đúng: "+word)
     # Strict mode can never approve a word with no dictionary evidence or
     # a distractor also matching the clue. Avoid long, futile AI requests.
     if mode=="strict" and (not answer["exact"] or
            not answer["translations"] or answer["match_to_clue"]<0.6 or
-           any("Đáp án nhiễu" in issue for issue in report["issues"])):
+           any("Đáp án nhiễu" in issue or "bằng chứng KRDict" in issue
+               for issue in report["issues"])):
         report["tier"]="needs_review"
         report["reviewer"]={"available":False,"reason":"Skipped: dictionary gate failed"}
         return report

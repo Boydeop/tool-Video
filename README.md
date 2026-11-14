@@ -327,7 +327,7 @@ upload failures are marked \`needs_review\` and never blindly retried.
 | Nền tảng | Kết nối và xuất bản | Yêu cầu |
 | --- | --- | --- |
 | Facebook Page | Page Reels API như cũ | Page ID, Page Access Token, các quyền phù hợp |
-| YouTube Shorts | OAuth Desktop client JSON, Google youtube.upload, resumable videos.insert | Google Cloud project & consent, quota; mặc định Private |
+| YouTube Shorts | OAuth Desktop client JSON, Google youtube.upload + youtube.readonly, resumable videos.insert | Google Cloud project & consent, quota; mặc định Private |
 | Instagram Reels | Graph API Professional, xử lý container rồi media_publish | IG User ID/token và URL MP4 HTTPS công khai có thể tải từ Meta |
 | TikTok | Sẵn MP4 và sao chép caption để đăng thủ công | Direct Post public yêu cầu audit và user consent; bản cá nhân không bypass |
 
@@ -405,7 +405,7 @@ invalidates its prior AI approval.
 1. Get a key from the official Korean Basic Dictionary:
    https://krdict.korean.go.kr/vie/openApi/openApiInfo
 2. In **API & Model**, select provider **KRDict**, import a TXT containing
-   the 32-hex key (or use `[krdict]` section in a combined TXT), then
+   the key issued by KRDict (the app treats it as an opaque credential) (or use `[krdict]` section in a combined TXT), then
    click **Test KRDict**. The key is protected by user-local DPAPI on Windows.
 3. In **Sản xuất tự động**, leave **strict** selected for KRDict Vietnamese
    dictionary evidence + a blind reverse-answering AI reviewer; switch to
@@ -483,3 +483,17 @@ selected AI model and Vietnamese TTS before a larger batch.
 4. Install the new EXE and verify the stored outputs in **Ngân hàng & video**.
 5. Import/check KRDict key, select a working AI text model and test one
    small Autopilot run. Generated drafts and completed videos are preserved.
+
+## v1.2.2 · KRDict Windows audit và sửa tích hợp
+
+Báo cáo chi tiết: [AUDIT_V122.md](AUDIT_V122.md).
+
+- Nhập key từ TXT UTF-8/UTF-16 Windows, nhận chuỗi key có dấu nháy bao ngoài;
+  thêm tùy chọn **Thay bộ key** để đổi key KRDict cũ ở đầu bộ.
+- Test KRDict gọi API trực tiếp, phân biệt thiếu key, lỗi API/mạng/TLS và thiếu nghĩa Việt.
+- Không ghi đè kho key hỏng; giữ dấu tiếng Việt khi so nghĩa; strict QA yêu cầu bằng chứng
+  cho cả đáp án nhiễu. Sửa xuất câu auto_approved và bảo vệ thao tác media/cache.
+- YouTube cần kết nối OAuth lại để cấp thêm youtube.readonly cho kiểm tra xử lý video.
+- Release EXE dùng tag theo build và đúng commit. Đóng EXE cũ trước khi mở bản mới.
+
+Các kiểm thử offline không thay thế kiểm chứng với key KRDict thật trên máy Windows.

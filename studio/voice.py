@@ -13,6 +13,7 @@ import subprocess
 import time
 
 from .fftools import binary, hidden_subprocess
+from .run_limits import check_budget,network_timeout,BudgetExpired,RunCancelled
 
 LOGGER=logging.getLogger("tienghansoeasy.voice")
 VOICES={
@@ -46,7 +47,8 @@ def check_engine(engine):
 
 async def _speak_edge(text,voice,target):
     import edge_tts
-    await edge_tts.Communicate(text,voice).save(str(target))
+    await asyncio.wait_for(edge_tts.Communicate(text,voice).save(str(target)),
+                           timeout=network_timeout(20,25))
 
 def _speak_google(text,language,target):
     from gtts import gTTS
@@ -78,6 +80,7 @@ def synthesize(text,voice,cache_dir,engine="auto"):
             # Retry transient Edge NoAudioReceived, then try next voice/provider.
             tries=2 if provider=="edge" else 1
             for attempt in range(tries):
+                check_budget()
                 tmp=cache/(digest+".working.mp3")
                 tmp.unlink(missing_ok=True)
                 try:
@@ -90,6 +93,9 @@ def synthesize(text,voice,cache_dir,engine="auto"):
                     tmp.replace(target)
                     LOGGER.info("TTS generated via %s for %s (%s bytes)",provider,language,target.stat().st_size)
                     return target
+                except (BudgetExpired,RunCancelled):
+                    tmp.unlink(missing_ok=True)
+                    raise
                 except Exception as exc:
                     tmp.unlink(missing_ok=True)
                     # Never log text or complete URL; error type is enough.

@@ -1,7 +1,7 @@
 """Official YouTube Data API upload with a user's own OAuth desktop client.
 
 Setup needs a Google Cloud OAuth Desktop client JSON, *not* a Gemini API key.
-The app requests only youtube.upload scope. No impersonation or scraping.
+Upload/thumbnail writes use youtube.upload; processing status uses youtube.readonly.
 """
 from __future__ import annotations
 import json
@@ -12,6 +12,7 @@ import threading
 from .facebook import _protect,_unprotect
 
 SCOPE="https://www.googleapis.com/auth/youtube.upload"
+SCOPES=[SCOPE,"https://www.googleapis.com/auth/youtube.readonly"]
 
 class YouTubeAccount:
     def __init__(self,root):
@@ -57,7 +58,7 @@ class YouTubeAccount:
             return {"client_configured":self.client_path.is_file(),
                     "connected":self.token_path.is_file(),
                     "oauth_status":self._status,"error":self._error,
-                    "note":"Yêu cầu OAuth quyền youtube.upload; API upload phụ thuộc hạn mức/xác minh Google."}
+                    "note":"Yêu cầu OAuth youtube.upload + youtube.readonly để theo dõi xử lý video. Tài khoản đã kết nối ở bản cũ cần đăng nhập lại."}
 
     def connect_start(self):
         with self._lock:
@@ -73,7 +74,7 @@ class YouTubeAccount:
         try:
             from google_auth_oauthlib.flow import InstalledAppFlow
             config=self._load_private(self.client_path)
-            flow=InstalledAppFlow.from_client_config(config,scopes=[SCOPE])
+            flow=InstalledAppFlow.from_client_config(config,scopes=SCOPES)
             creds=flow.run_local_server(host="127.0.0.1",port=0,open_browser=True,
                  authorization_prompt_message="",success_message="Đã kết nối YouTube. Có thể đóng tab.")
             if not creds.refresh_token:
@@ -98,7 +99,11 @@ class YouTubeAccount:
         from google.auth.transport.requests import Request
         token=self._load_private(self.token_path)
         if not token:raise ValueError("Chưa kết nối YouTube.")
-        creds=Credentials.from_authorized_user_info(token,scopes=[SCOPE])
+        granted=token.get("scopes") or []
+        if isinstance(granted,str):granted=granted.split()
+        if not set(SCOPES).issubset(granted):
+            raise ValueError("Kết nối lại YouTube để cấp youtube.upload và youtube.readonly cho kiểm tra xử lý video/thumbnail.")
+        creds=Credentials.from_authorized_user_info(token,scopes=SCOPES)
         if not creds.valid:
             if not creds.refresh_token:raise ValueError("YouTube OAuth đã hết hạn. Kết nối lại.")
             creds.refresh(Request())

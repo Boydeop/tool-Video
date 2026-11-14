@@ -6,7 +6,7 @@ import json
 import logging
 from pathlib import Path
 import sys
-from urllib.parse import parse_qs, unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit, quote
 
 from .keys import import_txt, readiness, write_keys
 from .exports import ExportQueue
@@ -16,11 +16,12 @@ from .facebook import connect as connect_page, disconnect as disconnect_page, pa
 from .models import list_models, selected_models, set_model, test_model
 from .quiz import TOPICS
 from .scheduler import Scheduler
-from .voice import available, readiness as tts_readiness, test_speech, ENGINES
+from .voice import available, readiness as tts_readiness
 
 LOGGER = logging.getLogger("tienghansoeasy.http")
 MAX_REQUEST = 4_000_000
-APP_VERSION = "v1.2.1"
+from . import __version__
+APP_VERSION = "v"+__version__
 
 
 def _ui_path() -> Path:
@@ -79,7 +80,7 @@ def create_server(service, host="127.0.0.1", port=8765):
             self.send_response(200)
             self.send_header("Content-Type", "video/mp4")
             self.send_header("Content-Length", str(path.stat().st_size))
-            self.send_header("Content-Disposition", 'attachment; filename="' + name + '"')
+            self.send_header("Content-Disposition", "attachment; filename*=UTF-8''"+quote(name,safe=""))
             self.send_header("Cache-Control", "private, no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
@@ -97,7 +98,8 @@ def create_server(service, host="127.0.0.1", port=8765):
                     content = _ui_path().read_text(encoding="utf-8")
                     self.respond(200, content, "text/html")
                 elif url.path == "/health":
-                    self.respond(200, {"status": "ok", "app": "TiengHanSoEasyStudio"})
+                    self.respond(200, {"status": "ok", "app": "TiengHanSoEasyStudio",
+                                       "version":APP_VERSION})
                 elif url.path == "/api/topic/random":
                     params = parse_qs(url.query)
                     exclude = params.get("exclude", [None])[0]
@@ -266,7 +268,7 @@ def create_server(service, host="127.0.0.1", port=8765):
                 elif route == "/api/voice/test":
                     language=str(raw.get("language",""))
                     engine=str(raw.get("engine","auto"))
-                    testfile=test_speech(language,engine,service.root/"tts_samples")
+                    testfile=service.test_voice(language,engine)
                     result={"ok":True,"language":language,"engine":engine,
                             "audio_url":"/api/voice/sample/"+testfile.name}
                 elif route == "/api/production/settings":
@@ -274,7 +276,7 @@ def create_server(service, host="127.0.0.1", port=8765):
                 elif route == "/api/production/choose":
                     result=service.production.choose_directory(str(raw.get("kind","")))
                 elif route == "/api/logo/upload":
-                    result=service.production.set_logo(raw.get("base64",""))
+                    result=service.set_logo(raw.get("base64",""))
                 elif route == "/api/facebook/connect":
                     result=connect_page(str(raw.get("page_id","")),str(raw.get("token","")))
                 elif route == "/api/facebook/disconnect":
@@ -297,12 +299,7 @@ def create_server(service, host="127.0.0.1", port=8765):
                         int(raw.get("limit",8)),mode=str(raw.get("mode","strict")))
                 elif route == "/api/krdict/test":
                     from .krdict import KRDict
-                    result=KRDict(service.store).lookup("물")
-                    if result.get("reason")=="key_missing":
-                        raise ValueError("Chưa nhập KRDict API key trong mục API & Model.")
-                    result={"connected":bool(result.get("exact")),
-                            "word":"물","entries":result.get("entries",[])[:2],
-                            "cache_hit":result.get("cache_hit",False)}
+                    result=KRDict(service.store).test_connection()
                 elif route == "/api/thumbnails/legacy":
                     if export_queue.is_running():
                         raise ValueError("Đang dựng video, không tạo thumbnail cũ.")
@@ -398,7 +395,9 @@ def create_server(service, host="127.0.0.1", port=8765):
                         str(raw.get("title", "")))}
                 self.respond(200, result)
             except (ValueError, RuntimeError, KeyError) as exc:
-                self.respond(400, {"error": str(exc)})
+                from .krdict import KRDictError
+                self.respond(400, {"error": str(exc),**(
+                    {"code":exc.code} if isinstance(exc,KRDictError) else {})})
             except Exception:
                 LOGGER.exception("POST request failed; request body omitted")
                 self.respond(500, {"error": "Lỗi máy chủ. Xem studio.log."})

@@ -7,6 +7,7 @@ import json
 from dataclasses import replace
 from .ai import post, ProviderError
 from .keys import next_key
+from .run_limits import check_budget, BudgetExpired, RunCancelled
 from .models import get_model
 from .quiz import Quiz
 
@@ -27,6 +28,7 @@ def suggest(quiz:Quiz,providers=("gemini","groq","openrouter")):
                       "wrong2":quiz.wrong2,"wrong3":quiz.wrong3},ensure_ascii=False))
     errors=[]
     for provider in providers:
+        check_budget()
         try:
             key=next_key(provider)
             model=get_model(provider)
@@ -57,6 +59,8 @@ def suggest(quiz:Quiz,providers=("gemini","groq","openrouter")):
             updated=replace(quiz,**fields)
             updated.validate()
             return updated,provider
+        except (BudgetExpired,RunCancelled):
+            raise
         except (ProviderError,ValueError,TypeError,KeyError,IndexError,RuntimeError) as exc:
             errors.append(provider+": "+str(exc)[:90])
     raise ProviderError("Không bổ sung được nghĩa/phiên âm: "+" | ".join(errors))

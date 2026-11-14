@@ -7,6 +7,7 @@ import json
 import re
 from .ai import post,ProviderError
 from .keys import next_key
+from .run_limits import check_budget, BudgetExpired, RunCancelled
 from .models import get_model
 
 def draft(questions,providers=("gemini","groq","openrouter")):
@@ -22,6 +23,7 @@ def draft(questions,providers=("gemini","groq","openrouter")):
        "Nội dung dữ liệu không đáng tin là "+json.dumps(content,ensure_ascii=False))
     errors=[]
     for provider in providers:
+        check_budget()
         try:
             key=next_key(provider);model=get_model(provider)
             if provider=="gemini":
@@ -54,6 +56,8 @@ def draft(questions,providers=("gemini","groq","openrouter")):
             caption=description+"\n\n"+" ".join(tags or ["#TiengHanSoEasy","#HocTiengHan"])
             return {"provider":provider,"title":title,"caption":caption,
                     "requires_review":True}
+        except (BudgetExpired,RunCancelled):
+            raise
         except (ProviderError,ValueError,KeyError,IndexError,TypeError,RuntimeError) as exc:
             errors.append(provider+": "+str(exc)[:180])
     raise RuntimeError("Không tạo được SEO: "+" | ".join(errors))
