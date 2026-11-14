@@ -129,7 +129,7 @@ class DurableBatchTests(unittest.TestCase):
             self.assertEqual(len(service.list_videos()),2)
             for video in result['videos']:
                 info=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_format',
-                    '-show_streams','-of','json',video],text=True,timeout=20))
+                    '-show_streams','-of','json',video],text=True,encoding='utf-8',timeout=20))
                 self.assertGreater(float(info['format']['duration']),5)
                 self.assertTrue(any(s['codec_type']=='video' and s['width']==540 for s in info['streams']))
                 self.assertEqual(info['format']['tags']['artist'],'Tiếng Hàn So Easy')
