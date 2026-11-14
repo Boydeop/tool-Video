@@ -118,7 +118,7 @@ class QueueCancelTests(unittest.TestCase):
                     if data["status"]=="cancelled":break
                     time.sleep(.01)
             self.assertEqual(data["status"],"cancelled")
-            self.assertEqual(data["videos"],[str(video)])
+            self.assertEqual(data["videos"],[str(video.resolve())])
             self.assertEqual(video.read_bytes(),b"KEEP_THIS_MP4")
             self.assertGreaterEqual(data["elapsed_seconds"],0)
             self.assertGreaterEqual(data["phase_elapsed_seconds"],0)
