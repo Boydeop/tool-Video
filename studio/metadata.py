@@ -45,8 +45,10 @@ def _mp4_tag_layout(path):
     # This is a compatibility hint, not a formal parser or proof of ownership.
     with open(path,"rb") as stream:
         beginning=stream.read(8*1024*1024)
-    if b"ilst" in beginning:return "ilst"
+    # FFmpeg writes an ilst wrapper for both conventions. The handler
+    # 'mdta' distinguishes legacy key/value atoms from standard 'mdir' ilst.
     if b"mdta" in beginning:return "mdta"
+    if b"ilst" in beginning:return "ilst"
     return "unknown"
 
 def inspect_metadata(filename):
