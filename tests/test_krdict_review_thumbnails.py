@@ -103,6 +103,21 @@ class QAReviewTests(unittest.TestCase):
             result=verify_quiz(quiz(),store,dictionary=FakeDictionary(),reviewer=wrong)
             self.assertIn("Hỏi ngược không chọn đáp án gốc",result["issues"])
             self.assertEqual(result["outcome"],"needs_review")
+    def test_legacy_auto_approved_without_qa_can_be_rechecked(self):
+        with tempfile.TemporaryDirectory() as td:
+            service=Service(td)
+            qid=service.store.insert_question(quiz(),provider="gemini")
+            service.store.auto_approve([qid])  # Pre-v1.2 state without QA.
+            self.assertEqual(service.store.get_question_qa(qid)["outcome"],"not_checked")
+            def verify(qid,mode="strict"):
+                service.store.set_question_qa(qid,"verified",
+                    {"tier":"dictionary+blind_ai","issues":[]})
+                return {"id":qid,"status":"verified","issues":[]}
+            service.verify_generated=verify
+            out=service.verify_pending_questions(limit=8)
+            self.assertEqual(out["verified"],1)
+            self.assertEqual(service.store.list_questions()[0]["qa_outcome"],"verified")
+
     def test_qa_outcome_independent_from_render_status(self):
         with tempfile.TemporaryDirectory() as td:
             store=Store(Path(td)/"test.sqlite3")

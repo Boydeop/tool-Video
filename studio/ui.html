@@ -606,7 +606,8 @@ function renderQuestions(){
        q.qa_outcome==="needs_review"?"AI tạo · Cần kiểm chứng":
        q.qa_outcome==="unavailable"?"AI tạo · API kiểm chứng lỗi":
        q.qa_outcome==="stale"?"Đã chỉnh sửa · Cần kiểm chứng":"AI tạo · Chưa kiểm chứng",
-       approved:"Đã duyệt tay",auto_approved:"AI kiểm chứng · Chưa xuất",
+       approved:"Đã duyệt tay",auto_approved:q.qa_outcome==="verified"?"AI kiểm chứng · Chưa xuất":
+         "Máy cũ · Chưa kiểm chứng",
        rendered:"Đã xuất video",rejected:"Đã từ chối"};
    status.append(make("span",labels[q.status]||q.status,"status "+q.status));
    const reason=(q.qa_report?.issues||q.qa_report?.structural_issues||[]).slice(0,2).join("; ");
@@ -1517,7 +1518,8 @@ async function loadStatus(){
  $("statApproved").textContent=state.questions.filter(q=>q.status==="approved"||
                         q.status==="auto_approved").length;
  $("statVideos").textContent=state.videos.length;
- $("statKeys").textContent=Object.values(state.providers).reduce((sum,p)=>sum+(p.keys||0),0);
+ $("statKeys").textContent=["gemini","groq","openrouter"].reduce(
+   (sum,p)=>sum+(state.providers[p]?.keys||0),0);
  for(const p of ["gemini","groq","openrouter","krdict"]){
    $("key"+p.charAt(0).toUpperCase()+p.slice(1)).textContent=(state.providers[p]||{}).keys||0;
  }

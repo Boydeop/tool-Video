@@ -72,8 +72,12 @@ class Service:
     def verify_pending_questions(self,limit=8,mode="strict"):
         if not isinstance(limit,int) or not 1<=limit<=12:
             raise ValueError("Chỉ kiểm tra tối đa 12 câu mỗi lượt")
-        drafts=[row for row in self.store.list_questions(status="draft",limit=100)
-                if row.get("provider")!="manual"]
+        # Also re-verify pre-v1.2 auto-approved questions lacking an audit.
+        drafts=[row for row in self.store.list_questions(limit=100)
+                if row.get("provider")!="manual" and
+                   (row["status"]=="draft" or
+                    (row["status"]=="auto_approved" and
+                     row.get("qa_outcome") in ("not_checked","stale")))]
         results=[]
         for row in drafts[:limit]:
             try:results.append(self.verify_generated(row["id"],mode))
