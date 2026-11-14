@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - fix/autopilot-66pct-timeouts-v121
   workflow_dispatch:
 
 permissions:
