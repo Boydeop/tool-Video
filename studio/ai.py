@@ -7,6 +7,7 @@ import urllib.request
 from .quiz import Quiz
 from .keys import next_key, rate_limited
 from .models import get_model
+from .run_limits import network_timeout, check_budget, budget_active
 
 class ProviderError(RuntimeError): pass
 
@@ -14,7 +15,7 @@ def post(provider,url,payload,headers):
     req=urllib.request.Request(url,data=json.dumps(payload,ensure_ascii=False).encode(),
         headers={"Content-Type":"application/json",**headers},method="POST")
     try:
-        with urllib.request.urlopen(req,timeout=100) as r: raw=r.read(150001)
+        with urllib.request.urlopen(req,timeout=network_timeout(20,70)) as r: raw=r.read(150001)
         if len(raw)>150000:raise ProviderError("Response too large")
         return json.loads(raw)
     except urllib.error.HTTPError as exc:
@@ -88,7 +89,17 @@ def generate(provider,topic,level,count,recent,fmt="từ vựng"):
 
 def fallback(topic,level,count,recent,fmt="từ vựng",providers=None):
     errors=[]
-    for provider in (providers or ["gemini","groq","openrouter","ollama"]):
+    from .keys import get_keys
+    candidate_list=(providers if providers is not None else
+                    ["gemini","groq","openrouter","ollama"])
+    if budget_active() and providers is None:
+        # In a time-bounded Autopilot run, do not try three slow dead APIs
+        # for each generation attempt. Honor whichever two are configured.
+        candidate_list=[p for p in candidate_list if
+                       (p=="ollama" and os.getenv("ENABLE_OLLAMA")=="1")
+                       or (p!="ollama" and get_keys(p))][:2]
+    for provider in candidate_list:
+        check_budget()
         try:return provider,generate(provider,topic,level,count,recent,fmt)
         except (ProviderError,ValueError) as exc:errors.append(provider+": "+str(exc))
     raise ProviderError("All providers unavailable: "+" | ".join(errors))

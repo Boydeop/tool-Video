@@ -20,7 +20,7 @@ from .voice import available, readiness as tts_readiness, test_speech, ENGINES
 
 LOGGER = logging.getLogger("tienghansoeasy.http")
 MAX_REQUEST = 4_000_000
-APP_VERSION = "v1.2.0"
+APP_VERSION = "v1.2.1"
 
 
 def _ui_path() -> Path:
@@ -226,7 +226,7 @@ def create_server(service, host="127.0.0.1", port=8765):
                       "/api/render/batch", "/api/preview/clip", "/api/render/start",
                       "/api/answers/enrich", "/api/answers/save", "/api/videos/metadata",
                       "/api/videos/metadata/inspect", "/api/videos/metadata/repair_bulk",
-                      "/api/autopilot/start", "/api/cache/clear",
+                      "/api/autopilot/start", "/api/autopilot/cancel", "/api/cache/clear",
                       "/api/qa/verify_pending", "/api/krdict/test",
                       "/api/thumbnails/legacy",
                       "/api/youtube/configure", "/api/youtube/connect", "/api/youtube/disconnect",
@@ -288,6 +288,8 @@ def create_server(service, host="127.0.0.1", port=8765):
                     result={"preview_url":"/api/preview/clip/"+name.name}
                 elif route == "/api/autopilot/start":
                     result=export_queue.start_autopilot(raw)
+                elif route == "/api/autopilot/cancel":
+                    result=export_queue.cancel_autopilot(str(raw.get("job_id","")))
                 elif route == "/api/qa/verify_pending":
                     if export_queue.is_running():
                         raise ValueError("Không kiểm tra cùng lúc sản xuất hàng loạt.")

@@ -72,72 +72,111 @@ def choose_distinct_topics(counts,number,rng=None):
         selected.append(topic);pool.remove(topic)
     return selected
 
-def run_pipeline(service,plan:Plan,update,on_result=None):
-    """One independent topic per video; keep failed/draft attempts visible."""
+def run_pipeline(service,plan:Plan,update,on_result=None,cancel=None):
+    """Bounded QA per topic, visible substeps, preserving partial MP4 outputs.
+
+    Cancellation is cooperative; an FFmpeg render already underway is allowed
+    to finish its current MP4 before the worker stops.
+    """
     from .events import choose_production_topics
-    chosen,events=choose_production_topics(service.store.topic_counts(),plan.videos,
+    from .run_limits import (topic_budget,check_budget,check_cancel,
+                             BudgetExpired,RunCancelled)
+    chosen,_events=choose_production_topics(service.store.topic_counts(),plan.videos,
                                            mode=plan.event_mode)
     results=[]
     rejected=[]
     for index,topic in enumerate(chosen):
+        if cancel is not None and cancel.is_set():break
         level=plan.levels[index%len(plan.levels)]
         fmt=plan.formats[index%len(plan.formats)]
-        update(100*index/plan.videos,"AI tạo chủ đề "+str(index+1)+"/"+str(plan.videos))
         item={"topic":topic,"level":level,"format":fmt,"status":"draft",
               "video":"","accepted":0,"reason":""}
         results.append(item)
+        def stage(message,fraction=0):
+            value=(index+min(.97,max(0.0,fraction)))*100/plan.videos
+            update(value,"Chủ đề "+str(index+1)+"/"+str(plan.videos)+
+                   " · "+message)
+        stage("Bắt đầu tạo câu hỏi",0)
         try:
             good=[]
             problems=[]
             generation_errors=[]
             inspected=set()
             repairs=0
-            # First request includes spare candidates to survive duplicate or
-            # incomplete AI answers. A second bounded attempt is optional.
-            for attempt in range(2):
-                if len(good)>=plan.per_video:break
-                remaining=plan.per_video-len(good)
-                count=min(12,max(remaining+2,remaining))
+            # The budget bounds network generation + review, not frame render.
+            # Previously 100-second sequential AI calls could accumulate to
+            # more than 30 minutes without a stage update.
+            with topic_budget(210,cancel):
                 try:
-                    generated=service.generate(topic,level,count,fmt=fmt)
-                    generation_errors.extend(generated.get("errors",[]))
-                except Exception as exc:
-                    generation_errors.append(type(exc).__name__+": "+str(exc)[:200])
-                    break
-                incoming=[qid for qid in generated.get("accepted",[]) if qid not in inspected]
-                if not incoming:
-                    break
-                for qid in incoming:
-                    inspected.add(qid)
-                    quiz=service.store.get_questions([qid])[0]
-                    issues=inspect_quiz(quiz)
-                    if (quiz.missing_answer_details and
-                            repairs<plan.per_video+2):
-                        repairs+=1
+                    for attempt in range(2):
+                        check_budget()
+                        if len(good)>=plan.per_video:
+                            break
+                        remaining=plan.per_video-len(good)
+                        count=min(10,remaining+2)
+                        stage("AI tạo câu (lượt "+str(attempt+1)+"/2)",.03+.10*attempt)
                         try:
-                            service.enrich_answer_details([qid])
+                            generated=service.generate(topic,level,count,fmt=fmt)
+                            generation_errors.extend(generated.get("errors",[]))
+                        except (BudgetExpired,RunCancelled):
+                            raise
+                        except Exception as exc:
+                            generation_errors.append(type(exc).__name__+
+                                                     ": "+str(exc)[:200])
+                            break
+                        incoming=[qid for qid in generated.get("accepted",[])
+                                  if qid not in inspected]
+                        if not incoming:
+                            break
+                        for number,qid in enumerate(incoming,1):
+                            check_budget()
+                            if len(good)>=plan.per_video:
+                                break  # don't spend minutes checking surplus
+                            inspected.add(qid)
+                            stage("Kiểm chứng KRDict + AI, câu "+
+                                  str(number)+"/"+str(len(incoming)),
+                                  .20+.55*(number/max(1,len(incoming))))
                             quiz=service.store.get_questions([qid])[0]
                             issues=inspect_quiz(quiz)
-                        except Exception as exc:
-                            generation_errors.append("Bổ sung "+qid[:6]+": "+
-                                type(exc).__name__)
-                    if issues:
-                        service.store.set_question_qa(qid,"needs_review",
-                            {"issues":issues,"stage":"structure","version":1})
-                        problems.append({"id":qid,"issues":issues})
-                        continue
-                    try:
-                        verdict=service.verify_generated(qid,mode=plan.qa_mode)
-                        if verdict["status"]=="verified":
-                            # Unrendered verified spare candidates remain ready.
-                            if len(good)<plan.per_video:good.append(qid)
-                        else:
-                            problems.append({"id":qid,"issues":
-                                  verdict.get("issues") or ["Chưa đủ bằng chứng từ KRDict/AI"]})
-                    except Exception as exc:
-                        service.store.set_question_qa(qid,"unavailable",
-                          {"issues":[type(exc).__name__],"stage":"verification"})
-                        problems.append({"id":qid,"issues":["Lỗi kiểm chứng: "+type(exc).__name__]})
+                            if (quiz.missing_answer_details and
+                                    repairs<plan.per_video+1):
+                                repairs+=1
+                                stage("Bổ sung phiên âm/nghĩa câu "+
+                                      str(number)+"/"+str(len(incoming)),.25)
+                                try:
+                                    service.enrich_answer_details([qid])
+                                    quiz=service.store.get_questions([qid])[0]
+                                    issues=inspect_quiz(quiz)
+                                except (BudgetExpired,RunCancelled):
+                                    raise
+                                except Exception as exc:
+                                    generation_errors.append("Bổ sung "+qid[:6]+
+                                        ": "+type(exc).__name__)
+                            if issues:
+                                service.store.set_question_qa(qid,"needs_review",
+                                    {"issues":issues,"stage":"structure","version":1})
+                                problems.append({"id":qid,"issues":issues})
+                                continue
+                            try:
+                                verdict=service.verify_generated(qid,mode=plan.qa_mode)
+                                if verdict["status"]=="verified":
+                                    good.append(qid)
+                                else:
+                                    problems.append({"id":qid,"issues":
+                                        verdict.get("issues") or
+                                        ["Chưa đủ bằng chứng từ KRDict/AI"]})
+                            except (BudgetExpired,RunCancelled):
+                                raise
+                            except Exception as exc:
+                                service.store.set_question_qa(qid,"unavailable",
+                                    {"issues":[type(exc).__name__],
+                                     "stage":"verification"})
+                                problems.append({"id":qid,"issues":
+                                      ["Lỗi kiểm chứng: "+type(exc).__name__]})
+                except BudgetExpired as exc:
+                    generation_errors.append(str(exc))
+                    stage("Dừng kiểm chứng vì quá thời gian cho chủ đề",.84)
+                check_budget() if len(good)>=plan.per_video else None
             item["accepted"]=len(good)
             item["requires_review"]=problems
             item["generation_errors"]=generation_errors[-4:]
@@ -151,35 +190,50 @@ def run_pipeline(service,plan:Plan,update,on_result=None):
                                   sorted(kinds.items(),key=lambda x:-x[1])[:3])
                 if not examples and generation_errors:
                     examples=generation_errors[-1]
-                item["reason"]=("Chỉ có "+str(len(good))+"/"+str(plan.per_video)+
-                    " câu đạt kiểm tra. "+(examples or
-                    "API chưa trả đủ câu mới hoặc nội dung trùng.")+
-                    " Các câu chưa đạt vẫn lưu nháp.")
+                item["reason"]=("Chỉ có "+str(len(good))+"/"+
+                    str(plan.per_video)+" câu đủ điều kiện. "+
+                    (examples or "API chưa trả đủ câu hoặc câu trùng.")+
+                    " Các câu chưa đạt vẫn lưu trong ngân hàng.")
                 rejected.extend(problems)
-                update(100*(index+1)/plan.videos,item["reason"])
+                stage(item["reason"],.98)
                 continue
-            good=good[:plan.per_video]
+            check_cancel(cancel)
+            stage("Đang dựng MP4 từ "+str(len(good))+" câu đã kiểm chứng",.78)
             def frame_progress(percent,phase):
-                update((index+max(0,min(1,percent/100)))*100/plan.videos,phase)
-            output=service.render_approved(good,theme=plan.theme,width=plan.width,
-                    with_voice=plan.voice,voice_engine=plan.engine,
-                    progress=frame_progress)
+                stage(phase,.78+.19*max(0,min(1,percent/100)))
+            output=service.render_approved(good[:plan.per_video],
+                  theme=plan.theme,width=plan.width,
+                  with_voice=plan.voice,voice_engine=plan.engine,
+                  progress=frame_progress)
             item["status"]="rendered";item["video"]=output
+            check_cancel(cancel)
             if plan.seo:
+                stage("Tạo bản nháp tiêu đề SEO",.98)
                 try:
-                    metadata=service.auto_seo_for_video(output)
+                    with topic_budget(35,cancel):
+                        metadata=service.auto_seo_for_video(output)
                     item["seo_source"]=metadata["source"]
-                except Exception as seo_exc:
-                    # A metadata draft failure must never erase an exported MP4.
+                except RunCancelled:
+                    raise
+                except Exception as exc:
                     item["seo_source"]="unavailable"
-                    item["seo_error"]=type(seo_exc).__name__
-            update(100*(index+1)/plan.videos,"Đã xuất "+str(index+1)+"/"+str(plan.videos))
+                    item["seo_error"]=type(exc).__name__
+            stage("Đã xuất MP4 "+str(index+1)+"/"+str(plan.videos),.99)
+        except RunCancelled as exc:
+            if not item["video"]:
+                item["status"]="cancelled"
+            item["reason"]=str(exc)
+            stage("Đã dừng theo yêu cầu",.99)
+            break
         except Exception as exc:
-            item["status"]="failed"
+            if not item["video"]:
+                item["status"]="failed"
             item["reason"]=type(exc).__name__+": "+str(exc)[:280]
-            update(100*(index+1)/plan.videos,"Lỗi chủ đề "+str(index+1)+": "+str(exc)[:100])
+            stage("Lỗi: "+str(exc)[:120],.99)
         finally:
             if on_result:on_result([dict(row) for row in results])
+        if cancel is not None and cancel.is_set():
+            break
     return {"videos":[r["video"] for r in results if r["video"]],
             "topics":results,"needs_review":rejected,
             "rendered":sum(bool(r["video"]) for r in results)}

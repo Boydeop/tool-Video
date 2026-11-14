@@ -38,14 +38,18 @@ class Service:
         return {"plan":plan,**self.generate(plan["topic"],level,count)}
 
     def generate(self,topic,level,count=6,fmt="từ vựng",providers=None):
+        from .run_limits import check_budget,budget_active,BudgetExpired,RunCancelled
         if not 1<=count<=30:raise ValueError("Số câu mỗi lần phải từ 1 tới 30.")
         accepted=[];errors=[];batch_id=uuid.uuid4().hex[:12]
-        for attempt in range(3):
+        for attempt in range(2 if budget_active() else 3):
+            check_budget()
             remaining=count-len(accepted)
             if remaining<=0:break
             try:
                 provider,rows=fallback(topic,level,min(30,remaining+min(remaining,4)),
                                        self.store.recent_prompts(50),fmt,providers)
+            except (BudgetExpired,RunCancelled):
+                raise
             except Exception as exc:
                 errors.append(str(exc))
                 break
