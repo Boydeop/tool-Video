@@ -14,7 +14,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from .keys import PROVIDERS, get_keys, rate_limited
+from .keys import get_keys, rate_limited
+# KRDict accepts an API key, but is a dictionary, never a text-generation model.
+MODEL_PROVIDERS = ("gemini", "groq", "openrouter")
 
 DEFAULTS = {
     "gemini": "gemini-3.5-flash-lite",
@@ -37,7 +39,7 @@ def _settings_path():
     return Path("data/models.local.json").resolve()
 
 def validate_provider(provider):
-    if provider not in PROVIDERS:
+    if provider not in MODEL_PROVIDERS:
         raise ValueError("Nhà cung cấp không được hỗ trợ.")
     return provider
 
@@ -73,7 +75,7 @@ def get_model(provider):
     return validate_model(provider, env or DEFAULTS[provider])
 
 def selected_models():
-    return {provider: get_model(provider) for provider in PROVIDERS}
+    return {provider: get_model(provider) for provider in MODEL_PROVIDERS}
 
 def set_model(provider, model):
     model = validate_model(provider, model)
