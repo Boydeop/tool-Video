@@ -48,6 +48,60 @@ def font(size,bold=False,korean=False):
             return ImageFont.truetype(name,int(size))
     raise RuntimeError("Không có font tiếng Việt/Hàn tương thích. Cần Windows Segoe UI + Malgun Gothic hoặc Noto Sans CJK.")
 
+@lru_cache(maxsize=256)
+def _native_face(path,index,size):
+    return ImageFont.truetype(path,max(1,int(size)),index=int(index))
+
+class _LogicalDraw:
+    """Draw shapes in 540x960 layout coordinates at native output resolution.
+
+    The previous renderer created 540px Hangul and enlarged it to 1080px,
+    which could soften or distort strokes. Fonts are now rasterized at actual
+    output size. No separate font file is distributed.
+    """
+    def __init__(self,image,scale):
+        self.raw=ImageDraw.Draw(image)
+        self.scale=float(scale)
+
+    def _font(self,face):
+        return _native_face(face.path,getattr(face,"index",0),
+                            round(face.size*self.scale))
+
+    def _box(self,coords):
+        return tuple(round(float(v)*self.scale) for v in coords)
+
+    def _points(self,coords):
+        return [self._box(pt) for pt in coords]
+
+    def rounded_rectangle(self,xy,radius=0,**kwargs):
+        if "width" in kwargs:kwargs["width"]=max(1,round(kwargs["width"]*self.scale))
+        return self.raw.rounded_rectangle(self._box(xy),radius=round(radius*self.scale),**kwargs)
+
+    def rectangle(self,xy,**kwargs):
+        if "width" in kwargs:kwargs["width"]=max(1,round(kwargs["width"]*self.scale))
+        return self.raw.rectangle(self._box(xy),**kwargs)
+
+    def ellipse(self,xy,**kwargs):
+        if "width" in kwargs:kwargs["width"]=max(1,round(kwargs["width"]*self.scale))
+        return self.raw.ellipse(self._box(xy),**kwargs)
+
+    def line(self,xy,fill=None,width=1,**kwargs):
+        return self.raw.line(self._points(xy),fill=fill,
+                             width=max(1,round(width*self.scale)),**kwargs)
+
+    def polygon(self,xy,**kwargs):
+        return self.raw.polygon(self._points(xy),**kwargs)
+
+    def textlength(self,text,font):
+        return self.raw.textlength(text,font=self._font(font))/self.scale
+
+    def textbbox(self,xy,text,font,**kwargs):
+        bb=self.raw.textbbox(self._box(xy),text,font=self._font(font),**kwargs)
+        return tuple(v/self.scale for v in bb)
+
+    def text(self,xy,text,font,**kwargs):
+        return self.raw.text(self._box(xy),text,font=self._font(font),**kwargs)
+
 def _is_hangul(c):
     return ("\uac00"<=c<="\ud7a3" or "\u1100"<=c<="\u11ff" or "\u3130"<=c<="\u318f")
 
@@ -100,11 +154,17 @@ def _fitted(d,text,limit,lines=3,initial=34,minimum=23):
     return minimum,_wrap(d,text,minimum,limit,lines)
 
 def _write_center(d,center,y,text,size,color,weight=True):
+    # Mixed Segoe UI and Malgun Gothic have different top bearings.
+    # Use one common baseline so Korean/Vietnamese text doesn't "jump".
+    parts=_segments(text)
     width=_measure(d,text,size,weight)
     x=center-width/2
-    for part,is_ko in _segments(text):
+    offset=max((-d.textbbox((0,0),part,font(size,weight,is_ko),anchor="ls")[1]
+               for part,is_ko in parts),default=size)
+    baseline=y+offset
+    for part,is_ko in parts:
         face=font(size,weight,is_ko)
-        d.text((x,y),part,font=face,fill=color,anchor="lt",
+        d.text((x,baseline),part,font=face,fill=color,anchor="ls",
                stroke_width=0)
         x+=d.textlength(part,face)
 
@@ -122,15 +182,16 @@ def _logo_overlay(img,path,position="top-right",scale=.15,logo_x=0.82,logo_y=0.1
     with Image.open(p) as file:
         logo=file.convert("RGBA")
     max_width=max(28,int(img.width*scale))
-    logo.thumbnail((max_width,90),Image.Resampling.LANCZOS)
-    margin=24
+    native=img.width/540
+    logo.thumbnail((max_width,round(90*native)),Image.Resampling.LANCZOS)
+    margin=round(24*native)
     if position=="custom":
         # Coordinates are fractions of the available area (not absolute pixels).
         x=round(max(0,min(1,logo_x))*(img.width-logo.width))
         y=round(max(0,min(1,logo_y))*(img.height-logo.height))
     else:
         x=margin if "left" in position else img.width-logo.width-margin
-        y=108 if position.startswith("top") else img.height-logo.height-62
+        y=round(108*native) if position.startswith("top") else img.height-logo.height-round(62*native)
     result=img.convert("RGBA")
     result.alpha_composite(logo,(x,y))
     return result.convert("RGB")
@@ -191,7 +252,7 @@ def _panel_pattern(img,theme):
     Drawn before Korean/Vietnamese text, with very low contrast for legibility.
     """
     bg=Image.new("RGBA",img.size,(0,0,0,0))
-    d=ImageDraw.Draw(bg,"RGBA")
+    d=_LogicalDraw(bg,img.width/540)
     tint={"hanji":(171,142,100),"blue":(119,168,205),"sejong":(191,141,111)}[theme]
     for cx,cy,r in ((446,266,20),(86,346,13)):
         for n in range(5):
@@ -211,18 +272,23 @@ def shorts_safe_frame(image,theme):
     drag-to-position coordinates remain exact.
     """
     bg=THEMES[theme][0]
-    output=Image.new("RGB",(540,960),bg)
-    # v1.0.0 used 421x749 and left large empty borders, shrinking Hangul.
-    # Preserve >90% of original scale and balanced horizontal margins.
-    adjusted=image.resize((492,875),Image.Resampling.LANCZOS)
-    output.paste(adjusted,(24,33))
+    width,height=image.size
+    unit=width/540
+    output=Image.new("RGB",image.size,bg)
+    # Keep the existing Shorts-safe inset but render the original text at
+    # output resolution BEFORE the final 9% reduction in this step.
+    adjusted=image.resize((round(492*unit),round(875*unit)),
+                          Image.Resampling.LANCZOS)
+    output.paste(adjusted,(round(24*unit),round(33*unit)))
     return output
 
 
 def draw_intro(theme,width=540,logo_path=None,logo_position="top-right",logo_scale=.15,progress=1,
                logo_x=.82,logo_y=.10,shorts_safe=False):
     bg,fg,accent=THEMES[theme]
-    im=_korea_background(theme).copy();d=ImageDraw.Draw(im)
+    im=_korea_background(theme).copy()
+    if width!=540:im=im.resize((width,width*16//9),Image.Resampling.LANCZOS)
+    d=_LogicalDraw(im,width/540)
     d.rounded_rectangle((36,225,504,630),radius=29,fill="#FFFFFF" if theme!="blue" else "#153E68")
     _label(d,270,302,"TIẾNG HÀN SO EASY",420,1,34,accent,26)
     _label(d,270,380,"THỬ THÁCH TIẾNG HÀN",424,2,36,"#191612" if theme!="blue" else "#FFFFFF",28)
@@ -230,7 +296,6 @@ def draw_intro(theme,width=540,logo_path=None,logo_position="top-right",logo_sca
     _label(d,270,727,"한국어 퀴즈",410,1,41,accent,30)
     if shorts_safe:im=shorts_safe_frame(im,theme)
     im=_logo_overlay(im,logo_path,logo_position,logo_scale,logo_x,logo_y)
-    if width!=540:im=im.resize((width,width*16//9),Image.Resampling.LANCZOS)
     return im
 
 def draw_frame(quiz:Quiz,idx,total,theme,elapsed,think=5.5,width=540,
@@ -240,15 +305,10 @@ def draw_frame(quiz:Quiz,idx,total,theme,elapsed,think=5.5,width=540,
     """Render a frame with three explicit stages: speaking, thinking, reveal."""
     if theme not in THEMES:
         raise ValueError("Unknown video theme")
-    if width!=540:
-        frame=draw_frame(quiz,idx,total,theme,elapsed,think,540,
-                         reveal,transition,logo_path,logo_position,logo_scale,
-                         prompt_duration,answer_duration,logo_x,logo_y,shorts_safe)
-        return frame.resize((width,width*16//9),Image.Resampling.LANCZOS)
-
     bg,fg,accent=THEMES[theme]
     im=_korea_background(theme).copy()
-    d=ImageDraw.Draw(im)
+    if width!=540:im=im.resize((width,width*16//9),Image.Resampling.LANCZOS)
+    d=_LogicalDraw(im,width/540)
     answer_start=prompt_duration+think
     show_answer=elapsed>=answer_start
     countdown=prompt_duration<=elapsed<answer_start
@@ -263,7 +323,7 @@ def draw_frame(quiz:Quiz,idx,total,theme,elapsed,think=5.5,width=540,
     # Very short prompt, including for legacy questions.
     d.rounded_rectangle((27,207,513,382),radius=21,fill="#FFFFFF")
     im=_panel_pattern(im,theme)
-    d=ImageDraw.Draw(im)
+    d=_LogicalDraw(im,width/540)
     _label(d,270,222,"TIẾNG HÀN LÀ GÌ?",430,1,22,accent,19)
     clue=quiz.short_clue
     size,lines=_fitted(d,clue,438,3,45,24)

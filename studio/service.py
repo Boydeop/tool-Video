@@ -127,19 +127,9 @@ class Service:
             logo_scale=config["logo_scale"],logo_x=config["logo_x"],logo_y=config["logo_y"],
             progress=progress,shorts_safe=config.get("shorts_safe",True))
         from .metadata import overwrite_metadata
-        tags=dict(config)
-        if tags.get("auto_metadata",True):
-            from datetime import datetime,timezone,timedelta
-            year=datetime.now(timezone(timedelta(hours=7))).year
-            topic_label=questions[0].topic if len({q.topic for q in questions})==1 else "Tổng hợp"
-            tags.update({
-                "metadata_title":("Tiếng Hàn So Easy | "+topic_label+
-                                  " | "+questions[0].level)[:200],
-                "metadata_artist":"Tiếng Hàn So Easy",
-                "metadata_copyright":("© "+str(year)+" Tiếng Hàn So Easy"
-                                      " · tienghansoeasy.io.vn"),
-                "metadata_comment":"Giáo dục tiếng Hàn · tienghansoeasy.io.vn"
-            })
+        topic_label=questions[0].topic if len({q.topic for q in questions})==1 else "Tổng hợp"
+        level_label=questions[0].level if len({q.level for q in questions})==1 else "TOPIK MIX"
+        tags=self._branding_for_video(topic_label,level_label)
         overwrite_metadata(completed,tags)
         self.store.mark_rendered(ids,completed)
         return completed
@@ -223,12 +213,60 @@ class Service:
             result.append({"id":qid,"provider":provider,"missing":outcome["missing"]})
         return {"updated":result,"requires_review":True}
 
+    def _branding_for_video(self,topic="",level=""):
+        """Build source-specific metadata without requiring manual form input."""
+        from datetime import datetime,timezone,timedelta
+        cfg=dict(self.production.settings())
+        if cfg.get("auto_metadata",True):
+            year=datetime.now(timezone(timedelta(hours=7))).year
+            label=str(topic or "Bài học tiếng Hàn").strip()
+            suffix=(" | "+str(level).strip()) if level else ""
+            cfg.update({
+                "metadata_title":("Tiếng Hàn So Easy | "+label+suffix)[:200],
+                "metadata_artist":"Tiếng Hàn So Easy",
+                "metadata_copyright":"© "+str(year)+" Tiếng Hàn So Easy · tienghansoeasy.io.vn",
+                "metadata_comment":"Giáo dục tiếng Hàn · tienghansoeasy.io.vn",
+            })
+        return cfg
+
+    def inspect_video_metadata(self,name):
+        from .metadata import inspect_metadata
+        return inspect_metadata(self.video_path(name))
+
+    def repair_legacy_video_metadata(self,limit=20):
+        """One-click repair for older outputs; skip scheduled videos."""
+        from .metadata import inspect_metadata,overwrite_metadata
+        if not isinstance(limit,int) or not 1<=limit<=20:
+            raise ValueError("Cho phép tối đa 20 video mỗi lượt.")
+        result={"checked":0,"repaired":[],"already_compatible":[],
+                "skipped":[],"errors":[]}
+        for item in self.list_videos(limit=limit):
+            name=item["name"]
+            try:
+                path=self.video_path(name)
+                if self.store.has_pending_page_job(path) or self.store.has_outbound(path):
+                    result["skipped"].append({"video":name,"reason":"Đang có lịch đăng"})
+                    continue
+                before=inspect_metadata(path)
+                result["checked"]+=1
+                if before["verified"] and before["layout"]=="ilst":
+                    result["already_compatible"].append(name)
+                    continue
+                tags=self._branding_for_video(item.get("topic",""))
+                overwrite_metadata(path,tags)
+                result["repaired"].append(name)
+            except Exception as exc:
+                result["errors"].append({"video":name,"reason":str(exc)[:180]})
+        return result
+
     def overwrite_video_metadata(self,name):
         from .metadata import overwrite_metadata
         path=self.video_path(name)
         if self.store.has_pending_page_job(path) or self.store.has_outbound(path):
             raise ValueError("Video đang lên lịch hoặc chưa xác nhận trạng thái đăng Meta. Không ghi đè.")
-        return overwrite_metadata(path,self.production.settings())
+        record=next((item for item in self.list_videos(limit=1000)
+                     if item["name"]==name),{})
+        return overwrite_metadata(path,self._branding_for_video(record.get("topic","")))
 
     def cache_stats(self):
         from .cache_manager import CacheManager

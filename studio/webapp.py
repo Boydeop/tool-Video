@@ -20,7 +20,7 @@ from .voice import available, readiness as tts_readiness, test_speech, ENGINES
 
 LOGGER = logging.getLogger("tienghansoeasy.http")
 MAX_REQUEST = 4_000_000
-APP_VERSION = "v1.1.0"
+APP_VERSION = "v1.1.2"
 
 
 def _ui_path() -> Path:
@@ -215,6 +215,7 @@ def create_server(service, host="127.0.0.1", port=8765):
                       "/api/facebook/connect", "/api/facebook/disconnect", "/api/seo",
                       "/api/render/batch", "/api/preview/clip", "/api/render/start",
                       "/api/answers/enrich", "/api/answers/save", "/api/videos/metadata",
+                      "/api/videos/metadata/inspect", "/api/videos/metadata/repair_bulk",
                       "/api/autopilot/start", "/api/cache/clear",
                       "/api/youtube/configure", "/api/youtube/connect", "/api/youtube/disconnect",
                       "/api/instagram/connect", "/api/instagram/disconnect",
@@ -316,6 +317,14 @@ def create_server(service, host="127.0.0.1", port=8765):
                 elif route == "/api/answers/save":
                     result=service.edit_answer_details(str(raw.get("id","")),
                            raw.get("details",{}))
+                elif route == "/api/videos/metadata/inspect":
+                    result=service.inspect_video_metadata(str(raw.get("video_name","")))
+                elif route == "/api/videos/metadata/repair_bulk":
+                    if raw.get("confirmed") is not True:
+                        raise ValueError("Cần xác nhận trước khi sửa MP4 cũ.")
+                    if export_queue.is_running():
+                        raise ValueError("Đang có lượt render; không sửa MP4 lúc này.")
+                    result=service.repair_legacy_video_metadata(int(raw.get("limit",20)))
                 elif route == "/api/videos/metadata":
                     result=service.overwrite_video_metadata(str(raw.get("video_name","")))
                 elif route == "/api/render/batch":
