@@ -13,7 +13,7 @@ import threading
 import time
 from .facebook import _protect,_unprotect
 
-PROVIDERS = ("gemini", "groq", "openrouter")
+PROVIDERS = ("gemini", "groq", "openrouter", "krdict")
 _LOCK = threading.RLock()
 _CURSOR = {}
 _BLOCKED_UNTIL = {}
@@ -96,6 +96,8 @@ def write_keys(provider, value):
         raise ValueError("Dịch vụ không hợp lệ.")
     keys = _split(value)
     _validate(keys)
+    if provider=="krdict" and any(not re.fullmatch(r"[0-9a-fA-F]{32}",key) for key in keys):
+        raise ValueError("KRDict API key phải gồm 32 ký tự hexadecimal.")
     with _LOCK:
         data = _settings()
         data[provider] = keys
@@ -109,7 +111,7 @@ def parse_txt(text, default_provider="gemini"):
 
     Plain TXT: one key per line, provider selected by UI.
     Combined TXT: [gemini], [groq], [openrouter] section headers.
-    Named TXT: groq:gsk_..., gemini=AIza..., OPENROUTER_API_KEY=...
+    Named TXT: groq:gsk_..., gemini=AIza..., KRDICT_API_KEY=...
     Only returns provider->keys; never logs or sends keys to third parties.
     """
     if default_provider not in PROVIDERS:
@@ -130,7 +132,7 @@ def parse_txt(text, default_provider="gemini"):
                 raise ValueError("Tên nhóm trong TXT không hợp lệ.")
             encountered.add(current)
             continue
-        prefixed = re.match(r"^(gemini|groq|openrouter)(?:_api_keys?)?\s*[:=]\s*(.+)$", line, re.I)
+        prefixed = re.match(r"^(gemini|groq|openrouter|krdict)(?:_api_keys?)?\s*[:=]\s*(.+)$", line, re.I)
         if prefixed:
             current_for_line = prefixed.group(1).lower()
             values = _split(prefixed.group(2))
@@ -148,8 +150,10 @@ def parse_txt(text, default_provider="gemini"):
     result = {provider: _split(keys) for provider, keys in grouped.items() if keys}
     if not result:
         raise ValueError("File TXT không chứa API key nào.")
-    for keys in result.values():
+    for provider,keys in result.items():
         _validate(keys)
+        if provider=="krdict" and any(not re.fullmatch(r"[0-9a-fA-F]{32}",key) for key in keys):
+            raise ValueError("KRDict API key phải gồm 32 ký tự hexadecimal.")
     return result
 
 

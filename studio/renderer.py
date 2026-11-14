@@ -284,7 +284,7 @@ def shorts_safe_frame(image,theme):
 
 
 def draw_intro(theme,width=540,logo_path=None,logo_position="top-right",logo_scale=.15,progress=1,
-               logo_x=.82,logo_y=.10,shorts_safe=False):
+               logo_x=.82,logo_y=.10,shorts_safe=False,topic="",level=""):
     bg,fg,accent=THEMES[theme]
     im=_korea_background(theme).copy()
     if width!=540:im=im.resize((width,width*16//9),Image.Resampling.LANCZOS)
@@ -292,8 +292,15 @@ def draw_intro(theme,width=540,logo_path=None,logo_position="top-right",logo_sca
     d.rounded_rectangle((36,225,504,630),radius=29,fill="#FFFFFF" if theme!="blue" else "#153E68")
     _label(d,270,302,"TIẾNG HÀN SO EASY",420,1,34,accent,26)
     _label(d,270,380,"THỬ THÁCH TIẾNG HÀN",424,2,36,"#191612" if theme!="blue" else "#FFFFFF",28)
-    _label(d,270,503,"Chọn đáp án đúng trước khi hết giờ!",410,2,25,"#324D63" if theme!="blue" else "#D9EBFD",21)
-    _label(d,270,727,"한국어 퀴즈",410,1,41,accent,30)
+    if topic:
+        _label(d,270,481,str(topic)[:70],420,2,30,
+               "#13263A" if theme!="blue" else "#FFFFFF",19)
+        _label(d,270,552,"Cùng học từ vựng qua 4 đáp án",410,2,24,
+               "#324D63" if theme!="blue" else "#D9EBFD",18)
+    else:
+        _label(d,270,503,"Chọn đáp án đúng trước khi hết giờ!",410,2,25,
+               "#324D63" if theme!="blue" else "#D9EBFD",21)
+    _label(d,270,727,("한국어 퀴즈 · "+str(level))[:35] if level else "한국어 퀴즈",410,1,41,accent,27)
     if shorts_safe:im=shorts_safe_frame(im,theme)
     im=_logo_overlay(im,logo_path,logo_position,logo_scale,logo_x,logo_y)
     return im
@@ -456,8 +463,11 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
             frames_done=0
             step=max(1,frames_total//75)
             for tick in range(int(round(scenes[0].start*fps))):
+                video_topic=questions[0].topic if len({q.topic for q in questions})==1 else "Tổng hợp tiếng Hàn"
+                video_level=questions[0].level if len({q.level for q in questions})==1 else "TOPIK MIX"
                 im=draw_intro(theme,width,logo_path,logo_position,logo_scale,
-                              logo_x=logo_x,logo_y=logo_y,shorts_safe=shorts_safe)
+                              logo_x=logo_x,logo_y=logo_y,shorts_safe=shorts_safe,
+                              topic=video_topic,level=video_level)
                 proc.stdin.write(im.tobytes())
                 frames_done+=1
                 if frames_done%step==0:report(24+65*frames_done/frames_total,"Đang vẽ khung video")

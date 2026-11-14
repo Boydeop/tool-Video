@@ -92,6 +92,11 @@ class AutopilotRepairTests(unittest.TestCase):
             service.generate=generate
             service.enrich_answer_details=enrich
             service.render_approved=render
+            def verify(qid,mode="strict"):
+                service.store.set_question_qa(qid,"verified",
+                    {"outcome":"verified","tier":"test_mock"})
+                return {"status":"verified","tier":"test_mock","issues":[]}
+            service.verify_generated=verify
             plan=Plan.parse({"videos":1,"per_video":1})
             results=run_pipeline(service,plan,lambda a,b:None)
             self.assertEqual(results["rendered"],1)

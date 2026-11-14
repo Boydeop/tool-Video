@@ -387,3 +387,53 @@ Báo cáo nguyên nhân & kiểm chứng: [AUDIT_V112.md](AUDIT_V112.md).
 - **Lưu ý:** Sửa metadata chỉ đổi thẻ container, không làm video cũ nét hơn. Chỉ những video dựng lại ở v1.1.2 mới có chữ Hàn ở độ sắc nét mới.
 
 Đóng bản cũ, sao lưu thư mục %LOCALAPPDATA%/TiengHanSoEasyStudio, rồi mở EXE cập nhật. Không cần nhập lại API keys.
+
+
+## v1.2.0 · Final QA with KRDict + automatic topic thumbnails
+
+**Technical audit:** [AUDIT_V120.md](AUDIT_V120.md).
+
+### Why auto-generated questions looked “pending”
+Questions are first written as drafts; previously only those rendered immediately
+were auto-approved. The bank now separates **production status** from
+**verification status**. Extra, unfinished or old questions display their
+real QA evidence and reason. Questions that pass all automated gates become
+`auto_approved` and remain ready if not yet rendered. Editing an answer
+invalidates its prior AI approval.
+
+### KRDict configuration
+1. Get a key from the official Korean Basic Dictionary:
+   https://krdict.korean.go.kr/vie/openApi/openApiInfo
+2. In **API & Model**, select provider **KRDict**, import a TXT containing
+   the 32-hex key (or use `[krdict]` section in a combined TXT), then
+   click **Test KRDict**. The key is protected by user-local DPAPI on Windows.
+3. In **Sản xuất tự động**, leave **strict** selected for KRDict Vietnamese
+   dictionary evidence + a blind reverse-answering AI reviewer; switch to
+   **assisted** if you knowingly accept AI-only checks on uncommon compounds.
+4. In the bank, use **Kiểm chứng 8 câu AI mới** without ticking to review
+   old drafts. Rejected/unknown questions remain available for editing.
+5. Structural and two-direction AI checks reduce errors, not guarantee correctness.
+   Sample-check videos before making a large batch public.
+
+### Automatic thumbnails
+- Every newly rendered MP4 automatically creates `<video>_thumbnail.jpg`
+  from the same portrait intro artwork, with the actual topic and TOPIK level.
+  JPG is kept beside the video, not in disposable cache.
+- Use **Kho video** for JPG preview and individual download.
+  For old MP4s, click **Tạo thumbnail cho MP4 cũ (tối đa 20)**.
+- YouTube Shorts: After official OAuth upload, Studio waits for processing and
+  calls Google's `thumbnails.set` in a **separate durable queue**. If the
+  thumbnail fails, the MP4 is *not* re-uploaded.
+- Facebook and Instagram: thumbnails are generated for preview/manual use.
+  This version does **not** claim the Meta Reels APIs accepted a custom cover;
+  platform behavior may select its own frame.
+- Thumbnail setting requires the usual Google account permissions and may
+  be refused despite successful MP4 upload.
+
+Official references: https://krdict.korean.go.kr/vie/openApi/openApiInfo
+and https://developers.google.com/youtube/data/reference/rest/v3/thumbnails/set .
+
+### Safety
+Back up `%LOCALAPPDATA%\TiengHanSoEasyStudio` before upgrading.
+Old questions, videos, keys, logos, Page jobs and prior renders are retained.
+Do not share dictionary/API keys in chat or GitHub.

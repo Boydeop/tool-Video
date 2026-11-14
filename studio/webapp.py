@@ -20,7 +20,7 @@ from .voice import available, readiness as tts_readiness, test_speech, ENGINES
 
 LOGGER = logging.getLogger("tienghansoeasy.http")
 MAX_REQUEST = 4_000_000
-APP_VERSION = "v1.1.2"
+APP_VERSION = "v1.2.0"
 
 
 def _ui_path() -> Path:
@@ -164,6 +164,7 @@ def create_server(service, host="127.0.0.1", port=8765):
                         "batches": service.store.list_batches(limit=120),
                         "production_runs": service.store.list_production_runs(limit=40),
                         "outbound_posts": service.store.list_outbound(limit=100),
+                        "youtube_thumbnails": service.store.list_youtube_thumbnails(),
                         "cache": service.cache_stats(),
                         "youtube":youtube.status(),"instagram":instagram.status(),
                         "total_questions":service.store.count_questions(),
@@ -192,6 +193,15 @@ def create_server(service, host="127.0.0.1", port=8765):
                     self.send_header("Cache-Control","no-store")
                     self.end_headers()
                     self.wfile.write(body)
+                elif url.path.startswith("/api/thumbnails/"):
+                    name=unquote(url.path[len("/api/thumbnails/"):])
+                    thumbnail=service.thumbnail_for_video(name)
+                    payload=thumbnail.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type","image/jpeg")
+                    self.send_header("Content-Length",str(len(payload)))
+                    self.send_header("Cache-Control","no-store")
+                    self.end_headers();self.wfile.write(payload)
                 elif url.path.startswith("/api/videos/"):
                     self._send_video(unquote(url.path[len("/api/videos/"):]))
                 else:
@@ -217,6 +227,8 @@ def create_server(service, host="127.0.0.1", port=8765):
                       "/api/answers/enrich", "/api/answers/save", "/api/videos/metadata",
                       "/api/videos/metadata/inspect", "/api/videos/metadata/repair_bulk",
                       "/api/autopilot/start", "/api/cache/clear",
+                      "/api/qa/verify_pending", "/api/krdict/test",
+                      "/api/thumbnails/legacy",
                       "/api/youtube/configure", "/api/youtube/connect", "/api/youtube/disconnect",
                       "/api/instagram/connect", "/api/instagram/disconnect",
                       "/api/platform/schedule")
@@ -276,6 +288,24 @@ def create_server(service, host="127.0.0.1", port=8765):
                     result={"preview_url":"/api/preview/clip/"+name.name}
                 elif route == "/api/autopilot/start":
                     result=export_queue.start_autopilot(raw)
+                elif route == "/api/qa/verify_pending":
+                    if export_queue.is_running():
+                        raise ValueError("Không kiểm tra cùng lúc sản xuất hàng loạt.")
+                    result=service.verify_pending_questions(
+                        int(raw.get("limit",8)),mode=str(raw.get("mode","strict")))
+                elif route == "/api/krdict/test":
+                    from .krdict import KRDict
+                    result=KRDict(service.store).lookup("물")
+                    if result.get("reason")=="key_missing":
+                        raise ValueError("Chưa nhập KRDict API key trong mục API & Model.")
+                    result={"connected":bool(result.get("exact")),
+                            "word":"물","entries":result.get("entries",[])[:2],
+                            "cache_hit":result.get("cache_hit",False)}
+                elif route == "/api/thumbnails/legacy":
+                    if export_queue.is_running():
+                        raise ValueError("Đang dựng video, không tạo thumbnail cũ.")
+                    result=service.generate_legacy_thumbnails(
+                        int(raw.get("limit",20)),str(raw.get("theme","hanji")))
                 elif route == "/api/cache/clear":
                     if export_queue.is_running():
                         raise ValueError("Không thể dọn cache khi đang sản xuất video.")

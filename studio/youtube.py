@@ -105,6 +105,30 @@ class YouTubeAccount:
             self._save_private(self.token_path,json.loads(creds.to_json()))
         return creds
 
+    def processing_status(self,video_id):
+        """Return processing state without uploading the MP4 again."""
+        from googleapiclient.discovery import build
+        api=build("youtube","v3",credentials=self.credentials(),cache_discovery=False)
+        result=api.videos().list(part="processingDetails",id=str(video_id)).execute()
+        rows=result.get("items",[])
+        if not rows:raise RuntimeError("YouTube chưa trả thông tin xử lý video")
+        return str(rows[0].get("processingDetails",{}).get("processingStatus","processing"))
+
+    def set_thumbnail(self,video_id,image_path):
+        """Can be called repeatedly for the same video, never re-uploads MP4."""
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaFileUpload
+        path=Path(image_path).resolve()
+        if path.suffix.lower() not in (".jpg",".jpeg",".png") or not path.is_file():
+            raise ValueError("Thumbnail JPEG/PNG không tồn tại.")
+        api=build("youtube","v3",credentials=self.credentials(),cache_discovery=False)
+        request=api.thumbnails().set(videoId=str(video_id),
+                   media_body=MediaFileUpload(str(path),mimetype="image/jpeg",resumable=False))
+        answer=request.execute()
+        if not answer.get("items"):
+            raise RuntimeError("YouTube chưa xác nhận thumbnail.")
+        return True
+
     def upload(self,path,title,caption,privacy="private"):
         from googleapiclient.discovery import build
         from googleapiclient.http import MediaFileUpload
