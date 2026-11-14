@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - fix/native-korean-text-windows-mp4-metadata-v112
   workflow_dispatch:
 
 permissions:
