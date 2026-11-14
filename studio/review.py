@@ -15,6 +15,7 @@ from .models import get_model
 from .keys import next_key,get_keys
 from .krdict import KRDict,normalize_vi,sense_overlap
 from .quality import inspect_quiz
+from .run_limits import (check_budget, budget_active, BudgetExpired, RunCancelled)
 
 def _model_review(provider,prompt):
     if provider=="gemini":
@@ -75,7 +76,8 @@ def blind_review(quiz,generation_provider="",call=None):
                    p!="ollama" and get_keys(p)]
     candidates.sort(key=lambda p:(p==generation_provider,p=="ollama"))
     errors=[]
-    for provider in candidates:
+    for provider in (candidates[:2] if budget_active() else candidates):
+        check_budget()
         try:
             answer=(call or _model_review)(provider,prompt)
             selected=str(answer.get("selected","")).strip()
@@ -111,6 +113,7 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
     # Only standalone lexical words are directly certifiable by dictionary.
     entries={}
     for word in (quiz.correct,quiz.wrong1,quiz.wrong2,quiz.wrong3):
+        check_budget()
         try:
             data=dict_client.lookup(word)
             exact=data.get("exact",False)
@@ -119,6 +122,8 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
                            "headword_codes":[x.get("target_code","") for x in data.get("entries",[])][:5],
                            "match_to_clue":sense_overlap(quiz.short_clue,meanings),
                            "source":"KRDict","reason":data.get("reason","")}
+        except (BudgetExpired,RunCancelled):
+            raise
         except Exception as exc:
             entries[word]={"exact":False,"translations":[],
                            "match_to_clue":0,"reason":type(exc).__name__,
@@ -135,6 +140,15 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
         item=entries[word]
         if item["exact"] and item["match_to_clue"]>=0.7:
             report["issues"].append("Đáp án nhiễu có thể cũng đúng: "+word)
+    # Strict mode can never approve a word with no dictionary evidence or
+    # a distractor also matching the clue. Avoid long, futile AI requests.
+    if mode=="strict" and (not answer["exact"] or
+           not answer["translations"] or answer["match_to_clue"]<0.6 or
+           any("Đáp án nhiễu" in issue for issue in report["issues"])):
+        report["tier"]="needs_review"
+        report["reviewer"]={"available":False,"reason":"Skipped: dictionary gate failed"}
+        return report
+    check_budget()
     blind=(reviewer or blind_review)(quiz,generation_provider)
     report["reviewer"]=blind
     if not blind.get("available"):

@@ -72,7 +72,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 <body>
 <div class="app">
 <aside class="sidebar">
- <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.2.0</small></div>
+ <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.2.1</small></div>
  <nav class="nav" aria-label="Điều hướng">
   <button data-nav="autopilot" class="active"><span class="num">1</span> Sản xuất tự động</button>
   <button data-nav="create"><span class="num">2</span> Tạo câu thủ công</button>
@@ -84,7 +84,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
  <div class="sidehelp"><b>Gợi ý bắt đầu</b><p>Nhập API key ở mục 4, rồi vào mục 1 chọn số video. Autopilot tạo nhiều chủ đề và kiểm tra cấu trúc trước khi xuất; nội dung AI vẫn cần kiểm tra độ chính xác.</p></div>
 </aside>
 <main class="content">
- <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.2.0</span></header>
+ <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.2.1</span></header>
  <div class="metrics">
   <div class="metric"><span class="name">Câu hỏi đã lưu</span><strong id="statQuestions">0</strong></div>
   <div class="metric"><span class="name">Câu đã duyệt</span><strong id="statApproved">0</strong></div>
@@ -144,6 +144,10 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
       <div style="display:flex;justify-content:space-between;gap:10px"><strong id="autoPhase">Chuẩn bị AI</strong><strong id="autoPercent">0%</strong></div>
       <progress max="100" value="0" id="autoBar" style="width:100%;height:20px;margin-top:12px"></progress>
       <div class="note" id="autoCount"></div>
+      <div class="actions" style="margin-top:10px;align-items:center">
+        <button class="btn outline small" type="button" id="autoCancel" disabled>■ Dừng sau tác vụ hiện tại</button>
+        <span class="note" id="autoTiming">Mỗi chủ đề có giới hạn thời gian kiểm chứng. MP4 đã xuất không bị xóa.</span>
+      </div>
     </div>
     <div class="divider"></div>
     <div class="sectiontitle"><h2 style="font-size:17px">Lịch sử Autopilot và các câu cần duyệt</h2></div>
@@ -1294,6 +1298,7 @@ $("cacheClear").addEventListener("click",async()=>{
 async function watchAutopilot(id){
  state.autoCurrent=id;state.activeRender=true;updateSelection();
  $("autoStart").disabled=true;
+ $("autoCancel").disabled=false;
  $("autoProgress").style.display="block";
  let networkErrors=0;
  try{
@@ -1313,16 +1318,21 @@ async function watchAutopilot(id){
        continue;
      }
      $("autoBar").value=Number(report.percent)||0;
-     $("autoPercent").textContent=["completed","partial","failed","needs_review"].includes(report.status)?
+     $("autoPercent").textContent=["completed","partial","failed","needs_review","cancelled"].includes(report.status)?
    ((report.videos||[]).length+"/"+report.total_videos+" MP4"):
    ((Number(report.percent)||0)+"%");
      $("autoPhase").textContent=report.phase||"Đang tạo video";
      $("autoCount").textContent=(report.videos||[]).length+" / "+report.total_videos+
                                  " video đã xuất";
+     const elapsed=Number(report.elapsed_seconds)||0,waiting=Number(report.phase_elapsed_seconds)||0;
+     $("autoTiming").textContent="Đã chạy "+Math.floor(elapsed/60)+"p "+(elapsed%60)+"s"+
+       " · Bước hiện tại: "+waiting+"s"+
+       (waiting>75?" · Chờ API/FFmpeg lâu. Có thể bấm Dừng an toàn.":"");
+     if(report.status==="stopping") $("autoCancel").disabled=true;
      $("autoStatus").textContent=({needs_review:"Cần bổ sung câu hỏi",
         completed:"Đã xong",partial:"Hoàn tất một phần",
-        failed:"Lỗi kỹ thuật",running:"Đang dựng"}[report.status]||report.status);
-     if(["completed","partial","failed","needs_review","interrupted"].includes(report.status)){
+        failed:"Lỗi kỹ thuật",running:"Đang xử lý",stopping:"Đang dừng",cancelled:"Đã dừng"}[report.status]||report.status);
+     if(["completed","partial","failed","needs_review","interrupted","cancelled"].includes(report.status)){
        await loadStatus();
        notice("Autopilot: "+(report.videos||[]).length+" MP4 đã tạo. "+
               (report.status!=="completed"?"Kiểm tra chủ đề bị thiếu trong lịch sử.":""),
@@ -1332,10 +1342,19 @@ async function watchAutopilot(id){
    }
  }finally{
    state.activeRender=false;state.autoCurrent="";
-   $("autoStart").disabled=false;updateSelection();
+   $("autoStart").disabled=false;$("autoCancel").disabled=true;updateSelection();
    try{const latest=await api("/api/status");updateMaintenance(latest.cache)}catch(_){}
  }
 }
+$("autoCancel").addEventListener("click",async()=>{
+ if(!state.autoCurrent || !confirm("Yêu cầu Autopilot dừng an toàn sau tác vụ hiện tại? Những MP4 đã xuất sẽ được giữ."))return;
+ const reply=await run(()=>api("/api/autopilot/cancel",{job_id:state.autoCurrent}));
+ if(reply){
+   $("autoCancel").disabled=true;
+   $("autoStatus").textContent="Đang dừng";
+   notice("Đã gửi yêu cầu dừng. Tác vụ mạng/FFmpeg đang chạy sẽ kết thúc trước khi dừng.");
+ }
+});
 $("autoStart").addEventListener("click",async()=>{
  if(state.activeRender){notice("Đang có lượt sản xuất khác.","error");return}
  if(!await saveProduction())return;

@@ -437,3 +437,49 @@ and https://developers.google.com/youtube/data/reference/rest/v3/thumbnails/set 
 Back up `%LOCALAPPDATA%\TiengHanSoEasyStudio` before upgrading.
 Old questions, videos, keys, logos, Page jobs and prior renders are retained.
 Do not share dictionary/API keys in chat or GitHub.
+
+
+## v1.2.1 hotfix · Autopilot stuck at 66% / slow API calls
+
+Observed: a 3-video run displayed “AI tạo chủ đề 3/3” and 66% while only
+1 MP4 + 1 JPG had been written. v1.2.0 used serial 100-second AI HTTP waits,
+multiple QA reviewers and four KRDict lookups per candidate, while the
+progress bar only updated between topics or FFmpeg frames. A long series of
+timeouts could look like a freeze for over 30 minutes.
+
+**Fixed:**
+- Per-topic **cooperative 210-second QA budget**. AI network waits capped at
+  20 seconds during Autopilot; KRDict waits capped at 6 seconds each.
+  Only two configured AI fallback providers are attempted per generation
+  step. Manual generation keeps its own less-restrictive settings.
+- Progress now names the current topic, AI request, answer enrichment,
+  KRDict + reverse AI validation, rendering and optional SEO drafting.
+- Status polling reports elapsed runtime and time in current stage.
+  Progress percentage represents work stages, **not elapsed time**.
+- New **Dừng sau tác vụ hiện tại** button. Stopping while an MP4 is rendering
+  waits for the current FFmpeg operation, then leaves completed MP4/JPG
+  and the question bank intact. Closing the old stuck EXE may still be
+  necessary; v1.2.0 has no cancellation endpoint.
+- When a topic lacks enough verified questions before its QA budget,
+  Autopilot records `needs_review` with a timeout reason, then continues
+  to the next topic. It does not falsely claim all videos were created.
+- Dictionary-strict verification skips redundant slow AI review when KRDict
+  cannot match the correct word/sense or finds a potentially correct
+  distractor. That candidate remains reviewable, not silently approved.
+
+**Important:** A socket timeout is not a hard process kill for OS DNS,
+thread hangs or a slow FFmpeg subprocess. The deadline is checked at
+cooperative boundaries; it limits normal long-running API chains.
+Start with **1 video / 3 questions** to validate your actual KRDict key,
+selected AI model and Vietnamese TTS before a larger batch.
+
+**Safe recovery from v1.2.0:**
+1. Stop using the Start button; check the exported MP4/JPG and optionally
+   preserve the `videos` folder.
+2. Close Studio if the progress has not changed for an excessive period.
+3. Back up `%LOCALAPPDATA%\\TiengHanSoEasyStudio`, especially
+   `studio.sqlite3`, `keys.local.json`, `models.local.json`,
+   `production.local.json` and `videos`.
+4. Install the new EXE and verify the stored outputs in **Ngân hàng & video**.
+5. Import/check KRDict key, select a working AI text model and test one
+   small Autopilot run. Generated drafts and completed videos are preserved.

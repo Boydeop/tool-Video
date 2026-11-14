@@ -15,6 +15,7 @@ import urllib.error
 import xml.etree.ElementTree as ET
 
 from .keys import get_keys
+from .run_limits import network_timeout, check_budget
 
 ENDPOINT="https://krdict.korean.go.kr/api/search"
 UA="TiengHanSoEasyStudio/1.2 (dictionary evidence)"
@@ -90,7 +91,7 @@ class KRDict:
             if self.transport:
                 raw=self.transport(req)
             else:
-                with urllib.request.urlopen(req,timeout=10) as handle:
+                with urllib.request.urlopen(req,timeout=network_timeout(6,10)) as handle:
                     if handle.geturl().split("?")[0]!=ENDPOINT:
                         raise RuntimeError("KRDict unexpected redirect")
                     raw=handle.read(MAX_XML_BYTES+1)
@@ -104,6 +105,7 @@ class KRDict:
         word=unicodedata.normalize("NFC",str(word).strip())
         if not 1<=len(word)<=60 or not re.search(r"[\uac00-\ud7a3]",word):
             return {"exact":False,"entries":[],"reason":"not_a_lexical_headword"}
+        check_budget()
         cached=self.store.krdict_cache_get(word)
         if cached is not None:return {**cached,"cache_hit":True}
         keys=get_keys("krdict")
