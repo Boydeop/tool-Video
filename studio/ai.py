@@ -9,7 +9,11 @@ from .keys import next_key, rate_limited
 from .models import get_model
 from .run_limits import network_timeout, check_budget, budget_active
 
-class ProviderError(RuntimeError): pass
+class ProviderError(RuntimeError):
+    def __init__(self,message,*,retryable=True,retry_after=0):
+        self.retryable=retryable
+        self.retry_after=retry_after
+        super().__init__(message)
 
 def post(provider,url,payload,headers):
     req=urllib.request.Request(url,data=json.dumps(payload,ensure_ascii=False).encode(),
@@ -21,14 +25,15 @@ def post(provider,url,payload,headers):
     except urllib.error.HTTPError as exc:
         if exc.code==429:
             rate_limited(provider,120)
-            raise ProviderError(provider+" is rate-limited; provider-level cooldown active") from exc
+            raise ProviderError(provider+" is rate-limited; provider-level cooldown active",retry_after=120) from None
         if exc.code==404:
-            raise ProviderError(provider+" HTTP 404: model không khả dụng với key này. Vào API Key TXT → Chọn model để thay đổi.") from exc
+            raise ProviderError(provider+" HTTP 404: model không khả dụng với key này. Vào API Key TXT → Chọn model để thay đổi.",retryable=False) from None
         if exc.code in (401,403):
-            raise ProviderError(provider+" rejected API credentials or permissions") from exc
-        raise ProviderError(provider+" HTTP "+str(exc.code)+"; check model and service status") from exc
+            raise ProviderError(provider+" rejected API credentials or permissions",retryable=False) from None
+        raise ProviderError(provider+" HTTP "+str(exc.code)+"; check model and service status",
+                            retry_after=30 if exc.code>=500 else 0) from None
     except (urllib.error.URLError,TimeoutError,ValueError) as exc:
-        raise ProviderError(provider+" connection or response error") from exc
+        raise ProviderError(provider+" connection or response error",retry_after=15) from None
 
 def generate(provider,topic,level,count,recent,fmt="từ vựng"):
     if not 1<=count<=30:raise ValueError("1-30 questions per request")
@@ -46,7 +51,7 @@ def generate(provider,topic,level,count,recent,fmt="từ vựng"):
       +"Không lặp lại đáp án hoặc câu đã dùng sau đây: "+json.dumps(recent[-50:],ensure_ascii=False))
     if provider=="gemini":
         try:key=next_key(provider)
-        except RuntimeError as exc:raise ProviderError(str(exc)) from exc
+        except RuntimeError as exc:raise ProviderError(str(exc),retry_after=120 if 'tạm nghỉ' in str(exc) else 0) from None
         model=get_model("gemini")
         if not re.fullmatch(r"[\w.-]+",model):raise ProviderError("Invalid Gemini model")
         data=post(provider,"https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent",
@@ -67,7 +72,7 @@ def generate(provider,topic,level,count,recent,fmt="từ vựng"):
             key="local"
         else:
             try:key=next_key(provider)
-            except RuntimeError as exc:raise ProviderError(str(exc)) from exc
+            except RuntimeError as exc:raise ProviderError(str(exc),retry_after=120 if 'tạm nghỉ' in str(exc) else 0) from None
         data=post(provider,url,{"model":get_model(provider) if provider!="ollama" else os.getenv(model_env,default),"temperature":0.85,
               "messages":[{"role":"user","content":prompt}]},{"Authorization":"Bearer "+key})
         try:content=data["choices"][0]["message"]["content"]
@@ -100,9 +105,11 @@ def fallback(topic,level,count,recent,fmt="từ vựng",providers=None):
                        (p=="ollama" and os.getenv("ENABLE_OLLAMA")=="1")
                        or (p!="ollama" and get_keys(p))][:2]
     if not candidate_list:
-        raise ProviderError("Chưa có provider AI khả dụng. Kiểm tra key AI trong mục API & Model.")
+        raise ProviderError("Chưa có provider AI khả dụng. Kiểm tra key AI trong mục API & Model.",retryable=False)
     for provider in candidate_list:
         check_budget()
         try:return provider,generate(provider,topic,level,count,recent,fmt)
-        except (ProviderError,ValueError) as exc:errors.append(provider+": "+str(exc))
-    raise ProviderError("All providers unavailable: "+" | ".join(errors))
+        except (ProviderError,ValueError) as exc:errors.append((provider,exc))
+    raise ProviderError("All providers unavailable: "+" | ".join(p+': '+str(exc) for p,exc in errors),
+        retryable=any(getattr(exc,'retryable',True) for _,exc in errors),
+        retry_after=max((getattr(exc,'retry_after',0) for _,exc in errors),default=0))

@@ -8,6 +8,7 @@ import threading
 import uuid
 from contextlib import contextmanager
 from .quiz import Quiz, fingerprint, similar, normalize
+from .batch_store import BatchStore
 
 class DuplicateQuestion(ValueError):
     pass
@@ -15,7 +16,7 @@ class DuplicateQuestion(ValueError):
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-class Store:
+class Store(BatchStore):
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -134,6 +135,8 @@ class Store:
             if "title" not in job_cols:
                 c.execute("ALTER TABLE jobs ADD COLUMN title TEXT NOT NULL DEFAULT ''")
 
+            self.init_batch_schema(c)
+
     def krdict_cache_get(self,query,max_age_seconds=2592000):
         import time
         with self.db() as c:
@@ -178,7 +181,7 @@ class Store:
             return [dict(row) for row in c.execute("""
                 SELECT q.id FROM questions q
                 LEFT JOIN question_qa qa ON qa.question_id=q.id
-                WHERE q.provider!='manual' AND
+                WHERE q.trashed=0 AND q.production_task='' AND q.provider!='manual' AND
                   (q.status='draft' OR (q.status='auto_approved' AND
                    (qa.outcome IS NULL OR qa.outcome IN ('not_checked','stale'))))
                 ORDER BY q.created_at DESC LIMIT ?""",(limit,))]
@@ -216,7 +219,7 @@ class Store:
                      (run_id,json.dumps(plan,ensure_ascii=False),utcnow(),utcnow()))
 
     def update_production_run(self,run_id,status,results,error=""):
-        if status not in ("running","completed","partial","failed","interrupted"):
+        if status not in ("running","completed","partial","failed","interrupted","paused","blocked"):
             raise ValueError("Invalid run status")
         with self._lock,self.db(immediate=True) as c:
             row=c.execute("""UPDATE production_runs SET status=?,results=?,error=?,updated_at=?
@@ -228,7 +231,7 @@ class Store:
         with self.db() as c:
             return [{**dict(r),"plan":json.loads(r["plan"]),
                      "results":json.loads(r["results"])}
-                    for r in c.execute("SELECT * FROM production_runs ORDER BY created_at DESC LIMIT ?",(limit,))]
+                    for r in c.execute("SELECT r.*,EXISTS(SELECT 1 FROM production_tasks t WHERE t.run_id=r.id) durable FROM production_runs r ORDER BY created_at DESC LIMIT ?",(limit,))]
 
     def recover_incomplete_runs(self):
         # Crash-restart recovery: never misreport a partially generated run as complete.
@@ -347,7 +350,7 @@ class Store:
             c.execute("INSERT INTO audit(created_at,kind,detail) VALUES(?,?,?)",
                       (utcnow(), kind, str(detail)[:1500]))
 
-    def insert_question(self, quiz: Quiz, provider="manual", batch_id="") -> str:
+    def insert_question(self, quiz: Quiz, provider="manual", batch_id="", production_task="") -> str:
         quiz.validate()
         qhash = fingerprint(quiz.question)
         ahash = fingerprint(quiz.correct)
@@ -358,7 +361,7 @@ class Store:
             if exact:
                 raise DuplicateQuestion("Trùng câu hỏi hoặc đáp án tiếng Hàn đã lưu.")
             # For near duplicates, scan question history. Exact hashes are indexed.
-            for r in c.execute("SELECT question, correct FROM questions"):
+            for r in c.execute("SELECT question, correct FROM questions WHERE trashed=0"):
                 if similar(r["question"], quiz.question) >= 0.89:
                     raise DuplicateQuestion("Câu hỏi gần trùng với dữ liệu cũ.")
                 if len(normalize(quiz.correct)) > 8 and similar(r["correct"], quiz.correct) >= 0.94:
@@ -370,16 +373,18 @@ class Store:
                 (qid,quiz.topic,quiz.question,quiz.correct,
                  json.dumps(quiz.to_dict(),ensure_ascii=False),
                  qhash,ahash,"draft",provider,utcnow(),batch_id))
+            if production_task:
+                c.execute('UPDATE questions SET production_task=? WHERE id=?',(production_task,qid))
             return qid
 
-    def list_questions(self, status=None, limit=100):
+    def list_questions(self, status=None, limit=100, trash=False):
         with self.db() as c:
-            if status:
-                rows = c.execute("SELECT q.*,qa.outcome qa_outcome,qa.report_json qa_report_json FROM questions q LEFT JOIN question_qa qa ON qa.question_id=q.id WHERE q.status=? ORDER BY q.created_at DESC LIMIT ?",
-                                 (status,limit)).fetchall()
-            else:
-                rows = c.execute("SELECT q.*,qa.outcome qa_outcome,qa.report_json qa_report_json FROM questions q LEFT JOIN question_qa qa ON qa.question_id=q.id ORDER BY q.created_at DESC LIMIT ?",
-                                 (limit,)).fetchall()
+            query="""SELECT q.*,qa.outcome qa_outcome,qa.report_json qa_report_json
+              FROM questions q LEFT JOIN question_qa qa ON qa.question_id=q.id
+              WHERE q.trashed=? AND q.production_task=''"""
+            values=[int(trash)]
+            if status:query+=' AND q.status=?';values.append(status)
+            rows=c.execute(query+' ORDER BY q.created_at DESC LIMIT ?',[*values,limit]).fetchall()
             result=[]
             for r in rows:
                 payload=json.loads(r["payload"])
@@ -399,7 +404,7 @@ class Store:
             return []
         with self.db() as c:
             placeholders = ",".join("?" for _ in ids)
-            query = "SELECT id,payload,status FROM questions WHERE id IN (" + placeholders + ")"
+            query = "SELECT id,payload,status FROM questions WHERE trashed=0 AND id IN (" + placeholders + ")"
             data = {r["id"]: r for r in c.execute(query, ids)}
             if len(data) != len(set(ids)):
                 raise ValueError("Không tìm thấy một số câu hỏi.")
@@ -421,7 +426,7 @@ class Store:
                 raise ValueError("Phiên âm hoặc nghĩa vượt giới hạn.")
             sanitized[key]=value.strip()
         with self._lock,self.db(immediate=True) as c:
-            row=c.execute("SELECT payload,status FROM questions WHERE id=?",(qid,)).fetchone()
+            row=c.execute("SELECT payload,status FROM questions WHERE trashed=0 AND id=?",(qid,)).fetchone()
             if not row:raise ValueError("Không tìm thấy câu hỏi.")
             if row["status"]=="rendered":
                 raise ValueError("Không sửa câu đã xuất video. Tạo phiên bản câu mới.")
@@ -436,7 +441,7 @@ class Store:
 
     def repair_source(self,qid):
         with self.db() as c:
-            row=c.execute("SELECT payload,status FROM questions WHERE id=?",(qid,)).fetchone()
+            row=c.execute("SELECT payload,status FROM questions WHERE trashed=0 AND id=?",(qid,)).fetchone()
             if row is None or row['status'] not in ('draft','auto_approved','approved'):
                 raise ValueError('Chỉ sửa câu chưa xuất, chưa bị loại; không sửa MP4 đã dựng.')
             return Quiz.parse(json.loads(row['payload']))
@@ -448,7 +453,7 @@ class Store:
         if (before.topic,before.question,before.clue,before.level)!=(after.topic,after.question,after.clue,after.level):
             raise ValueError('Không đổi câu hỏi khi sửa đáp án')
         with self._lock,self.db(immediate=True) as c:
-            row=c.execute('SELECT payload,status FROM questions WHERE id=?',(qid,)).fetchone()
+            row=c.execute('SELECT payload,status FROM questions WHERE trashed=0 AND id=?',(qid,)).fetchone()
             if row is None or row['status'] not in ('draft','auto_approved','approved'):
                 raise ValueError('Câu hỏi đã xuất hoặc đã đổi trạng thái; không ghi đè')
             if Quiz.parse(json.loads(row['payload']))!=before:
@@ -456,7 +461,7 @@ class Store:
             ahash=fingerprint(after.correct)
             if c.execute('SELECT 1 FROM questions WHERE answer_hash=? AND id!=?',(ahash,qid)).fetchone():
                 raise DuplicateQuestion('Đáp án sửa trùng câu đã lưu; giữ nguyên câu cũ')
-            for other in c.execute('SELECT correct FROM questions WHERE id!=?',(qid,)):
+            for other in c.execute('SELECT correct FROM questions WHERE trashed=0 AND id!=?',(qid,)):
                 if len(normalize(after.correct))>8 and similar(other['correct'],after.correct)>=.94:
                     raise DuplicateQuestion('Đáp án sửa gần trùng câu đã lưu; giữ nguyên câu cũ')
             old=json.dumps(before.to_dict(),ensure_ascii=False)
@@ -481,7 +486,7 @@ class Store:
             raise ValueError("Chưa chọn câu hỏi.")
         with self._lock, self.db(immediate=True) as c:
             for qid in ids:
-                row = c.execute("UPDATE questions SET status=? WHERE id=? AND status!='rendered'", (status,qid))
+                row = c.execute("UPDATE questions SET status=? WHERE id=? AND trashed=0 AND status!='rendered'", (status,qid))
                 if row.rowcount != 1:
                     raise ValueError("Không tìm thấy câu: " + str(qid))
 
@@ -495,7 +500,7 @@ class Store:
                        SUM(CASE WHEN status IN ('approved','auto_approved') THEN 1 ELSE 0 END) approved,
                        SUM(CASE WHEN status='auto_approved' THEN 1 ELSE 0 END) auto_approved,
                        SUM(CASE WHEN status='rendered' THEN 1 ELSE 0 END) rendered
-                FROM questions GROUP BY COALESCE(NULLIF(batch_id,''),'legacy')
+                FROM questions WHERE trashed=0 AND production_task='' GROUP BY COALESCE(NULLIF(batch_id,''),'legacy')
                 ORDER BY created_at DESC LIMIT ?""",(limit,))]
 
     def mark_rendered(self,ids,path):
@@ -503,7 +508,7 @@ class Store:
         target=str(Path(path).resolve())
         with self._lock,self.db(immediate=True) as c:
             placeholders=",".join("?" for _ in ids)
-            rows=c.execute("SELECT id,topic,status FROM questions WHERE id IN ("+placeholders+")",ids).fetchall()
+            rows=c.execute("SELECT id,topic,status,production_task FROM questions WHERE id IN ("+placeholders+")",ids).fetchall()
             if len(rows)!=len(set(ids)) or any(row["status"] not in ("approved","auto_approved") for row in rows):
                 raise ValueError("All questions must be approved and not yet rendered.")
             vid=uuid.uuid4().hex
@@ -511,6 +516,14 @@ class Store:
                          VALUES(?,?,?,?,'rendered',?)""",
                 (vid,target,json.dumps(ids),rows[0]["topic"],utcnow()))
             c.execute("UPDATE questions SET status='rendered',last_video=? WHERE id IN ("+placeholders+")", [target,*ids])
+            task_ids={row['production_task'] for row in rows if row['production_task']}
+            if task_ids:
+                if len(task_ids)!=1 or any(not row['production_task'] for row in rows):
+                    raise ValueError('Không ghép câu từ nhiều tác vụ sản xuất')
+                task_id=next(iter(task_ids))
+                task=c.execute('SELECT status FROM production_tasks WHERE id=?',(task_id,)).fetchone()
+                if task is None or task['status']!='running':raise ValueError('Tác vụ không còn quyền ghi video')
+                c.execute("UPDATE production_tasks SET status='completed',video_path=?,error='',updated_at=? WHERE id=?",(target,utcnow(),task_id))
             return vid
 
     def list_videos(self,limit=80):
@@ -548,16 +561,16 @@ class Store:
     def recent_prompts(self, limit=40):
         with self.db() as c:
             return [r["question"] + " => " + r["correct"] for r in c.execute(
-                "SELECT question,correct FROM questions ORDER BY created_at DESC LIMIT ?",(limit,))]
+                "SELECT question,correct FROM questions WHERE trashed=0 ORDER BY created_at DESC LIMIT ?",(limit,))]
 
     def topic_counts(self):
         with self.db() as c:
             return {r["topic"]:r["n"] for r in c.execute(
-                "SELECT topic, COUNT(*) n FROM questions GROUP BY topic")}
+                "SELECT topic, COUNT(*) n FROM questions WHERE trashed=0 GROUP BY topic")}
 
     def count_questions(self):
         with self.db() as c:
-            return c.execute("SELECT COUNT(*) FROM questions").fetchone()[0]
+            return c.execute("SELECT COUNT(*) FROM questions WHERE trashed=0 AND production_task=''").fetchone()[0]
 
     def add_job(self, video_path, caption, scheduled_at, title=""):
         run_at = datetime.fromisoformat(scheduled_at.replace("Z","+00:00"))

@@ -31,7 +31,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 .actions{display:flex;flex-wrap:wrap;gap:9px;align-items:center}.tip{background:#fff5e9;border:1px solid #ffe1b7;border-radius:12px;color:#7a4d16;padding:12px 14px;font-size:13px}
 .empty{padding:42px 18px;text-align:center;color:var(--muted);border:1px dashed #c6d5e6;border-radius:14px;background:#fafcff}.empty strong{display:block;color:var(--deep);font-size:16px;margin:6px}
 .tablewrap{overflow-x:auto}.table{border-collapse:collapse;width:100%;min-width:640px}.table th{font-size:12px;color:var(--muted);letter-spacing:.3px;font-weight:700;text-align:left;padding:12px;background:#f6f9fd}.table td{padding:13px 10px;border-bottom:1px solid var(--line);vertical-align:middle;font-size:13px}.table td small{color:var(--muted);display:block}.table tr:hover td{background:#f9fbfe}.table td:last-child{max-width:280px}.table input{width:17px;height:17px;accent-color:var(--blue)}
-.status{display:inline-flex;font-size:11px;font-weight:700;border-radius:50px;padding:5px 9px;background:#fff2e0;color:#9e6016}.status.approved{background:#e8f7ee;color:var(--green)}.status.rejected{background:#fce8e5;color:#b33226}
+.status{display:inline-flex;font-size:11px;font-weight:700;border-radius:50px;padding:5px 9px;background:#fff2e0;color:#9e6016}.status.auto_approved,.status.approved{background:#e8f7ee;color:var(--green)}.status.rejected{background:#fce8e5;color:#b33226}
 .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0 17px}.toolbar select{max-width:190px}.choose{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--muted)}
 .themegrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;margin:13px 0}.themegrid label{border:1px solid var(--line);border-radius:13px;padding:11px;cursor:pointer;display:flex;gap:9px;align-items:center;font-size:13px;font-weight:700}.themegrid label:has(input:checked){border-color:var(--blue);background:#eff5ff}.themegrid input{accent-color:var(--blue)}.swatch{width:27px;height:36px;border-radius:6px;background:#fdfbf7;border:1px solid #c1d0dd;position:relative}.swatch:after{content:"";background:var(--blue);position:absolute;left:5px;right:5px;top:8px;height:5px;border-radius:2px}.swatch.blue{background:#0f4c81}.swatch.blue:after{background:#e84a36}.swatch.sejong{background:#f7f4eb}.swatch.sejong:after{background:#d13624}
 .switchrow{display:flex;gap:9px;align-items:center;font-size:14px;margin:15px 0}.switchrow input{accent-color:var(--blue);width:17px;height:17px}
@@ -67,46 +67,47 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 @media(max-width:1150px){#panel-autopilot .fieldrow:not(.auto-prefs){grid-template-columns:repeat(3,minmax(0,1fr))}#panel-autopilot .auto-prefs{grid-template-columns:1fr 1fr}}
 @media(max-width:740px){#panel-autopilot .fieldrow:not(.auto-prefs),#panel-autopilot .auto-prefs{grid-template-columns:1fr 1fr}}
 @media(max-width:470px){#panel-autopilot .fieldrow:not(.auto-prefs),#panel-autopilot .auto-prefs{grid-template-columns:1fr}}
+
+.queue-run{border:1px solid #dce8f2;border-radius:14px;padding:16px;margin:12px 0;background:#fff}
+.queue-run details{margin-top:12px}.card>summary{font-weight:700;cursor:pointer;color:var(--deep);padding:5px}
+#manualWorkspace>summary{padding:10px}#videoShelf .table{min-width:650px}
+@media(max-width:760px){.toolbar{display:grid;grid-template-columns:1fr}.toolbar>*{width:100%}.auto-prefs{grid-template-columns:1fr!important}}
 </style>
 </head>
 <body>
 <div class="app">
 <aside class="sidebar">
- <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.3.2</small></div>
+ <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.4.0</small></div>
  <nav class="nav" aria-label="Điều hướng">
-  <button data-nav="autopilot" class="active"><span class="num">1</span> Sản xuất tự động</button>
-  <button data-nav="create"><span class="num">2</span> Tạo câu thủ công</button>
-  <button data-nav="questions"><span class="num">3</span> Ngân hàng & video</button>
-  <button data-nav="keys"><span class="num">4</span> API & Model</button>
-  <button data-nav="publish"><span class="num">5</span> Đăng đa nền tảng</button>
-  <button data-nav="maintenance"><span class="num">6</span> Dọn cache & nhật ký</button>
+  <button data-nav="autopilot" class="active"><span class="num">1</span> Sản xuất</button>
+  <button data-nav="questions"><span class="num">2</span> Kho video</button>
+  <button data-nav="keys"><span class="num">3</span> API & Model</button>
+  <button data-nav="publish"><span class="num">4</span> Đăng video</button>
+  <button data-nav="maintenance"><span class="num">5</span> Thiết lập & dọn dẹp</button>
  </nav>
- <div class="sidehelp"><b>Gợi ý bắt đầu</b><p>Nhập API key ở mục 4, rồi vào mục 1 chọn số video. Autopilot tạo nhiều chủ đề và kiểm tra cấu trúc trước khi xuất; nội dung AI vẫn cần kiểm tra độ chính xác.</p></div>
+ <div class="sidehelp"><b>Gợi ý bắt đầu</b><p>Thiết lập API một lần, chọn 1–100 video rồi bắt đầu. Tác vụ lỗi tự tạo lại; mở Kho video để xem kết quả. Không cần xử lý câu thừa.</p></div>
 </aside>
 <main class="content">
- <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.3.2</span></header>
+ <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.4.0</span></header>
  <div class="metrics">
-  <div class="metric"><span class="name">Câu hỏi đã lưu</span><strong id="statQuestions">0</strong></div>
-  <div class="metric"><span class="name">Câu đã duyệt</span><strong id="statApproved">0</strong></div>
+  <div class="metric"><span class="name">Bản nháp đang dùng</span><strong id="statQuestions">0</strong></div>
+  <div class="metric"><span class="name">Bản nháp sẵn sàng</span><strong id="statApproved">0</strong></div>
   <div class="metric"><span class="name">Video MP4</span><strong id="statVideos">0</strong></div>
   <div class="metric"><span class="name">API key đã cấu hình</span><strong id="statKeys">0</strong></div>
  </div>
 
  <section class="panel active" id="panel-autopilot">
   <div class="card">
-    <div class="sectiontitle"><h2>🚀 Autopilot · Sản xuất hàng loạt không tick</h2><span class="pill">Mỗi MP4 một chủ đề</span></div>
-    <p class="note">Tự chọn chủ đề ít được sử dụng, sinh câu bằng AI, kiểm tra trùng lặp và thông tin 4 đáp án, rồi xuất MP4 9:16. Câu thiếu dữ liệu hoặc không đạt kiểm tra sẽ về ngân hàng để duyệt, không bị giấu đi.</p>
+    <div class="sectiontitle"><h2>Sản xuất video tự động</h2><span class="pill">Mỗi MP4 một chủ đề</span></div>
+    <p class="note">Chọn số video và bắt đầu. Mỗi video được tạo, kiểm tra và dựng riêng; nếu lỗi sẽ bỏ nội dung tạm và thử lại. Video đã hoàn tất được giữ nguyên.</p>
     <div class="fieldrow">
       <div class="field compact"><label for="autoVideos">Số video / lượt</label>
-        <select id="autoVideos"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>6</option><option>8</option><option>10</option><option>12</option></select></div>
+        <input id="autoVideos" type="number" min="1" max="100" value="3"></div>
       <div class="field compact"><label for="autoPerVideo">Câu / video</label>
         <select id="autoPerVideo"><option>3</option><option selected>4</option><option>5</option><option>6</option></select></div>
-      <div class="field compact"><label for="autoLevels">Cấp độ TOPIK</label>
-        <select id="autoLevels"><option value="1">TOPIK 1</option><option value="1,2" selected>TOPIK 1–2</option><option value="1,2,3,4">TOPIK 1–4</option></select></div>
-      <div class="field compact"><label for="autoFormats">Dạng bài</label>
-        <select id="autoFormats"><option value="vocab" selected>Từ vựng ngắn, nhiều chủ đề</option><option value="mixed">Trộn từ vựng và hội thoại</option></select></div>
-      <div class="field compact"><label for="autoTheme">Template</label>
-        <select id="autoTheme"><option value="hanji">Hanji Classic</option><option value="blue">Blue Modern</option><option value="sejong">Sejong Heritage</option></select></div>
+
+
+
     </div>
     <div class="fieldrow auto-prefs">
       <label class="switchrow"><input type="checkbox" id="autoVoice" checked> Giọng Việt–Hàn + đếm ngược + SFX (cần mạng)</label>
@@ -114,7 +115,10 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
       <div class="field compact"><label for="autoWidth">Profile xuất</label>
         <select id="autoWidth"><option value="1080" selected>Shorts/Reels 1080×1920</option><option value="540">Kiểm thử nhanh 540×960</option></select></div>
     </div>
-    <div class="eventstudio" id="seasonalStudio">
+<details class="card" id="autoAdvanced"><summary>Chủ đề, kiểm chứng & thiết lập nâng cao</summary><div class="fieldrow"><div class="field compact"><label for="autoLevels">Cấp độ TOPIK</label>
+        <select id="autoLevels"><option value="1">TOPIK 1</option><option value="1,2" selected>TOPIK 1–2</option><option value="1,2,3,4">TOPIK 1–4</option></select></div><div class="field compact"><label for="autoFormats">Dạng bài</label>
+        <select id="autoFormats"><option value="vocab" selected>Từ vựng ngắn, nhiều chủ đề</option><option value="mixed">Trộn từ vựng và hội thoại</option></select></div><div class="field compact"><label for="autoTheme">Template</label>
+        <select id="autoTheme"><option value="hanji">Hanji Classic</option><option value="blue">Blue Modern</option><option value="sejong">Sejong Heritage</option></select></div></div>    <div class="eventstudio" id="seasonalStudio">
       <strong>📅 Chủ đề theo sự kiện · riêng với chủ đề ngẫu nhiên</strong>
       <p class="event-description">Chọn độc lập để ưu tiên Noel, Ngày Hangeul, Pepero... theo lịch Việt Nam. Nếu không bật, chủ đề ngẫu nhiên hoạt động như cũ.</p>
       <div class="fieldrow" style="display:grid;grid-template-columns:1fr minmax(170px,.65fr);align-items:end">
@@ -135,10 +139,12 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
           <option value="assisted">⚖ AI hỏi ngược nếu từ điển không có cụm từ</option>
         </select>
       </div>
-      <div class="note" style="align-self:center">Tự sinh câu, tra KRDict và tự sửa từ/nghĩa sai, rồi đổi vị trí đáp án cho AI kiểm tra lại. Câu sửa đạt được dựng video; câu chưa sửa được giữ ở Cần QA.</div>
+      <div class="note" style="align-self:center">Tự tạo và kiểm tra nội dung. Câu không đạt được bỏ để tạo lại; câu thử không xuất hiện trong Kho video hay bản nháp thủ công.</div>
     </div>
-    <p class="note">Autopilot chỉ duyệt máy khi kiểm tra cấu trúc, KRDict và AI hỏi ngược đạt yêu cầu. Nó không thay thế người kiểm tra tiếng Hàn. Video chỉ được đăng khi bạn lên lịch và cấp quyền riêng cho từng nền tảng. Tối đa 12 video/lượt để kiểm soát chi phí và quota API.</p>
-    <div class="actions"><button class="btn" id="autoStart">🚀 Tạo nhiều chủ đề và dựng tất cả</button>
+<div class="field compact" style="max-width:260px"><label for="autoAttempts">Số lần thử tối đa / video</label><select id="autoAttempts"><option>2</option><option selected>3</option><option>5</option></select></div></details>
+    <p class="note">Chạy lần lượt để giữ ổn định. Tác vụ lỗi tự thử lại; có thể tạm dừng và tiếp tục mà không dựng lại video đã xong.</p>
+
+    <div class="actions"><button class="btn" id="autoStart">Bắt đầu sản xuất</button>
       <span class="pill" id="autoStatus">Chưa có lượt sản xuất</span></div>
     <div id="autoProgress" style="display:none;margin-top:15px;padding:16px;background:#f4f8fd;border-radius:14px">
       <div style="display:flex;justify-content:space-between;gap:10px"><strong id="autoPhase">Chuẩn bị AI</strong><strong id="autoPercent">0%</strong></div>
@@ -150,12 +156,10 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
       </div>
     </div>
     <div class="divider"></div>
-    <div class="sectiontitle"><h2 style="font-size:17px">Lịch sử Autopilot và các câu cần duyệt</h2></div>
+    <div class="sectiontitle"><h2 style="font-size:17px">Tiến trình từng lượt sản xuất</h2></div>
     <div id="autoHistory" class="note">Chưa có lượt xuất.</div>
   </div>
-</section>
-
-<section class="panel" id="panel-create">
+<details id="manualCreate" class="card"><summary>Tạo câu thủ công · nâng cao</summary>
   <div class="card">
    <div class="sectiontitle"><h2>Tạo câu hỏi riêng để kiểm duyệt</h2><span class="pill">Không cần nhập chủ đề</span></div>
    <p class="note">Studio tự đề xuất chủ đề trong hơn 50 lĩnh vực, ưu tiên những chủ đề bạn ít tạo video. Có thể đổi chủ đề bất cứ lúc nào.</p>
@@ -169,25 +173,38 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
    <p class="note" style="margin-top:15px">Câu hỏi AI được lưu dưới dạng nháp để kiểm tra tiếng Hàn trước khi xuất video. Không bảo đảm mọi đáp án AI đều chính xác.</p>
   </div>
   <div class="tip" id="setupTip">💡 Chưa có API key? Chọn mục <b>API Key TXT</b> để nhập từ file văn bản hoặc dán key trực tiếp.</div>
- </section>
+ </details>
+</section>
 
- <section class="panel" id="panel-questions">
+<section class="panel" id="panel-questions">
+<div class="card" id="videoShelf">   <div style="margin-top:0"><div class="sectiontitle"><h2 style="font-size:17px">Kho video đã sản xuất</h2><span class="pill" id="libraryCount">0 video</span></div>
+    <div class="tablewrap"><table class="table"><thead><tr><th>Thumbnail</th><th>Video</th><th>Chủ đề</th><th>Trạng thái</th><th>Tải xuống</th></tr></thead><tbody id="videoLibrary"></tbody></table></div>
+    <p class="note" id="emptyVideos">Chưa có video. Vào Sản xuất, chọn số lượng và bấm Bắt đầu.</p>
+    <div class="actions"><button class="btn outline small" id="videoPrev">← Trước</button><span class="pill" id="videoPageInfo">Trang 1</span><button class="btn outline small" id="videoNext">Tiếp →</button></div></div>
+   <div class="actions" style="margin-top:12px">
+      <button class="btn secondary small" id="generateOldThumbnails">🖼️ Tạo thumbnail cho MP4 cũ (tối đa 20)</button>
+      <span class="note">Thumbnail JPG lấy từ khung mở đầu, lưu cùng MP4. Video cũ có thể không còn lưu template ban đầu.</span>
+    </div>
+   <div class="actions" style="margin-top:12px"><a id="videoDownload" class="btn secondary" style="display:none;text-decoration:none" download>↓ Tải MP4 vừa xuất</a></div></div>
+<div class="card"><div class="sectiontitle"><h2>Bản nháp thủ công</h2><span class="pill" id="draftSummary">0 bản nháp</span></div>
+ <p class="note">Sản xuất tự động chỉ đưa MP4 hoàn tất vào kho. Mục này dành cho câu bạn tự tạo hoặc muốn chỉnh tay.</p>
+ <div class="actions"><button class="btn secondary" id="openDraftBank">Mở bản nháp</button>
+ <button class="btn outline" id="cleanupDrafts">Dọn bản nháp AI chưa dùng</button><button class="btn outline" id="openTrash">Thùng rác (0)</button></div></div>
+<details id="manualWorkspace" class="card"><summary>Làm video từ bản nháp · nâng cao</summary>
   <div class="card">
-   <div class="sectiontitle"><h2>Ngân hàng câu hỏi</h2><span class="pill" id="selectedCount">Đã chọn 0 câu</span></div>
+   <div class="sectiontitle"><h2>Quản lý bản nháp</h2><span class="pill" id="selectedCount">Đã chọn 0 câu</span></div>
    <div class="toolbar">
-    <select id="questionFilter" aria-label="Lọc câu hỏi"><option value="draft" selected>AI cần QA / câu chưa duyệt</option><option value="approved">Đã duyệt tay · Chưa xuất</option><option value="auto_approved">Đã kiểm tra máy · Chưa xuất</option><option value="rendered">Đã xuất video</option><option value="rejected">Đã từ chối</option><option value="all">Tất cả trạng thái</option></select>
+    <select id="questionFilter" aria-label="Lọc câu hỏi"><option value="ready" selected>Sẵn sàng làm video</option><option value="draft">Bản nháp cần xử lý</option><option value="rendered">Đã xuất video</option><option value="rejected">Đã từ chối</option><option value="all">Tất cả bản nháp</option><option value="trash">Thùng rác</option></select>
     <select id="batchFilter" aria-label="Lọc lô"><option value="all">Tất cả lô nội dung</option></select>
-    <button class="btn secondary small" id="selectDrafts">Chọn tất cả câu chờ duyệt</button>
-    <button class="btn secondary small" id="selectApproved">Chọn câu đã duyệt</button>
-    <button class="btn outline small" id="clearSelected">Bỏ chọn</button>
+    <select id="selectApproved" aria-label="Chọn bản nháp"><option value="">Chọn câu…</option><option value="visible">Chọn đang hiển thị</option><option value="ready">Chọn câu sẵn sàng</option><option value="clear">Bỏ chọn</option></select>
     <button class="btn small" id="approve" disabled>✓ Duyệt tay câu đã chọn</button>
     <button class="btn small" id="makeSelectedVideo" disabled>🎬 Làm video từ câu đã chọn</button>
    </div>
    <div class="actions" style="margin-bottom:12px">
-      <button class="btn secondary small" id="enrichAnswers">✨ AI bổ sung nghĩa/phiên âm cho câu đã chọn (tối đa 6)</button>
-      <button class="btn secondary small" id="bulkVerifyAI">🔧 Kiểm tra & tự sửa 6 câu AI mới bằng KRDict + hỏi ngược (không tick)</button>
-      <button class="btn small" id="repairSelected">🔧 Tự sửa câu đã chọn bằng KRDict + AI</button>
-      <span class="note">Nội dung AI cần duyệt. Các câu đã xuất không sửa trực tiếp.</span>
+      <button class="btn small" id="repairSelected">Tự sửa bằng KRDict + AI</button>
+      <button class="btn outline small" id="trashSelected">Xóa bản nháp đã chọn</button>
+      <button class="btn secondary small" id="restoreSelected">Khôi phục</button>
+      <button class="btn outline small" id="emptyTrash">Xóa vĩnh viễn thùng rác</button>
    </div>
    <p class="note" id="repairStatus" aria-live="polite"></p>
    <div class="card" id="answerEditor" style="display:none;background:#f8fbff;border:1px solid #b7d0eb">
@@ -267,12 +284,12 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
      </div>
    </div>
    <video id="motionPreview" controls playsinline style="display:none;max-height:520px;max-width:100%;margin:10px auto;border-radius:12px"></video>
-   <details id="manualExportDetails" open><summary>🎬 Xuất video từ câu đã chọn</summary>
+   <details id="manualExportDetails"><summary>Thiết lập chia MP4</summary>
    <div class="actions" style="margin-top:12px">
-    <button class="btn" id="render" disabled>🎬 Xuất video (chọn câu đã duyệt)</button>
+
     <div class="field compact"><label for="perVideo">Câu / MP4</label>
       <select id="perVideo"><option>3</option><option>4</option><option>5</option><option selected>6</option></select></div>
-    <button class="btn secondary" id="renderBatch" disabled>📦 Xuất hàng loạt thành nhiều MP4</button>
+
    </div>
    <p class="note">Chỉ dành cho câu được chọn ở ngân hàng. Dùng Autopilot để sản xuất nhiều chủ đề không cần tick.</p>
    </details>
@@ -316,15 +333,10 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
    <div class="actions"><button class="btn secondary" id="overwriteMetadata">© Ghi đè metadata MP4 đã chọn</button>
      <span class="note">Cấu hình tự áp dụng cho MP4 mới. Chỉ dùng chức năng này cho MP4 cũ cần cập nhật.</span></div>
    </details>
-   <div style="margin-top:24px"><div class="sectiontitle"><h2 style="font-size:17px">Kho video đã sản xuất</h2><span class="pill" id="libraryCount">0 video</span></div>
-    <div class="tablewrap"><table class="table"><thead><tr><th>Thumbnail</th><th>Video</th><th>Chủ đề</th><th>Trạng thái</th><th>Tải xuống</th></tr></thead><tbody id="videoLibrary"></tbody></table></div></div>
-   <div class="actions" style="margin-top:12px">
-      <button class="btn secondary small" id="generateOldThumbnails">🖼️ Tạo thumbnail cho MP4 cũ (tối đa 20)</button>
-      <span class="note">Thumbnail JPG lấy từ khung mở đầu, lưu cùng MP4. Video cũ có thể không còn lưu template ban đầu.</span>
-    </div>
-   <div class="actions" style="margin-top:12px"><a id="videoDownload" class="btn secondary" style="display:none;text-decoration:none" download>↓ Tải MP4 vừa xuất</a></div>
+
   </div>
- </section>
+ </details>
+</section>
 
  <section class="panel" id="panel-keys">
   <div class="card">
@@ -475,7 +487,7 @@ YOUR_KRDICT_API_KEY</div></details>
     <div class="actions"><button class="btn secondary" id="copyTikTokCaption">Sao chép mô tả từ lịch đăng ở trên</button></div>
   </div>
  </section>
- 
+
 <section class="panel" id="panel-maintenance">
   <div class="card">
     <div class="sectiontitle"><h2>🧹 Dọn bộ nhớ đệm và kiểm tra dữ liệu</h2></div>
@@ -505,8 +517,8 @@ YOUR_KRDICT_API_KEY</div></details>
 const $=id=>document.getElementById(id);
 const state={topic:"",questions:[],batches:[],jobs:[],videos:[],providers:{},models:{},modelLists:{},
  production:{},productionInit:false,facebook:{},selection:new Set(),questionPage:1,
- busy:false,activeRender:false,autoToast:null,lastVideo:"",editingQuestion:null,logoX:.82,logoY:.10,
- productionRuns:[],outbound:[],youtube:{},instagram:{},autoCurrent:"",upcomingEvents:[]};
+ trash:[],busy:false,activeRender:false,autoToast:null,lastVideo:"",editingQuestion:null,logoX:.82,logoY:.10,
+ videoPage:1,productionRuns:[],outbound:[],youtube:{},instagram:{},autoCurrent:"",upcomingEvents:[]};
 function make(tag,text,cls){const el=document.createElement(tag);if(text!==undefined)el.textContent=String(text);if(cls)el.className=cls;return el}
 function notice(message,type){const el=$("toast");el.textContent=message;el.className="result visible "+(type||"");if(state.autoToast)clearTimeout(state.autoToast);state.autoToast=setTimeout(()=>{el.className="result"},6500)}
 async function api(url,body){
@@ -552,7 +564,7 @@ async function createQuestions(daily){
      if(response.batch_id)$("batchFilter").value=response.batch_id;
      state.questionPage=1;
      renderQuestions();
-     showPanel("questions");
+     showPanel("questions");$("manualWorkspace").open=true;
      notice("Đã tạo "+response.accepted.length+" câu nháp. Hãy xem và duyệt đáp án trước khi xuất video.","success");
    }else if(response.skipped){notice("Chủ đề của hôm nay đã được tạo. Bạn vẫn có thể dùng nút tạo câu hỏi ngẫu nhiên.")}
    else {notice("Chưa tạo được câu hỏi. Kiểm tra API key / quota tại mục API Key TXT.","error")}
@@ -573,18 +585,29 @@ function selectedForApproval(){
 }
 function updateSelection(){
  const ids=state.selection,approved=selectedApproved().length;
+ const trash=$("questionFilter").value==="trash";
+ $("trashSelected").disabled=state.busy||state.activeRender||trash||ids.size===0;
+ $("restoreSelected").disabled=state.busy||state.activeRender||!trash||ids.size===0;
+ $("restoreSelected").style.display=trash?"inline-flex":"none";
+ $("emptyTrash").disabled=state.busy||state.activeRender||state.trash.length===0;
+ $("emptyTrash").style.display=trash?"inline-flex":"none";
+ $("repairSelected").disabled=state.busy||state.activeRender||trash;
+ $("cleanupDrafts").disabled=state.busy||state.activeRender;
+
  const canApprove=selectedForApproval().length>0;
  $("selectedCount").textContent="Đã chọn "+ids.size+" câu · "+approved+" sẵn sàng xuất";
  $("approve").disabled=state.busy||state.activeRender||!canApprove;
  $("makeSelectedVideo").disabled=state.busy||state.activeRender||approved===0||approved>120;
  $("makeSelectedVideo").textContent=approved?"🎬 Làm video từ "+approved+" câu đã chọn":"🎬 Làm video từ câu đã chọn";
- $("render").disabled=state.busy||state.activeRender||approved===0||approved>30;
- $("renderBatch").disabled=state.busy||state.activeRender||approved===0||approved>120;
- $("render").textContent=approved?"🎬 Xuất video từ "+approved+" câu chưa xuất":"🎬 Xuất video (chọn câu đã duyệt)";
+
+
+
 }
 function filteredQuestions(){
  const stage=$("questionFilter").value,batch=$("batchFilter").value;
- return state.questions.filter(q=>(stage==="all"||q.status===stage)&&
+ const source=stage==="trash"?state.trash:state.questions;
+ return source.filter(q=>(stage==="trash"||stage==="all"||q.status===stage||
+                      (stage==="ready"&&["approved","auto_approved"].includes(q.status)))&&
                (batch==="all"||(q.batch_id||"legacy")===batch));
 }
 function renderBatches(){
@@ -658,7 +681,7 @@ function renderQuestions(){
      const meaning=k==="correct"?q.meaning:q[k+"_meaning"];
      detailsCell.append(make("small",k+": "+(roman||"thiếu phiên âm")+" · "+(meaning||"thiếu nghĩa")));
    }
-   if(q.status!=="rendered"){
+   if(q.status!=="rendered" && $("questionFilter").value!=="trash"){
      const edit=make("button","Sửa 4 đáp án","btn secondary small");
      edit.addEventListener("click",()=>openAnswerEditor(q.id));
      detailsCell.append(edit);
@@ -725,39 +748,48 @@ $("saveAnswerEditor").addEventListener("click",async()=>{
    await loadStatus();notice("Đã lưu 4 đáp án. Hãy duyệt lại nội dung.","success");
  }
 });
-$("enrichAnswers").addEventListener("click",async()=>{
- const ids=Array.from(state.selection).filter(id=>{
-   const q=state.questions.find(item=>item.id===id);
-   return q && q.status!=="rendered";
- });
- if(!ids.length||ids.length>6){notice("Chọn từ 1 đến 6 câu chưa xuất để AI bổ sung.","error");return}
- notice("Đang lấy nghĩa và phiên âm của cả bốn đáp án từ AI…");
- const result=await run(()=>api("/api/answers/enrich",{ids}));
- if(result){
-   state.selection.clear();$("questionFilter").value="draft";
-   await loadStatus();notice("AI đã điền thông tin. Mở nút Sửa 4 đáp án để kiểm tra trước khi duyệt.","success");
- }
-});
-
 $("questionFilter").addEventListener("change",()=>{state.questionPage=1;state.selection.clear();renderQuestions()});
 $("batchFilter").addEventListener("change",()=>{state.questionPage=1;state.selection.clear();renderQuestions()});
 $("prevQuestions").addEventListener("click",()=>{state.questionPage--;renderQuestions()});
 $("nextQuestions").addEventListener("click",()=>{state.questionPage++;renderQuestions()});
+function openDrafts(stage="ready"){
+ $("manualWorkspace").open=true;$("questionFilter").value=stage;state.selection.clear();
+ state.questionPage=1;renderQuestions();$("manualWorkspace").scrollIntoView({behavior:"smooth",block:"start"});
+}
+$("openDraftBank").addEventListener("click",()=>openDrafts());
+$("openTrash").addEventListener("click",()=>openDrafts("trash"));
+async function manageDrafts(action){
+ if(state.activeRender){notice("Tạm dừng sản xuất trước khi dọn bản nháp.","error");return}
+ const ids=Array.from(state.selection);
+ const prompt={trash:"Chuyển các bản nháp đã chọn vào Thùng rác? Có thể khôi phục.",
+  cleanup:"Chuyển tất cả bản nháp AI chưa dùng (kể cả câu đã duyệt) vào Thùng rác? Video không bị xóa; có thể khôi phục bản nháp.",
+  purge:"Xóa vĩnh viễn bản nháp trong Thùng rác? Không xóa video."}[action];
+ if(prompt&&!confirm(prompt))return;
+ const reply=await run(()=>api("/api/questions/manage",{action,ids}));
+ if(reply){state.selection.clear();await loadStatus();notice("Đã xử lý bản nháp. Video được giữ nguyên.","success")}
+}
+$("trashSelected").addEventListener("click",()=>manageDrafts("trash"));
+$("cleanupDrafts").addEventListener("click",()=>manageDrafts("cleanup"));
+$("restoreSelected").addEventListener("click",()=>manageDrafts("restore"));
+$("emptyTrash").addEventListener("click",()=>manageDrafts("purge"));
 function selectStage(stage){
  $("questionFilter").value=stage;
  const matches=filteredQuestions().filter(q=>q.status===stage);
  state.selection=new Set(matches.slice(0,30).map(q=>q.id));
  state.questionPage=1;renderQuestions();
 }
-$("selectDrafts").addEventListener("click",()=>selectStage("draft"));
 function selectReadyQuestions(){
- $("questionFilter").value="all";
+ $("questionFilter").value="ready";
  state.selection=new Set(filteredQuestions().filter(q=>["approved","auto_approved"].includes(q.status))
                          .slice(0,120).map(q=>q.id));
  state.questionPage=1;renderQuestions();
 }
-$("selectApproved").addEventListener("click",selectReadyQuestions);
-$("clearSelected").addEventListener("click",()=>{state.selection.clear();renderQuestions()});
+$("selectApproved").addEventListener("change",()=>{
+ const action=$("selectApproved").value;
+ if(action==="ready")selectReadyQuestions();
+ else {state.selection=new Set(action==="visible"?filteredQuestions().slice(0,500).map(q=>q.id):[]);renderQuestions()}
+ $("selectApproved").value="";
+});
 async function approveSelectedQuestions(){
  const ids=selectedForApproval();
  const selectedBefore=new Set(state.selection);
@@ -765,10 +797,10 @@ async function approveSelectedQuestions(){
  const result=await run(()=>api("/api/approve",{ids}),"Đã duyệt "+ids.length+" câu.");
  if(result){
    state.selection=selectedBefore;
-   $("questionFilter").value="approved";
+   $("questionFilter").value="ready";
    state.questionPage=1;
    await loadStatus();
-   showPanel("questions");
+   showPanel("questions");$("manualWorkspace").open=true;
  }
 }
 $("approve").addEventListener("click",approveSelectedQuestions);
@@ -819,7 +851,7 @@ async function startExport(batch){
        }
        state.selection.clear();
        await loadStatus();
-       $("questionFilter").value="approved";state.questionPage=1;renderQuestions();
+       $("questionFilter").value="ready";state.questionPage=1;renderQuestions();
        if(created.length)$("videoSelect").value=state.lastVideo;
        notice(report.status==="completed"?
          "Đã xuất thành công "+created.length+" MP4.":
@@ -830,8 +862,8 @@ async function startExport(batch){
    }
  }finally{state.activeRender=false;updateSelection()}
 }
-$("render").addEventListener("click",()=>startExport(false));
-$("renderBatch").addEventListener("click",()=>startExport(true));
+// Manual video action
+
 $("makeSelectedVideo").addEventListener("click",()=>startExport(true));
 $("voice").addEventListener("change",()=>{
  $("voiceOptions").style.display=$("voice").checked?"flex":"none";
@@ -980,17 +1012,23 @@ function renderVideos(){
  first.value="";sel.append(first);
  const library=$("videoLibrary");library.replaceChildren();
  $("libraryCount").textContent=state.videos.length+" video";
- for(const video of state.videos){
+ const pages=Math.max(1,Math.ceil(state.videos.length/20));
+ state.videoPage=Math.max(1,Math.min(state.videoPage||1,pages));
+ $("videoPageInfo").textContent="Trang "+state.videoPage+"/"+pages;
+ $("videoPrev").disabled=state.videoPage===1;$("videoNext").disabled=state.videoPage===pages;
+ $("emptyVideos").style.display=state.videos.length?"none":"block";
+ for(const [index,video] of state.videos.entries()){
    const opt=make("option",video.name+" · "+video.status+" · "+video.size_mb+" MB");
    opt.value=video.path;sel.append(opt);
    const crossOption=make("option",video.name+" · "+video.status);
    crossOption.value=video.path;cross.append(crossOption);
    const option=make("option",video.name+" · "+video.status);
    option.value=video.path;meta.append(option);
+   if(index<(state.videoPage-1)*20||index>=state.videoPage*20)continue;
    const row=make("tr");
    const cover=make("td");
    if(video.thumbnail_available){
-     const img=make("img");
+     const img=make("img");img.loading="lazy";
      img.src="/api/thumbnails/"+encodeURIComponent(video.name);
      img.alt="Khung mở đầu · "+(video.topic||video.name);
      img.style.cssText="width:52px;height:92px;object-fit:cover;border-radius:6px";
@@ -1015,6 +1053,8 @@ function renderVideos(){
  if(state.videos.some(v=>v.path===metaChosen))meta.value=metaChosen;
  else if(state.videos.length)meta.value=state.videos[0].path;
 }
+$("videoPrev").addEventListener("click",()=>{state.videoPage--;renderVideos()});
+$("videoNext").addEventListener("click",()=>{state.videoPage++;renderVideos()});
 function productionPayload(){
  return {
   think:Number($("timingThink").value),reveal:Number($("timingReveal").value),
@@ -1180,7 +1220,7 @@ $("repairMetadataBulk").addEventListener("click",async()=>{
    " · Bỏ qua: "+result.skipped.length+
    " · Lỗi: "+result.errors.length+
    (result.errors.length?"\n"+result.errors.map(x=>x.video+": "+x.reason).join("\n"):"");
- notice("Đã rà soát và sửa thẻ MP4 cũ. Bạn có thể kiểm tra lại một video.", 
+ notice("Đã rà soát và sửa thẻ MP4 cũ. Bạn có thể kiểm tra lại một video.",
         result.errors.length?"error":"success");
  await loadStatus();
 });
@@ -1289,28 +1329,33 @@ function renderUpcomingEvents(){
 }
 function updateAutopilotHistory(){
  const holder=$("autoHistory");holder.replaceChildren();
- const recent=state.productionRuns||[];
- if(!recent.length){holder.append(make("p","Chưa có lượt sản xuất tự động."));return}
- for(const run of recent.slice(0,15)){
-   const panel=make("div");
-   panel.style.cssText="margin:8px 0;padding:10px;border:1px solid #dce8f2;border-radius:10px";
-   const mode=({autopilot:"Autopilot",repair:"Tự sửa KRDict + AI"})[(run.plan||{}).mode]||"Xuất từ ngân hàng";
-   panel.append(make("strong",mode+" · "+run.status+" · "+
-      new Date(run.created_at).toLocaleString("vi-VN")));
-   const results=run.results||[];
-   const repaired=results.reduce((count,item)=>count+(item.repaired===true?1:
-                   Array.isArray(item.repaired)?item.repaired.length:0),0);
-   if(repaired)panel.append(make("small","Đã tự sửa "+repaired+" câu; xem trước/sau trong ngân hàng."));
-   for(const item of results.slice(0,12)){
-     const label=item.topic||((item.video||"").split(/[\\/]/).pop())||"Câu hỏi";
-     const line=make("small",label+": "+(item.status||"")+
-                     (item.reason?" · "+item.reason:""));
-     line.style.cssText="display:block;overflow-wrap:anywhere;margin:5px 0";
-     panel.append(line);
-   }
-   holder.append(panel);
+ const runs=(state.productionRuns||[]).filter(run=>run.plan?.mode==="autopilot");
+ if(!runs.length){holder.append(make("p","Chưa có lượt sản xuất. Chọn số video rồi bấm Bắt đầu."));return}
+ const labels={running:"Đang xử lý",completed:"Hoàn tất",paused:"Đã tạm dừng",partial:"Còn mục cần thử lại",blocked:"Cần kiểm tra kết nối",interrupted:"Có thể tiếp tục",failed:"Cần thử lại"};
+ for(const run of runs.slice(0,15)){
+  const panel=make("div");panel.className="queue-run";
+  const items=run.results||[],done=items.filter(item=>item.video).length,total=run.plan.videos;
+  panel.append(make("strong",done+"/"+total+" video · "+(labels[run.status]||run.status)));
+  panel.append(make("p",new Date(run.created_at).toLocaleString("vi-VN"),"note"));
+  if(run.durable && !["running","completed"].includes(run.status)){
+   const button=make("button","Tiếp tục mục chưa xong","btn secondary small");
+   button.addEventListener("click",async()=>{
+    if(state.activeRender){notice("Đang có lượt sản xuất khác.","error");return}
+    const reply=await runActionResume(run.id);if(reply)watchAutopilot(reply.job_id);
+   });panel.append(button);
+  }
+  const details=make("details");details.append(make("summary","Chi tiết từng video"));
+  for(const item of items){
+   const name=item.slot?"Video "+item.slot:item.topic||"Chủ đề";
+   const label=({completed:"Đã xong",rendered:"Đã xong",queued:"Đang chờ",retry_wait:"Chờ thử lại",failed:"Hết lượt thử",blocked:"Cần kiểm tra kết nối",running:"Đang xử lý"})[item.status]||item.status;
+   details.append(make("p",name+" · "+(item.topic||"")+" · "+label+
+      (item.attempts?" · lần "+item.attempts+"/"+item.max_attempts:"")+
+      (item.reason?" · "+item.reason:""),"note"));
+  }
+  panel.append(details);holder.append(panel);
  }
 }
+async function runActionResume(id){return run(()=>api("/api/autopilot/resume",{job_id:id}))}
 function updateMaintenance(cache){
  if(!cache)return;
  $("cacheSize").textContent=Number(cache.mb||0).toFixed(2)+" MB · "+Number(cache.files||0)+" file";
@@ -1319,16 +1364,8 @@ function updateMaintenance(cache){
  $("cacheClear").disabled=busy;
  $("autoStart").disabled=busy;
  const container=$("runHistory");container.replaceChildren();
- const rows=(state.productionRuns||[]).slice(0,30);
- for(const run of rows){
-   const row=make("div");
-   row.style.cssText="display:flex;justify-content:space-between;border-bottom:1px solid #dce6ee;padding:8px;gap:14px";
-   row.append(make("span",(run.plan?.mode==="autopilot"?"Auto":"Thủ công")+
-                     " · "+run.created_at.slice(0,19)),
-              make("span",run.status+" · "+(run.results||[]).filter(x=>x.video).length+" video"));
-   container.append(row);
- }
- if(!rows.length)container.append(make("p","Chưa có lịch sử sản xuất."));
+ const link=make("button","Mở hàng đợi sản xuất","btn secondary small");
+ link.addEventListener("click",()=>showPanel("autopilot"));container.append(link);
 }
 $("cacheRefresh").addEventListener("click",async()=>{
  const data=await run(()=>api("/api/cache/status"));
@@ -1370,7 +1407,7 @@ async function watchAutopilot(id){
        continue;
      }
      $("autoBar").value=Number(report.percent)||0;
-     $("autoPercent").textContent=["completed","partial","failed","needs_review","cancelled"].includes(report.status)?
+     $("autoPercent").textContent=["completed","partial","failed","needs_review","cancelled","needs_retry","blocked"].includes(report.status)?
    ((report.videos||[]).length+"/"+report.total_videos+" MP4"):
    ((Number(report.percent)||0)+"%");
      $("autoPhase").textContent=report.phase||"Đang tạo video";
@@ -1382,12 +1419,12 @@ async function watchAutopilot(id){
        (waiting>75?" · Chờ API/FFmpeg lâu. Có thể bấm Dừng an toàn.":"");
      if(report.status==="stopping") $("autoCancel").disabled=true;
      $("autoStatus").textContent=({needs_review:"Cần bổ sung câu hỏi",
-        completed:"Đã xong",partial:"Hoàn tất một phần",
+        completed:"Đã xong",needs_retry:"Cần thử lại mục chưa xong",blocked:"Cần kiểm tra kết nối",partial:"Hoàn tất một phần",
         failed:"Lỗi kỹ thuật",running:"Đang xử lý",stopping:"Đang dừng",cancelled:"Đã dừng"}[report.status]||report.status);
-     if(["completed","partial","failed","needs_review","interrupted","cancelled"].includes(report.status)){
+     if(["completed","partial","failed","needs_review","interrupted","cancelled","needs_retry","blocked"].includes(report.status)){
        await loadStatus();
        notice("Autopilot: "+(report.videos||[]).length+" MP4 đã tạo. "+
-              (report.status!=="completed"?"Kiểm tra chủ đề bị thiếu trong lịch sử.":""),
+              (report.status!=="completed"?"Bấm Tiếp tục ở lượt này để thử lại mục chưa xong; video đã xong được giữ.":""),
               report.status==="completed"?"success":"error");
        break;
      }
@@ -1412,15 +1449,12 @@ $("autoStart").addEventListener("click",async()=>{
  if(!await saveProduction())return;
  const levels=$("autoLevels").value.split(",").map(n=>"TOPIK "+n);
  const formats=$("autoFormats").value==="mixed"?["từ vựng","hội thoại"]:["từ vựng"];
- if(!confirm("Autopilot sẽ tạo "+$("autoVideos").value+
-     " MP4 từ các chủ đề khác nhau bằng AI. Câu đạt kiểm tra máy được dựng ngay, "+
-     "nhưng chưa được xem là bản dịch đã kiểm chứng. Tiếp tục?"))return;
  const data=await run(()=>api("/api/autopilot/start",{
    videos:Number($("autoVideos").value),per_video:Number($("autoPerVideo").value),
    levels,formats,theme:$("autoTheme").value,
    with_voice:$("autoVoice").checked,voice_engine:$("voiceEngine").value,
    width:Number($("autoWidth").value),auto_seo:$("autoSeo").checked,
-  event_mode:$("autoEventMode").value,qa_mode:$("autoQaMode").value
+  event_mode:$("autoEventMode").value,qa_mode:$("autoQaMode").value,max_attempts:Number($("autoAttempts").value)
  }));
  if(data)watchAutopilot(data.job_id);
 });
@@ -1428,7 +1462,7 @@ async function recoverActiveExport(){
  try{
    const report=await api("/api/render/active");
    if(report.job_id && !state.activeRender){
-     if(report.mode==="repair"){showPanel("questions");watchRepair(report.job_id);return}
+     if(report.mode==="repair"){showPanel("questions");$("manualWorkspace").open=true;watchRepair(report.job_id);return}
      showPanel("autopilot");
      watchAutopilot(report.job_id);
    }
@@ -1548,7 +1582,6 @@ $("testKrdict").addEventListener("click",async()=>{
  $("krdictResult").textContent=data.message;
  notice(data.message,data.has_vietnamese?"success":"error");
 });
-$("bulkVerifyAI").addEventListener("click",()=>startRepair(false));
 async function watchRepair(id){
  state.activeRender=true;updateSelection();
  try{
@@ -1580,7 +1613,7 @@ async function startRepair(selected){
  const reply=await run(()=>api("/api/answers/repair",selected?{ids}:{}));
  if(reply)watchRepair(reply.job_id);
 }
-$("repairSelected").addEventListener("click",()=>startRepair(true));
+$("repairSelected").addEventListener("click",()=>startRepair(state.selection.size>0));
 $("generateOldThumbnails").addEventListener("click",async()=>{
  const answer=await run(()=>api("/api/thumbnails/legacy",{limit:20,theme:$("autoTheme").value}));
  if(!answer)return;
@@ -1604,7 +1637,7 @@ function renderJobs(){
 }
 async function loadStatus(){
  const data=await api("/api/status");
- state.questions=data.questions||[];state.batches=data.batches||[];
+ state.questions=data.questions||[];state.trash=data.trash_questions||[];state.batches=data.batches||[];
  state.productionRuns=data.production_runs||[];state.outbound=data.outbound_posts||[];
  state.upcomingEvents=data.upcoming_events||[];
  state.youtube=data.youtube||{};state.instagram=data.instagram||{};
@@ -1615,7 +1648,7 @@ async function loadStatus(){
  state.models=data.models||{};
  const validIds=new Set(state.questions.map(q=>q.id));
  state.selection=new Set([...state.selection].filter(id=>validIds.has(id)));
- $("statQuestions").textContent=data.total_questions||state.questions.length;
+ $("statQuestions").textContent=state.questions.filter(q=>q.status!=="rendered").length;
  $("statApproved").textContent=state.questions.filter(q=>q.status==="approved"||
                         q.status==="auto_approved").length;
  $("statVideos").textContent=state.videos.length;
@@ -1625,6 +1658,8 @@ async function loadStatus(){
    $("key"+p.charAt(0).toUpperCase()+p.slice(1)).textContent=(state.providers[p]||{}).keys||0;
  }
  $("setupTip").style.display=Number($("statKeys").textContent)?"none":"block";
+ $("draftSummary").textContent=state.questions.filter(q=>q.status!=="rendered").length+" bản nháp";
+ $("openTrash").textContent="Thùng rác ("+state.trash.length+")";
  renderBatches();renderQuestions();renderVideos();renderJobs();updateModelPanel();
  updateProductionPanel();updateFacebookPanel();updateAutopilotHistory();updatePlatforms();updateMaintenance(data.cache);renderUpcomingEvents();
 }

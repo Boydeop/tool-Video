@@ -27,8 +27,10 @@ CACHE_VERSION=3
 
 class KRDictError(RuntimeError):
     """A safe diagnostic; never includes the request URL or API key."""
-    def __init__(self,code,message):
+    def __init__(self,code,message,*,retryable=True,retry_after=30):
         self.code=code
+        self.retryable=retryable
+        self.retry_after=retry_after
         super().__init__(message)
 
 def normalize_vi(text):
@@ -164,7 +166,9 @@ class KRDict:
             hint=("Kiểm tra key và quyền API." if exc.code in (401,403) else
                   "Đã chạm giới hạn yêu cầu; thử lại sau." if exc.code==429 else
                   "Kiểm tra trạng thái dịch vụ KRDict.")
-            raise KRDictError("http_error","KRDict HTTP "+str(exc.code)+". "+hint) from None
+            raise KRDictError("http_error","KRDict HTTP "+str(exc.code)+". "+hint,
+                              retryable=exc.code not in (401,403),
+                              retry_after=120 if exc.code==429 else 30) from None
         except (urllib.error.URLError,TimeoutError) as exc:
             reason=getattr(exc,"reason",exc)
             if isinstance(reason,ssl.SSLError):

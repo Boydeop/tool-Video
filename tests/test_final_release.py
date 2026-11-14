@@ -96,7 +96,7 @@ class QualityAndAutopilotTests(unittest.TestCase):
         self.assertEqual(inspect_quiz(quiz(0)),[])
         self.assertTrue(inspect_quiz(quiz(1,False)))
         self.assertEqual(Plan.parse({"videos":8}).videos,8)
-        with self.assertRaises(ValueError):Plan.parse({"videos":100})
+        with self.assertRaises(ValueError):Plan.parse({"videos":101})
 
     def test_choose_unique_topics_across_run(self):
         selected=choose_distinct_topics({"Gia đình":500},10)

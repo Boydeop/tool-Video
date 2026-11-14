@@ -177,7 +177,7 @@ class ThumbnailTests(unittest.TestCase):
 class UIContract(unittest.TestCase):
     def test_qa_and_cover_controls_are_present(self):
         html=(Path(__file__).resolve().parents[1]/"studio"/"ui.html").read_text("utf8")
-        for name in ("autoQaMode","testKrdict","bulkVerifyAI","crossThumbnail",
+        for name in ("autoQaMode","testKrdict","repairSelected","crossThumbnail",
                      "crossThumbDownload","generateOldThumbnails","keyKrdict"):
             self.assertIn('id="'+name+'"',html)
 

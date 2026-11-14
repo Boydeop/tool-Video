@@ -526,3 +526,15 @@ Hỗ trợ so “chuông/cái chuông” và kiểm tra cụm 2–3 danh từ th
 KRDict kết hợp AI hỏi ngược, thay vì đòi mọi cụm phải có nguyên mục từ. Báo rõ bằng
 chứng thành phần và nghĩa KRDict trả về khi lệch. Autopilot thêm lượt bổ sung khi
 chưa đủ câu, vẫn giữ ngân sách thời gian. Chi tiết: [AUDIT_V132.md](AUDIT_V132.md).
+
+## v1.4.0 · Hàng đợi 1–100 video và giao diện gọn hơn
+
+Chọn số video trong **Sản xuất**. Mỗi video có tiến trình lưu riêng; video lỗi
+tự tạo lại từ đầu, câu thử không xuất hiện trong ngân hàng. Hết lượt thử có nút
+**Tiếp tục mục chưa xong**, giữ nguyên MP4 đã hoàn tất. Có backoff cho lỗi API và
+khôi phục lượt bị gián đoạn khi mở lại ứng dụng.
+
+**Kho video** hiển thị thành phẩm trước, phân trang 20 video. Công cụ thủ công
+nằm trong phần nâng cao; có thùng rác/khôi phục và dọn bản nháp AI thừa của bản
+cũ. Không xóa câu đã dùng trong video. Thiết lập chủ đề/QA nằm trong phần nâng
+cao, gộp các nút chức năng trùng. [Audit, kiểm thử và giới hạn](AUDIT_V140.md).

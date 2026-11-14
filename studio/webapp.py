@@ -165,6 +165,7 @@ def create_server(service, host="127.0.0.1", port=8765):
                         "topics_count": len(TOPICS),
                         "upcoming_events": service.upcoming_events(),
                         "questions": service.store.list_questions(limit=500),
+                        "trash_questions":service.store.list_questions(limit=500,trash=True),
                         "batches": service.store.list_batches(limit=120),
                         "production_runs": service.store.list_production_runs(limit=40),
                         "outbound_posts": service.store.list_outbound(limit=100),
@@ -175,7 +176,7 @@ def create_server(service, host="127.0.0.1", port=8765):
                         "production": service.production.settings(),
                         "facebook": page_status(),
                         "jobs": service.store.list_jobs(limit=100),
-                        "videos": service.list_videos(),
+                        "videos": service.list_videos(limit=1000),
                         "providers": readiness(),
                         "models": selected_models(),
                         "tts_ready": available(),
@@ -230,7 +231,7 @@ def create_server(service, host="127.0.0.1", port=8765):
                       "/api/render/batch", "/api/preview/clip", "/api/render/start",
                       "/api/answers/enrich", "/api/answers/save", "/api/answers/repair", "/api/videos/metadata",
                       "/api/videos/metadata/inspect", "/api/videos/metadata/repair_bulk",
-                      "/api/autopilot/start", "/api/autopilot/cancel", "/api/cache/clear",
+                      "/api/autopilot/start", "/api/autopilot/cancel", "/api/autopilot/resume", "/api/questions/manage", "/api/cache/clear",
                       "/api/qa/verify_pending", "/api/krdict/test",
                       "/api/thumbnails/legacy",
                       "/api/youtube/configure", "/api/youtube/connect", "/api/youtube/disconnect",
@@ -292,6 +293,16 @@ def create_server(service, host="127.0.0.1", port=8765):
                     result={"preview_url":"/api/preview/clip/"+name.name}
                 elif route == "/api/autopilot/start":
                     result=export_queue.start_autopilot(raw)
+                elif route == "/api/autopilot/resume":
+                    result=export_queue.resume_autopilot(str(raw.get('job_id','')))
+                elif route == "/api/questions/manage":
+                    if export_queue.is_running():raise ValueError('Chờ hoặc tạm dừng sản xuất trước khi dọn bản nháp')
+                    action=raw.get('action')
+                    if action=='trash':result=service.store.trash_questions(raw.get('ids'))
+                    elif action=='cleanup':result=service.store.trash_questions(cleanup=True)
+                    elif action=='restore':result=service.store.restore_questions(raw.get('ids'))
+                    elif action=='purge':result=service.store.empty_question_trash()
+                    else:raise ValueError('Thao tác bản nháp không hợp lệ')
                 elif route == "/api/autopilot/cancel":
                     result=export_queue.cancel_autopilot(str(raw.get("job_id","")))
                 elif route == "/api/qa/verify_pending":
@@ -412,7 +423,9 @@ def create_server(service, host="127.0.0.1", port=8765):
         def handle_error(self, request, client_address):
             LOGGER.exception("HTTP handler crashed for %s", client_address[0])
 
-    return LocalServer((host, port), Handler)
+    server=LocalServer((host, port), Handler)
+    server.export_queue=export_queue
+    return server
 
 
 def serve(service, host="127.0.0.1", port=8765, on_ready=None):
@@ -420,6 +433,7 @@ def serve(service, host="127.0.0.1", port=8765, on_ready=None):
     scheduler = Scheduler(service.store)
     service.store.recover_incomplete_runs()
     try:
+        server.export_queue.recover_autopilot()
         scheduler.start()
         LOGGER.info("Studio server bound to %s:%s", *server.server_address)
         if on_ready:

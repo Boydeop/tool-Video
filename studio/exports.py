@@ -112,60 +112,56 @@ class ExportQueue:
 
     def start_autopilot(self,config):
         from .autopilot import Plan
+        from .events import choose_production_topics
         plan=Plan.parse(config)
         with self._lock:
-            if self._running is not None:
-                raise ValueError("Đang có lượt xuất video khác.")
+            if self._running is not None:raise ValueError('Đang có lượt sản xuất khác')
+            topics,_=choose_production_topics(self.service.store.topic_counts(),plan.videos,mode=plan.event_mode)
             jid=uuid.uuid4().hex
-            self.service.store.create_production_run(jid,{"mode":"autopilot",**plan.public_dict()})
-            self._cancel_events[jid]=threading.Event()
-            self._started_at[jid]=time.monotonic()
-            self._phase_at[jid]=self._started_at[jid]
-            self._jobs[jid]={"job_id":jid,"status":"queued","percent":0,
-                "phase":"Chờ tạo nhiều chủ đề","videos":[],"error":None,
-                "total_videos":plan.videos,"topics":[],
-                "created_at":datetime.now(timezone.utc).isoformat()}
-            self._running=jid
-        threading.Thread(target=self._run_autopilot,args=(jid,plan),
-                 daemon=True,name="thse-autopilot-"+jid[:8]).start()
-        return {"job_id":jid,"status":"queued","mode":"autopilot"}
+            self.service.store.create_batch(jid,plan,topics)
+            self._launch_batch(jid,plan)
+        return {'job_id':jid,'status':'queued','mode':'autopilot'}
+
+    def _launch_batch(self,jid,plan):
+        self._cancel_events[jid]=threading.Event()
+        self._started_at[jid]=self._phase_at[jid]=time.monotonic()
+        self._finished_at.pop(jid,None)
+        self._jobs[jid]={'job_id':jid,'mode':'autopilot','status':'queued','percent':0,
+            'phase':'Chờ xử lý hàng đợi','videos':[],'error':None,'total_videos':plan.videos,'topics':[]}
+        self._running=jid
+        threading.Thread(target=self._run_autopilot,args=(jid,plan),daemon=True,
+                         name='thse-autopilot-'+jid[:8]).start()
+
+    def resume_autopilot(self,jid,recovery=False):
+        from .autopilot import Plan
+        with self._lock:
+            if self._running is not None:raise ValueError('Đang có tác vụ khác; hãy dừng hoặc chờ hoàn tất')
+            run=self.service.store.batch_run(jid)
+            if run['plan'].get('mode')!='autopilot':raise ValueError('Không phải lượt sản xuất tự động')
+            if run['status']=='completed':raise ValueError('Lượt này đã hoàn tất; không dựng lại video đã có')
+            self.service.store.resume_batch(jid,reset_failed=not recovery)
+            self._launch_batch(jid,Plan.parse(run['plan']))
+        return {'job_id':jid,'mode':'autopilot','status':'queued'}
+
+    def recover_autopilot(self):
+        for run in self.service.store.list_production_runs(100):
+            if (run['status']=='interrupted' and run['plan'].get('mode')=='autopilot'
+                    and self.service.store.batch_tasks(run['id'])):
+                return self.resume_autopilot(run['id'],recovery=True)
 
     def _run_autopilot(self,jid,plan):
-        from .autopilot import run_pipeline
-        results=[]
-        cancel_event=self._cancel_events[jid]
+        from .batch_runner import BatchRunner
         try:
-            self._update(jid,status="running",phase="Đang sinh câu hỏi nhiều chủ đề")
-            def progress(percent,phase):
-                self._update(jid,percent=min(98,int(percent)),phase=phase)
-            def store_results(items):
-                nonlocal results
-                results=items
-                outputs=[item.get("video") for item in items if item.get("video")]
-                self._update(jid,topics=items,videos=outputs)
-                self.service.store.update_production_run(jid,"running",items)
-            completed=run_pipeline(self.service,plan,progress,store_results,
-                                   cancel=cancel_event)
-            outputs=completed["videos"]
-            # No video with saved drafts is a review-needed run, not a broken
-            # renderer. Surface actual file count instead of treating 100%
-            # stages processed as 100% successfully exported.
-            terminal=("completed" if len(outputs)==plan.videos else
-                      "cancelled" if cancel_event.is_set() else
-                      "partial" if outputs else "needs_review")
-            self.service.store.update_production_run(jid,
-                   "partial" if terminal in ("needs_review","cancelled") else terminal,
-                   results)
-            self._update(jid,status=terminal,percent=100,
-                         phase=("Đã dừng an toàn: " if terminal=="cancelled" else
-                                "Đã kiểm tra chủ đề, còn câu cần bổ sung: "
-                                if terminal=="needs_review" else "Đã kết thúc Autopilot: ")+
-                               str(len(outputs))+"/"+str(plan.videos)+" MP4",
-                         videos=outputs,topics=results)
+            BatchRunner(self.service,jid,self._cancel_events[jid],
+                        lambda message:self._update(jid,**message)).run()
         except Exception as exc:
-            self.service.store.update_production_run(jid,"failed",results,str(exc))
-            self._update(jid,status="failed",error=str(exc)[:500],
-                         phase="Autopilot gặp lỗi, xem câu đã tạo và video đã xuất")
+            # Preserve the last durable summary if a progress callback fails.
+            # Task checkpoints remain authoritative when the run is resumed.
+            import json
+            run=self.service.store.batch_run(jid)
+            self.service.store.update_production_run(jid,'interrupted',json.loads(run['results']),type(exc).__name__)
+            self._update(jid,status='needs_retry',error=type(exc).__name__,
+                         phase='Đã giữ tiến trình; bấm Tiếp tục để xử lý phần còn lại')
         finally:
             with self._lock:
                 if self._running==jid:self._running=None
@@ -210,7 +206,8 @@ class ExportQueue:
         with self._lock:
             if jid in self._jobs:
                 job=self._jobs[jid]
-                if "percent" in changes:
+                if "percent" in changes and not (job.get('mode')=='autopilot' and
+                        changes.get('status') in ('completed','needs_retry','cancelled','blocked')):
                     changes["percent"]=min(100,max(job["percent"],int(changes["percent"])))
                 if ("phase" in changes and changes["phase"]!=job.get("phase")):
                     self._phase_at[jid]=time.monotonic()

@@ -75,7 +75,7 @@ def blind_review(quiz,generation_provider="",call=None):
                 if p=="ollama" and os.getenv("ENABLE_OLLAMA")=="1" or
                    p!="ollama" and get_keys(p)]
     candidates.sort(key=lambda p:(p==generation_provider,p=="ollama"))
-    errors=[]
+    errors=[];failures=[]
     for provider in (candidates[:2] if budget_active() else candidates):
         check_budget()
         try:
@@ -97,8 +97,11 @@ def blind_review(quiz,generation_provider="",call=None):
             raise
         except (RuntimeError,ValueError,KeyError,TypeError) as exc:
             errors.append(provider+": "+type(exc).__name__)
+            failures.append(exc)
     return {"available":False,"reason":"Không có AI reviewer trả kết quả hợp lệ",
-            "errors":errors[:3]}
+            "errors":errors[:3],
+            "blocked":not candidates or (bool(failures) and all(not getattr(exc,'retryable',True) for exc in failures)),
+            "retry_after":max((getattr(exc,'retry_after',0) for exc in failures),default=0)}
 
 def verify_quiz(quiz,store,generation_provider="",mode="strict",
                 dictionary=None,reviewer=None):
@@ -136,7 +139,9 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
                            "headword_codes":[x.get("target_code","") for x in data.get("entries",[])][:5],
                            "match_to_clue":sense_overlap(quiz.short_clue,meanings),
                            "source":"KRDict","reason":data.get("reason","")}
-            if data.get("reason")=="key_missing":dictionary_failure=entries[word]
+            if data.get("reason")=="key_missing":
+                dictionary_failure=entries[word]
+                if mode=='strict':report['blocked']=True
         except (BudgetExpired,RunCancelled):
             raise
         except Exception as exc:
@@ -145,7 +150,11 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
                            "reason":exc.code if isinstance(exc,KRDictError) else type(exc).__name__,
                            "message":str(exc) if isinstance(exc,KRDictError) else "Lỗi xử lý từ điển",
                            "source":"KRDict"}
-            if isinstance(exc,KRDictError):dictionary_failure=entries[word]
+            if isinstance(exc,KRDictError):
+                dictionary_failure=entries[word]
+                if mode=='strict':
+                    report['blocked']=not exc.retryable
+                    report['retry_after']=exc.retry_after if exc.retryable else 0
     report["dictionary"]=entries
     answer=entries[quiz.correct]
     if answer.get("message"):
@@ -179,6 +188,8 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
     report["reviewer"]=blind
     if not blind.get("available"):
         report["issues"].append("Không có xác nhận ngược từ AI reviewer")
+        report['blocked']=blind.get('blocked',False)
+        report['retry_after']=blind.get('retry_after',0)
     else:
         if blind.get("ambiguous") or blind.get("conflicting_choices"):
             report["issues"].append("AI phát hiện câu hỏi mơ hồ hoặc nhiều đáp án")

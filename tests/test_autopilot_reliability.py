@@ -95,15 +95,20 @@ class QueueCancelTests(unittest.TestCase):
             entered=threading.Event()
             video=Path(folder)/"already_rendered.mp4"
             video.write_bytes(b"KEEP_THIS_MP4")
-            def faked_pipeline(service,plan,update,on_result=None,cancel=None):
+            def faked_pipeline(service,plan,update,on_result=None,cancel=None,topics=None):
                 entered.set()
                 cancel.wait(3)
                 assert cancel.is_set()
+                from studio.quiz import Quiz
+                from studio.service import _PRODUCTION
+                q=Quiz(topic='Test',question='Nước',correct='물',wrong1='봄',wrong2='여름',wrong3='가을')
+                qid=service.store.insert_question(q,production_task=_PRODUCTION.get()['id'])
+                service.store.approve([qid]);service.store.mark_rendered([qid],video)
                 item={"topic":"Test","status":"rendered","video":str(video)}
                 if on_result:on_result([item])
                 return {"videos":[str(video)],"topics":[item],"rendered":1,
                         "needs_review":[]}
-            with patch("studio.autopilot.run_pipeline",side_effect=faked_pipeline):
+            with patch("studio.batch_runner.run_pipeline",side_effect=faked_pipeline):
                 task=queue.start_autopilot({"videos":2,"per_video":3})
                 self.assertTrue(entered.wait(3))
                 reply=queue.cancel_autopilot(task["job_id"])
@@ -117,7 +122,7 @@ class QueueCancelTests(unittest.TestCase):
             self.assertEqual(video.read_bytes(),b"KEEP_THIS_MP4")
             self.assertGreaterEqual(data["elapsed_seconds"],0)
             self.assertGreaterEqual(data["phase_elapsed_seconds"],0)
-            self.assertEqual(service.store.list_production_runs()[0]["status"],"partial")
+            self.assertEqual(service.store.list_production_runs()[0]["status"],"paused")
             with self.assertRaises(ValueError):queue.cancel_autopilot(task["job_id"])
 
 class UiHotfixTests(unittest.TestCase):

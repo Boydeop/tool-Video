@@ -29,7 +29,7 @@ class SelectionUITests(unittest.TestCase):
                           ('function filteredQuestions(){','function renderBatches(){'),
                           ('function selectReadyQuestions(){','$("selectApproved").addEventListener'),
                           ('async function approveSelectedQuestions(){','$("approve").addEventListener'),
-                          ('async function startExport(batch){','$("render").addEventListener')]:
+                          ('async function startExport(batch){','// Manual video action')]:
             blocks.append(ui[ui.index(begin):ui.index(end,ui.index(begin))])
         harness=r'''
 const assert=require('node:assert/strict');
@@ -37,7 +37,7 @@ const nodes={};const $=id=>nodes[id]??=(
  {value:'',disabled:false,textContent:'',style:{},open:false,scrolled:0,
   scrollIntoView(){this.scrolled++}});
 const document={querySelector:()=>({value:'hanji'})};
-const state={selection:new Set(),questions:[],busy:false,activeRender:false,questionPage:1};
+const state={selection:new Set(),questions:[],trash:[],busy:false,activeRender:false,questionPage:1};
 const calls=[];
 function notice(){} function showPanel(){} function renderQuestions(){}
 async function saveProduction(){return true} async function loadStatus(){}

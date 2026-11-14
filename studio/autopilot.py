@@ -22,6 +22,7 @@ class Plan:
     seo:bool=False
     event_mode:str="random"
     qa_mode:str="strict"
+    max_attempts:int=3
 
     @classmethod
     def parse(cls,raw:dict):
@@ -35,9 +36,11 @@ class Plan:
                  engine=str(raw.get("voice_engine","auto")),
                  width=int(raw.get("width",1080)),seo=raw.get("auto_seo") is True,
                  event_mode=str(raw.get("event_mode","random")),
-                 qa_mode=str(raw.get("qa_mode","strict")))
-        if not 1<=plan.videos<=12 or not 1<=plan.per_video<=6:
-            raise ValueError("Maximum 12 videos per run, 1-6 questions/video")
+                 qa_mode=str(raw.get("qa_mode","strict")),
+                 max_attempts=int(raw.get("max_attempts",3)))
+        if not 1<=plan.videos<=100 or not 1<=plan.per_video<=6:
+            raise ValueError("Maximum 100 videos per run, 1-6 questions/video")
+        if not 1<=plan.max_attempts<=5:raise ValueError("Chỉ thử lại tối đa 5 lần/video")
         if not plan.levels or not all(x in LEVELS for x in plan.levels):
             raise ValueError("Invalid TOPIK levels")
         if not plan.formats or not all(x in FORMATS for x in plan.formats):
@@ -59,20 +62,21 @@ class Plan:
                 "voice_engine":self.engine,"width":self.width,
                 "review_policy":"strict machine check, NOT human verified",
                 "auto_seo":self.seo,"event_mode":self.event_mode,
-                "qa_mode":self.qa_mode}
+                "qa_mode":self.qa_mode,"max_attempts":self.max_attempts}
 
 def choose_distinct_topics(counts,number,rng=None):
-    if number>len(TOPICS):raise ValueError("Too many distinct topics")
+    if not 1<=number<=100:raise ValueError("Choose 1–100 video topics")
     source=rng or random.SystemRandom()
     pool=list(TOPICS)
     selected=[]
     for _ in range(number):
+        if not pool:pool=list(TOPICS)
         weights=[1/(1+max(0,counts.get(topic,0)))**1.5 for topic in pool]
         topic=source.choices(pool,weights=weights,k=1)[0]
         selected.append(topic);pool.remove(topic)
     return selected
 
-def run_pipeline(service,plan:Plan,update,on_result=None,cancel=None):
+def run_pipeline(service,plan:Plan,update,on_result=None,cancel=None,topics=None):
     """Bounded QA per topic, visible substeps, preserving partial MP4 outputs.
 
     Cancellation is cooperative; an FFmpeg render already underway is allowed
@@ -81,8 +85,11 @@ def run_pipeline(service,plan:Plan,update,on_result=None,cancel=None):
     from .events import choose_production_topics
     from .run_limits import (topic_budget,check_budget,check_cancel,
                              BudgetExpired,RunCancelled)
-    chosen,_events=choose_production_topics(service.store.topic_counts(),plan.videos,
-                                           mode=plan.event_mode)
+    if topics is not None:
+        if len(topics)!=plan.videos:raise ValueError('Topic count mismatch')
+        chosen=topics
+    else:
+        chosen,_events=choose_production_topics(service.store.topic_counts(),plan.videos,mode=plan.event_mode)
     results=[]
     rejected=[]
     for index,topic in enumerate(chosen):
@@ -118,6 +125,8 @@ def run_pipeline(service,plan:Plan,update,on_result=None,cancel=None):
                         try:
                             generated=service.generate(topic,level,count,fmt=fmt)
                             generation_errors.extend(generated.get("errors",[]))
+                            if generated.get('retry_after'):item['retry_after']=generated['retry_after']
+                            if generated.get('blocked'):item['blocked']=True
                         except (BudgetExpired,RunCancelled):
                             raise
                         except Exception as exc:
@@ -155,6 +164,11 @@ def run_pipeline(service,plan:Plan,update,on_result=None,cancel=None):
                                         ": "+type(exc).__name__)
                             try:
                                 verdict=service.verify_generated(qid,mode=plan.qa_mode)
+                                if verdict.get('blocked') or verdict.get('retry_after'):
+                                    item['blocked']=verdict.get('blocked',False)
+                                    item['retry_after']=verdict.get('retry_after',0)
+                                    problems.append({'id':qid,'issues':verdict.get('issues',[]) or ['Dịch vụ kiểm chứng chưa khả dụng']})
+                                    break  # Outage is not incorrect vocabulary to repair.
                                 if verdict["status"]!="verified":
                                     stage("Tự sửa bằng KRDict + AI, câu "+str(number),.55)
                                     verdict=service.repair_generated(qid,initial=verdict,
@@ -175,6 +189,7 @@ def run_pipeline(service,plan:Plan,update,on_result=None,cancel=None):
                                      "stage":"verification"})
                                 problems.append({"id":qid,"issues":
                                       ["Lỗi kiểm chứng: "+type(exc).__name__]})
+                        if item.get('blocked') or item.get('retry_after'):break
                 except BudgetExpired as exc:
                     generation_errors.append(str(exc))
                     stage("Dừng kiểm chứng vì quá thời gian cho chủ đề",.84)
@@ -195,7 +210,7 @@ def run_pipeline(service,plan:Plan,update,on_result=None,cancel=None):
                 item["reason"]=("Chỉ có "+str(len(good))+"/"+
                     str(plan.per_video)+" câu đủ điều kiện. "+
                     (examples or "API chưa trả đủ câu hoặc câu trùng.")+
-                    " Các câu chưa đạt vẫn lưu trong ngân hàng.")
+                    " Tác vụ sẽ tạo lại nội dung nếu còn lượt thử.")
                 rejected.extend(problems)
                 stage(item["reason"],.98)
                 continue

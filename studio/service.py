@@ -7,6 +7,10 @@ from pathlib import Path
 import uuid
 import threading
 from functools import wraps
+from contextvars import ContextVar
+from contextlib import contextmanager
+
+_PRODUCTION=ContextVar("production_task",default=None)
 
 from .ai import fallback
 from .database import DuplicateQuestion,Store
@@ -40,6 +44,27 @@ class Service:
         self.production=Production(self.root)
         self.store=Store(self.root/"studio.sqlite3")
 
+    @contextmanager
+    def production_scope(self,task):
+        token=_PRODUCTION.set(task)
+        try:yield
+        finally:_PRODUCTION.reset(token)
+
+    def prepare_production_task(self,task):
+        self.store.discard_task_questions(task['id'])
+        self.discard_production_output(task)
+
+    def discard_production_output(self,task):
+        # This reserved path belongs to this persisted task. A registry entry
+        # is never removed; it is the durable completion checkpoint.
+        config=self.production.settings()
+        for folder in dict.fromkeys([config['export_dir'],*config.get('export_history',[])]):
+            path=Path(folder)/task['output_name']
+            if path.exists():
+                try:self.store.get_video(path)
+                except ValueError:path.unlink()
+                else:raise ValueError('Video đã được ghi nhận; không dựng trùng')
+
     def upcoming_events(self,window_days=45):
         from .events import upcoming_events
         return upcoming_events(window_days=window_days)
@@ -56,25 +81,29 @@ class Service:
         from .run_limits import check_budget,budget_active,BudgetExpired,RunCancelled
         if not 1<=count<=30:raise ValueError("Số câu mỗi lần phải từ 1 tới 30.")
         accepted=[];errors=[];batch_id=uuid.uuid4().hex[:12]
+        task=_PRODUCTION.get()
+        retry_after=0;blocked=False
         for attempt in range(2 if budget_active() else 3):
             check_budget()
             remaining=count-len(accepted)
             if remaining<=0:break
             try:
-                provider,rows=fallback(topic,level,min(30,remaining+min(remaining,4)),
+                provider,rows=fallback(topic,level,min(30,remaining if task else remaining+min(remaining,4)),
                                        self.store.recent_prompts(50),fmt,providers)
             except (BudgetExpired,RunCancelled):
                 raise
             except Exception as exc:
                 errors.append(str(exc))
+                retry_after=max(retry_after,getattr(exc,'retry_after',0))
+                blocked=not getattr(exc,'retryable',True)
                 break
             for quiz in rows:
-                try:accepted.append(self.store.insert_question(quiz,provider,batch_id))
+                try:accepted.append(self.store.insert_question(quiz,provider,batch_id,production_task=task["id"] if task else ""))
                 except DuplicateQuestion:pass
                 if len(accepted)>=count:break
         self.store.log("generation",f"{topic}: accepted={len(accepted)}/{count}, batch={batch_id}")
         return {"accepted":accepted,"requested":count,"batch_id":batch_id,
-                "errors":errors,"message":"Review each Korean answer before rendering."}
+                "errors":errors,"retry_after":retry_after,"blocked":blocked,"message":"Review each Korean answer before rendering."}
 
     def verify_generated(self,qid,mode="strict"):
         from .review import verify_quiz
@@ -83,6 +112,7 @@ class Service:
         report=verify_quiz(question,self.store,origin,mode=mode)
         self.store.set_question_qa(qid,report["outcome"],report)
         return {"id":qid,"status":report["outcome"],
+                "blocked":report.get('blocked',False),"retry_after":report.get('retry_after',0),
                 "tier":report.get("tier","needs_review"),
                 "issues":report.get("issues",[]),
                 "dictionary":report.get("dictionary",{}),
@@ -149,10 +179,13 @@ class Service:
 
     def list_videos(self,limit=80):
         registry={str(Path(r["path"]).resolve()):r for r in self.store.list_videos(limit=1000)}
+        with self.store.db() as c:
+            reserved={r['output_name'] for r in c.execute("SELECT output_name FROM production_tasks WHERE status!='completed'")}
         found={}
         for folder in self.output_folders():
             if folder.is_dir():
                 for file in folder.glob("*.mp4"):
+                    if file.name in reserved and str(file.resolve()) not in registry:continue
                     try:found[str(file.resolve())]=file
                     except OSError:pass
         sorted_files=sorted(found.values(),key=lambda p:p.stat().st_mtime,reverse=True)
@@ -207,7 +240,10 @@ class Service:
         questions=self.store.get_questions(ids,status=("approved","auto_approved"))
         if not questions:raise ValueError("Chọn ít nhất một câu đã duyệt.")
         config=self.production.settings()
-        if filename:
+        task=_PRODUCTION.get()
+        if task:
+            name=task['output_name']
+        elif filename:
             name=filename
         else:
             topics={q.topic for q in questions}
