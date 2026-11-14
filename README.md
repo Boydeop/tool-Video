@@ -497,3 +497,10 @@ Báo cáo chi tiết: [AUDIT_V122.md](AUDIT_V122.md).
 - Release EXE dùng tag theo build và đúng commit. Đóng EXE cũ trước khi mở bản mới.
 
 Các kiểm thử offline không thay thế kiểm chứng với key KRDict thật trên máy Windows.
+
+## v1.2.3 · Sửa QA bốn mùa bị nhận nhầm đồng nghĩa
+
+Chi tiết: [AUDIT_V123.md](AUDIT_V123.md). KRDict tách bản dịch mục từ khỏi định nghĩa
+mô tả để không coi mùa xuân/mùa thu đồng nghĩa với mùa đông chỉ vì định nghĩa có nhắc
+tới mùa đông. Cache tự làm mới; sau khi mở EXE mới, kiểm chứng lại các câu đang cần QA.
+Tên riêng Rudolph (`루돌프`) không thay thế từ chung “tuần lộc” (`순록`).

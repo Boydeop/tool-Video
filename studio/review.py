@@ -104,7 +104,7 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
                 dictionary=None,reviewer=None):
     if mode not in ("strict","assisted"):raise ValueError("Invalid QA mode")
     problems=inspect_quiz(quiz)
-    report={"version":1,"mode":mode,"outcome":"needs_review",
+    report={"version":2,"mode":mode,"outcome":"needs_review",
             "structural_issues":problems,"dictionary":{},"reviewer":{},
             "issues":[],"provenance":["KRDict headword and Vietnamese senses",
                                      "blind AI reverse choice"]}
@@ -123,8 +123,14 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
         try:
             data=dict_client.lookup(word)
             exact=data.get("exact",False)
-            meanings=[v for entry in data.get("entries",[]) for v in entry.get("meanings",[])]
+            # Definitions can mention other choices: spring is described as
+            # the season after winter. Only translated headword glosses count
+            # as evidence of equivalence, never words inside definitions.
+            meanings=[v for entry in data.get("entries",[])
+                      for v in entry.get("glosses",entry.get("meanings",[]))]
             entries[word]={"exact":exact,"translations":meanings[:12],
+                           "definitions":[v for entry in data.get("entries",[])
+                                          for v in entry.get("definitions",[])][:12],
                            "headword_codes":[x.get("target_code","") for x in data.get("entries",[])][:5],
                            "match_to_clue":sense_overlap(quiz.short_clue,meanings),
                            "source":"KRDict","reason":data.get("reason","")}

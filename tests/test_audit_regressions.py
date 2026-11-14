@@ -29,7 +29,7 @@ from studio.review import blind_review, verify_quiz
 from studio.run_limits import BudgetExpired, RunCancelled
 from studio.scheduler import Scheduler
 from studio.service import Service
-from studio.webapp import create_server
+from studio.webapp import create_server,APP_VERSION
 from studio.youtube import SCOPES, YouTubeAccount
 
 XML='''<channel><total>1</total><item><word>물</word><target_code>1</target_code>
@@ -355,7 +355,7 @@ class HTTPAuditTests(unittest.TestCase):
                     headers={'Content-Type':'application/json'}),timeout=5)
             try:
                 with opener.open(base+'/health',timeout=5) as response:
-                    self.assertEqual(json.load(response)['version'],'v1.2.2')
+                    self.assertEqual(json.load(response)['version'],APP_VERSION)
                 with patch.dict(os.environ,{'KRDICT_API_KEY':'','KRDICT_API_KEYS':''}):
                     with self.assertRaises(urllib.error.HTTPError) as caught:
                         post('/api/krdict/test',{})

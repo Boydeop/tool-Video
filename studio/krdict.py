@@ -22,7 +22,7 @@ from .run_limits import network_timeout, check_budget
 ENDPOINT="https://krdict.korean.go.kr/api/search"
 UA="TiengHanSoEasyStudio/1.2 (dictionary evidence)"
 MAX_XML_BYTES=512_000
-CACHE_VERSION=2
+CACHE_VERSION=3
 
 class KRDictError(RuntimeError):
     """A safe diagnostic; never includes the request URL or API key."""
@@ -47,11 +47,13 @@ def sense_overlap(vietnamese,translations):
     if not expected:return 0.0
     maximum=0.0
     for candidate in translations:
-        variants=re.split(r"[,;/()]+",candidate)
+        # Parenthetical explanations are not synonyms ("sau mùa đông").
+        candidate=re.sub(r"\([^()]*\)","",candidate)
+        variants=re.split(r"[,;/]+",candidate)
         for part in variants:
             other=_tokens(part)
             if other:
-                maximum=max(maximum,len(expected&other)/max(1,len(expected)))
+                maximum=max(maximum,len(expected&other)/len(expected|other))
                 # Loanword and compound matching can vary; leave below-threshold
                 # matches for AI + manual review rather than guessing.
     return round(maximum,3)
@@ -80,7 +82,7 @@ def parse_search(xml_bytes,expected):
         word=(entry.findtext("word") or "").strip()
         if unicodedata.normalize("NFC",word)!=unicodedata.normalize("NFC",expected.strip()):
             continue  # search may return fuzzy matches; exact headword only
-        meanings=[]
+        meanings=[];glosses=[];definitions=[]
         for sense in entry.findall("./sense"):
             # trans_lang=7 is requested but we still filter bilingual elements
             for part in sense.findall("./translation"):
@@ -90,10 +92,13 @@ def parse_search(xml_bytes,expected):
                 for tag in ("trans_word","trans_dfn"):
                     value=(part.findtext(tag) or "").strip()
                     if value and value not in meanings:meanings.append(value)
+                    values=glosses if tag=="trans_word" else definitions
+                    if value and value not in values:values.append(value)
         found.append({"word":word,
                       "target_code":(entry.findtext("target_code") or "").strip(),
                       "pos":(entry.findtext("pos") or "").strip(),
                       "meanings":meanings,
+                      "glosses":glosses,"definitions":definitions,
                       "link":(entry.findtext("link") or "").strip()})
     return {"exact":bool(found),"entries":found}
 
