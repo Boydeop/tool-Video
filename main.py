@@ -10,6 +10,11 @@ def main():
     sub=parser.add_subparsers(dest="command",required=True)
     sub.add_parser("serve"); sub.add_parser("worker"); sub.add_parser("jobs")
     sub.add_parser("questions")
+    m=sub.add_parser('memory',help='Bộ nhớ chống trùng bền vững')
+    memory=m.add_subparsers(dest='memory_action',required=True)
+    memory.add_parser('status')
+    for action in ('export','import'):
+        memory.add_parser(action).add_argument('file',help='JSONL backup path')
     d=sub.add_parser("daily"); d.add_argument("--count",type=int,default=6)
     g=sub.add_parser("generate")
     g.add_argument("--topic",required=True);g.add_argument("--level",default="TOPIK 1")
@@ -38,6 +43,10 @@ def main():
     elif args.command=="schedule":
         result={"job_id":service.schedule(args.video,args.caption,args.at)}
     elif args.command=="questions": result=service.store.list_questions()
+    elif args.command=='memory':
+        if args.memory_action=='status':result=service.store.memory_stats()
+        elif args.memory_action=='export':result=service.store.export_memory(args.file)
+        else:result=service.store.import_memory(args.file)
     else: result=service.store.list_jobs()
     print(json.dumps(result,ensure_ascii=False,indent=2))
 

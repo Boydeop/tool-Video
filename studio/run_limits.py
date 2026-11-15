@@ -20,13 +20,14 @@ class RunCancelled(RuntimeError):
 class _RunLimit:
     deadline:float
     cancel:object=None
+    seconds:float=210
 
 _CURRENT=ContextVar("thse_run_limit",default=None)
 
 @contextmanager
 def topic_budget(seconds=210,cancel=None):
     if seconds<=0:raise ValueError("Invalid QA time budget")
-    token=_CURRENT.set(_RunLimit(time.monotonic()+float(seconds),cancel))
+    token=_CURRENT.set(_RunLimit(time.monotonic()+float(seconds),cancel,float(seconds)))
     try:
         yield
     finally:
@@ -37,7 +38,9 @@ def budget_active():
 
 def remaining_seconds():
     limit=_CURRENT.get()
-    return None if limit is None else max(0.0,limit.deadline-time.monotonic())
+    # Coarse clocks/float subtraction may produce a remainder a few ulps
+    # larger than the original duration, particularly on Windows.
+    return None if limit is None else min(limit.seconds,max(0.0,limit.deadline-time.monotonic()))
 
 def check_budget():
     limit=_CURRENT.get()
@@ -51,7 +54,9 @@ def network_timeout(inside=20,outside=60):
     check_budget()
     remaining=remaining_seconds()
     if remaining is None:return float(outside)
-    return max(.25,min(float(inside),remaining))
+    if remaining<=0:
+        raise BudgetExpired("Hết giới hạn thời gian trước khi gửi yêu cầu mạng.")
+    return min(float(inside),remaining)
 
 def check_cancel(cancel):
     if cancel is not None and cancel.is_set():

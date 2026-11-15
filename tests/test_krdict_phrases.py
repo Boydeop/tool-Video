@@ -41,7 +41,8 @@ class PhraseEvidenceTests(unittest.TestCase):
     def client(self):return Mock(lookup=Mock(side_effect=lookup))
     def test_bell_question_passes_with_classifier_in_dictionary_gloss(self):
         q=replace(phrase_quiz(),question='Chuông',clue='Chuông',correct='종',
-                  meaning='Chuông',wrong1='모자',wrong2='사탕',wrong3='장식')
+                  meaning='Chuông',wrong1='모자',wrong2='사탕',wrong3='장식',
+                  wrong1_meaning='Mũ',wrong2_meaning='Kẹo',wrong3_meaning='Đồ trang trí')
         result=verify_quiz(q,Mock(),dictionary=self.client(),reviewer=reviewer)
         self.assertEqual(result['outcome'],'verified',result['issues'])
         self.assertEqual(result['dictionary']['종']['translations'],['cái chuông'])

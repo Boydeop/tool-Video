@@ -107,7 +107,7 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
                 dictionary=None,reviewer=None):
     if mode not in ("strict","assisted"):raise ValueError("Invalid QA mode")
     problems=inspect_quiz(quiz)
-    report={"version":3,"mode":mode,"outcome":"needs_review",
+    report={"version":4,"mode":mode,"outcome":"needs_review",
             "structural_issues":problems,"dictionary":{},"reviewer":{},
             "issues":[],"provenance":["KRDict headword and Vietnamese senses",
                                      "blind AI reverse choice"]}
@@ -156,6 +156,13 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
                     report['blocked']=not exc.retryable
                     report['retry_after']=exc.retry_after if exc.retryable else 0
     report["dictionary"]=entries
+    detail_issues=[]
+    for word,item in entries.items():
+        meaning=quiz.answer_details(word)['meaning']
+        item['match_to_displayed_meaning']=sense_overlap(meaning,item['translations'])
+        if item.get('supported',item['exact']) and item['translations'] and item['match_to_displayed_meaning']<.6:
+            detail_issues.append('Nghĩa hiển thị chưa khớp KRDict: '+word)
+    report['issues'].extend(detail_issues)
     answer=entries[quiz.correct]
     if answer.get("message"):
         report["issues"].append(answer["message"])
@@ -176,7 +183,7 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
             report["issues"].append("Đáp án nhiễu có thể cũng đúng: "+word)
     # Strict mode can never approve a word with no dictionary evidence or
     # a distractor also matching the clue. Avoid long, futile AI requests.
-    if mode=="strict" and (not answer.get("supported",answer["exact"]) or
+    if mode=="strict" and (detail_issues or not answer.get("supported",answer["exact"]) or
            not answer["translations"] or answer["match_to_clue"]<0.6 or
            any("Đáp án nhiễu" in issue or "bằng chứng KRDict" in issue
                for issue in report["issues"])):
@@ -208,7 +215,7 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
            blind.get("selected")==quiz.correct and
            report.get("reverse_overlap",0)>=0.55)
     unsafe=any("Đáp án nhiễu" in x for x in report["issues"])
-    if ai_ok and not unsafe and (strict_dict_ok or mode=="assisted"):
+    if ai_ok and not unsafe and not detail_issues and (strict_dict_ok or mode=="assisted"):
         # A phrase not covered by KRDict can be AI-assisted, but no false claim
         # that the dictionary verified its exact lexical meaning.
         report["outcome"]="verified"

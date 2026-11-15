@@ -125,12 +125,13 @@ class Quiz:
 
 
     def validate(self) -> None:
-        if not self.topic.strip() or not self.question.strip():
+        from .memory import canonical
+        if not self.topic.strip() or not canonical(self.question):
             raise ValueError("Cần chủ đề và câu hỏi.")
         answers = [self.correct, self.wrong1, self.wrong2, self.wrong3]
         if any(not a.strip() for a in answers):
             raise ValueError("Cần đủ bốn đáp án.")
-        if len({normalize(a) for a in answers}) != 4:
+        if len({canonical(a,'answer') for a in answers}) != 4:
             raise ValueError("Có hai đáp án giống nhau.")
         if not all(re.search(r"[\uac00-\ud7a3]", a) for a in answers):
             raise ValueError("Đáp án phải chứa tiếng Hàn.")

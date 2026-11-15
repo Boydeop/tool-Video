@@ -21,6 +21,19 @@ from studio.service import Service
 
 
 class RunDeadlineTests(unittest.TestCase):
+    def test_coarse_clock_and_subquarter_second_remainders(self):
+        with patch('studio.run_limits.time.monotonic',return_value=1000):
+            with topic_budget(.7):
+                self.assertLessEqual(network_timeout(20,70),.7)
+        with patch('studio.run_limits.time.monotonic',side_effect=[100,100.65,100.65]):
+            with topic_budget(.7):
+                timeout=network_timeout(20,70)
+                self.assertGreater(timeout,0)
+                self.assertLessEqual(timeout,.051)
+        with patch('studio.run_limits.time.monotonic',side_effect=[100,100.6,100.71]):
+            with topic_budget(.7),self.assertRaises(BudgetExpired):
+                network_timeout(20,70)
+
     def test_per_request_network_time_does_not_exceed_remaining_budget(self):
         with topic_budget(.7):
             self.assertGreater(network_timeout(20,70),0)

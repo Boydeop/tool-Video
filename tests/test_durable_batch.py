@@ -46,8 +46,11 @@ class Factory:
     def __call__(self,topic,level,count,*args,**kwargs):
         rows=[]
         for _ in range(count):
-            self.counter+=1;word=chr(0xAC00+self.counter)
-            rows.append(Quiz(topic=topic,level=level,question='Câu '+uuid.uuid4().hex[:8],clue='Nước',
+            self.counter+=1
+            token=uuid.uuid4().hex
+            word=''.join(chr(0xAC00+int(token[i:i+3],16)) for i in range(0,18,3))
+            clue='Câu '+token[:16]
+            rows.append(Quiz(topic=topic,level=level,question=clue,clue=clue,
                 correct=word,wrong1='봄',wrong2='여름',wrong3='가을',meaning='Nước',romanization='mul',
                 wrong1_meaning='Xuân',wrong1_romanization='bom',wrong2_meaning='Hè',wrong2_romanization='yeoreum',
                 wrong3_meaning='Thu',wrong3_romanization='gaeul'))
@@ -258,14 +261,15 @@ class DraftCleanupTests(unittest.TestCase):
         with self.assertRaises(ValueError):store.trash_questions([draft,used])
         self.assertEqual(store.list_questions(trash=True),[])
         self.assertEqual(len(store.list_questions()),2)
-    def test_trash_releases_dedupe_but_restore_never_overwrites_new_work(self):
+    def test_trash_preserves_dedupe_and_allows_restoring_its_owner(self):
         first=self.service.store.insert_question(self.quiz(),provider='gemini')
         self.service.store.trash_questions([first])
         self.assertEqual(self.service.store.list_questions(),[])
         self.assertEqual(len(self.service.store.list_questions(trash=True)),1)
-        second=self.service.store.insert_question(self.quiz(),provider='gemini')
-        with self.assertRaises(DuplicateQuestion):self.service.store.restore_questions([first])
-        self.assertEqual(self.service.store.get_questions([second])[0].correct,'물')
+        with self.assertRaises(DuplicateQuestion):
+            self.service.store.insert_question(self.quiz(),provider='gemini')
+        self.service.store.restore_questions([first])
+        self.assertEqual(self.service.store.get_questions([first])[0].correct,'물')
     def test_cleanup_preserves_manual_and_rendered_questions(self):
         store=self.service.store
         manual=store.insert_question(self.quiz(),provider='manual')

@@ -139,6 +139,8 @@ class BatchStore:
                 row=c.execute('SELECT * FROM questions WHERE id=? AND trashed=1',(qid,)).fetchone()
                 if row is None:raise ValueError('Không tìm thấy câu trong thùng rác')
                 qhash,ahash=fingerprint(row['question']),fingerprint(row['correct'])
+                from .quiz import Quiz
+                self._check_memory(c,Quiz.parse(json.loads(row['payload'])),source_id=qid)
                 if c.execute('SELECT 1 FROM questions WHERE question_hash=? OR answer_hash=?',(qhash,ahash)).fetchone():
                     raise DuplicateQuestion('Đã có câu tương tự sau khi xóa; không ghi đè khi khôi phục')
                 c.execute('UPDATE questions SET trashed=0,question_hash=?,answer_hash=? WHERE id=?',(qhash,ahash,qid))

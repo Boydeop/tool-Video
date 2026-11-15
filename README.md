@@ -97,6 +97,40 @@ Run tests:
 
     python -m unittest discover -s tests -v
 
+## Bộ nhớ câu hỏi local bền vững · audit 2026-11-15
+
+Bản nâng cấp lưu sổ chống trùng riêng trong bảng `question_memory` của
+`studio.sqlite3`. Sổ này chỉ thêm lịch sử: xóa bản nháp, dọn thùng rác, thử lại
+video lỗi, sửa đáp án hoặc dọn cache không làm mất dấu câu cũ. Khi nâng cấp,
+ứng dụng tự nhập câu hiện có, câu trong thùng rác và lịch sử sửa còn trong DB.
+Câu đã bị xóa hoàn toàn trước nâng cấp chỉ có thể nhớ lại từ bản sao lưu.
+
+Chặn câu/gợi ý trùng sau chuẩn hóa Unicode, dấu câu, chữ hoa/thường và ký tự ẩn;
+chặn đáp án đúng tiếng Hàn đã dùng, kể cả khác khoảng trắng. Có kiểm tra gần
+trùng trên toàn sổ, không chỉ 50 câu gần nhất. Đáp án nhiễu có thể được dùng lại.
+Sổ chống trùng không chứng minh được mọi cách diễn đạt đồng nghĩa; không cam
+kết có vô hạn câu mới. Hệ thống từ chối câu trùng thay vì hạ tiêu chuẩn để đủ số.
+
+Trong **Thiết lập / Dọn bộ nhớ**, xem số câu đã nhớ, tải bản sao lưu JSONL
+và gộp bản sao lưu (tối đa 8 MB qua dashboard). Gộp không xóa lịch sử hiện có
+và không tạo lại bản nháp. File lớn hơn có thể gộp bằng CLI:
+
+```bash
+python main.py --data data memory status
+python main.py --data data memory export /path/to/question-memory.jsonl
+python main.py --data data memory import /path/to/question-memory.jsonl
+```
+
+Đóng ứng dụng trước khi sao lưu toàn bộ thư mục dữ liệu. Bản Windows lưu tại
+`%LOCALAPPDATA%\TiengHanSoEasyStudio`; bản mã nguồn dùng `--data` (mặc định
+`data/`). Giữ `studio.sqlite3` hoặc bản sao lưu bộ nhớ khi đổi máy/cài lại.
+Nếu xóa/mất DB và mọi bản sao lưu, lịch sử không thể tự phục hồi.
+JSONL chỉ chứa nội dung chống trùng; không chứa API keys hay token.
+
+QA v4 kiểm tra nghĩa hiển thị của cả bốn lựa chọn. Các câu chỉ được máy duyệt
+theo QA cũ trở về bản nháp một lần để kiểm chứng lại; câu người dùng đã duyệt
+và video đã xuất được giữ nguyên. Xem [báo cáo audit](AUDIT_LOCAL_MEMORY.md).
+
 ## Known MVP limitations
 
 - Online Vietnamese and Korean voice synthesis via edge-tts is available when selecting Voice; music is not included.
@@ -538,3 +572,15 @@ khôi phục lượt bị gián đoạn khi mở lại ứng dụng.
 nằm trong phần nâng cao; có thùng rác/khôi phục và dọn bản nháp AI thừa của bản
 cũ. Không xóa câu đã dùng trong video. Thiết lập chủ đề/QA nằm trong phần nâng
 cao, gộp các nút chức năng trùng. [Audit, kiểm thử và giới hạn](AUDIT_V140.md).
+
+
+## v1.4.1 · Bộ nhớ câu hỏi local và bản audit
+
+Lưu chống trùng bền vững qua xóa nháp, retry và sửa đáp án; sao lưu/gộp JSONL
+trong Thiết lập. QA v4 kiểm tra nghĩa hiển thị của cả bốn lựa chọn. Sửa lỗi
+nhất quán QA/render, bảo vệ HTTP local, dọn MP4 lỗi và tối ưu vẽ khung hình.
+Sửa giới hạn timeout khi đồng hồ Windows có độ phân giải thấp.
+
+Đóng bản EXE cũ và sao lưu `%LOCALAPPDATA%\TiengHanSoEasyStudio` trước khi
+nâng cấp. Giữ database để duy trì lịch sử; các câu chỉ được máy duyệt theo QA
+cũ cần kiểm chứng lại. [Báo cáo và giới hạn](AUDIT_LOCAL_MEMORY.md).

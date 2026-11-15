@@ -52,6 +52,10 @@ def font(size,bold=False,korean=False):
 def _native_face(path,index,size):
     return ImageFont.truetype(path,max(1,int(size)),index=int(index))
 
+@lru_cache(maxsize=4096)
+def _text_length(path,index,size,text):
+    return _native_face(path,index,size).getlength(text)
+
 class _LogicalDraw:
     """Draw shapes in 540x960 layout coordinates at native output resolution.
 
@@ -93,7 +97,8 @@ class _LogicalDraw:
         return self.raw.polygon(self._points(xy),**kwargs)
 
     def textlength(self,text,font):
-        return self.raw.textlength(text,font=self._font(font))/self.scale
+        return _text_length(font.path,getattr(font,'index',0),
+                            round(font.size*self.scale),text)/self.scale
 
     def textbbox(self,xy,text,font,**kwargs):
         bb=self.raw.textbbox(self._box(xy),text,font=self._font(font),**kwargs)
@@ -105,6 +110,7 @@ class _LogicalDraw:
 def _is_hangul(c):
     return ("\uac00"<=c<="\ud7a3" or "\u1100"<=c<="\u11ff" or "\u3130"<=c<="\u318f")
 
+@lru_cache(maxsize=2048)
 def _segments(text):
     text=unicodedata.normalize("NFC",str(text))
     if not text:return []
@@ -272,6 +278,14 @@ def _panel_pattern(img,theme):
     return Image.alpha_composite(img.convert("RGBA"),bg).convert("RGB")
 
 
+@lru_cache(maxsize=6)
+def _native_background(theme,width):
+    image=_korea_background(theme)
+    if width!=540:
+        image=image.resize((width,width*16//9),Image.Resampling.LANCZOS)
+    return image
+
+
 def shorts_safe_frame(image,theme):
     """Keep visual text away from UI overlays in YouTube Shorts / Instagram Reels.
 
@@ -294,8 +308,7 @@ def shorts_safe_frame(image,theme):
 def draw_intro(theme,width=540,logo_path=None,logo_position="top-right",logo_scale=.15,progress=1,
                logo_x=.82,logo_y=.10,shorts_safe=False,topic="",level=""):
     bg,fg,accent=THEMES[theme]
-    im=_korea_background(theme).copy()
-    if width!=540:im=im.resize((width,width*16//9),Image.Resampling.LANCZOS)
+    im=_native_background(theme,width).copy()
     d=_LogicalDraw(im,width/540)
     d.rounded_rectangle((36,225,504,630),radius=29,fill="#FFFFFF" if theme!="blue" else "#153E68")
     _label(d,270,302,"TIẾNG HÀN SO EASY",420,1,34,accent,26)
@@ -321,8 +334,7 @@ def draw_frame(quiz:Quiz,idx,total,theme,elapsed,think=5.5,width=540,
     if theme not in THEMES:
         raise ValueError("Unknown video theme")
     bg,fg,accent=THEMES[theme]
-    im=_korea_background(theme).copy()
-    if width!=540:im=im.resize((width,width*16//9),Image.Resampling.LANCZOS)
+    im=_native_background(theme,width).copy()
     d=_LogicalDraw(im,width/540)
     answer_start=prompt_duration+think
     show_answer=elapsed>=answer_start
@@ -462,12 +474,15 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
                             transition,intro,sfx_volume,scenes=scenes)
             events.append((track,0,"sfx"))
         silent=folder/"silent.mp4"
+        # A pipe fills if FFmpeg emits errors while we are writing frames.
+        # Spooling stderr avoids a producer/encoder deadlock.
+        errors=tempfile.TemporaryFile()
         proc=subprocess.Popen([
             binary("ffmpeg"),"-hide_banner","-loglevel","error","-y",
             "-f","rawvideo","-pix_fmt","rgb24","-s",f"{width}x{width*16//9}",
             "-r",str(fps),"-i","-","-an","-c:v","libx264","-preset","veryfast",
             "-pix_fmt","yuv420p","-movflags","+faststart",str(silent)
-        ],stdin=subprocess.PIPE,stderr=subprocess.PIPE,**hidden_subprocess())
+        ],stdin=subprocess.PIPE,stderr=errors,**hidden_subprocess())
         try:
             frames_total=int(round(scenes[0].start*fps))+sum(int(round(scene.duration*fps)) for scene in scenes)
             frames_done=0
@@ -494,16 +509,19 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
                     if frames_done%step==0:report(24+65*frames_done/frames_total,
                                                  "Đang dựng câu "+str(i)+"/"+str(len(questions)))
             proc.stdin.close()
-            stderr=proc.stderr.read().decode("utf-8","replace")
-            if proc.wait()!=0:
+            code=proc.wait(timeout=max(90,int(duration*10)))
+            errors.seek(max(0,errors.tell()-2000))
+            stderr=errors.read().decode("utf-8","replace")
+            if code!=0:
                 raise RuntimeError("FFmpeg render failed: "+stderr[-1400:])
         except BaseException:
-            if proc.stdin and not proc.stdin.closed:
-                proc.stdin.close()
             proc.kill();proc.wait()
+            if proc.stdin and not proc.stdin.closed:
+                from contextlib import suppress
+                with suppress(OSError):proc.stdin.close()
             raise
         finally:
-            proc.stderr.close()
+            errors.close()
         report(90,"Đang ghép âm thanh")
         if events:
             mux_narration(silent,events,staged,duration)

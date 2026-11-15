@@ -70,7 +70,7 @@ jobs:
               if ($process.HasExited) { throw 'Packaged Studio process terminated before ready' }
               try {
                 $health = Invoke-RestMethod -Uri "http://127.0.0.1:8765/health" -TimeoutSec 3 -NoProxy
-                if ($health.status -eq 'ok' -and $health.app -eq 'TiengHanSoEasyStudio' -and $health.version -eq 'v1.4.0') {
+                if ($health.status -eq 'ok' -and $health.app -eq 'TiengHanSoEasyStudio' -and $health.version -eq 'v1.4.1') {
                   $ready = $true
                   break
                 }
@@ -153,7 +153,23 @@ jobs:
                 throw "Packaged EXE KRDict missing-key diagnostic failed"
               }
             }
-            Write-Output "Studio v1.4.0 dictionary QA, auto thumbnails and durable YouTube cover smoke passed"
+            $memory = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/memory/status" -TimeoutSec 5 -NoProxy
+            if ($memory.permanent -ne $true -or $null -eq $memory.answers) {
+              throw 'Permanent question memory missing from packaged EXE'
+            }
+            if ($homePage.Content -notmatch 'memorySummary' -or $homePage.Content -notmatch 'memoryImport') {
+              throw 'Memory backup/restore controls missing from packaged EXE'
+            }
+            $backup = Invoke-WebRequest -Uri "http://127.0.0.1:8765/api/memory/export" -TimeoutSec 5 -NoProxy
+            $backupText = [System.Text.Encoding]::UTF8.GetString($backup.RawContentStream.ToArray())
+            $header = ($backupText -split "`n")[0] | ConvertFrom-Json
+            if ($header.format -ne 'thse-question-memory' -or $header.version -ne 1) {
+              throw 'Packaged EXE memory backup format invalid'
+            }
+            $importBody = @{text=$backupText} | ConvertTo-Json -Compress
+            $merged = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/memory/import" -Method Post -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($importBody)) -TimeoutSec 5 -NoProxy
+            if ($merged.added -ne 0) { throw 'Memory backup merge should be idempotent' }
+            Write-Output "Studio v1.4.1 permanent memory backup/merge and HTTP smoke passed"
           } catch {
             $logPath = Join-Path $env:LOCALAPPDATA "TiengHanSoEasyStudio\studio.log"
             if (Test-Path $logPath) { Get-Content $logPath -Tail 100 }
@@ -174,16 +190,18 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.4.0-build.${{ github.run_number }}
-          name: Tiếng Hàn So Easy Studio v1.4.0 (build ${{ github.run_number }})
+          tag_name: v1.4.1-build.${{ github.run_number }}
+          name: Tiếng Hàn So Easy Studio v1.4.1 (build ${{ github.run_number }})
           target_commitish: ${{ github.sha }}
           files: dist/TiengHanSoEasyStudio.exe
           make_latest: true
           generate_release_notes: false
           body: |
-            v1.4.0: Hàng đợi 1–100 video, tự thử lại video lỗi từ đầu và tiếp tục phần chưa xong.
-            Câu tạm không vào ngân hàng; thêm thùng rác/khôi phục và dọn bản nháp cũ.
-            Giao diện gộp về Sản xuất, Kho video, API & Model, Đăng video, Thiết lập.
+            v1.4.1: Bộ nhớ câu hỏi local bền vững, giữ lịch sử sau xóa nháp, retry và sửa đáp án.
+            Sao lưu/gộp JSONL trong Thiết lập; chặn trùng văn bản/đáp án và gần trùng, không cam kết mọi cách diễn đạt đồng nghĩa.
+            QA v4 đối chiếu nghĩa của cả bốn đáp án; các câu máy duyệt theo QA cũ cần kiểm chứng lại.
+            Sửa race khi QA/render, bảo vệ HTTP local, dọn MP4 lỗi và tối ưu vẽ khung hình.
+            Back up LOCALAPPDATA/TiengHanSoEasyStudio before upgrading; keep the local database for question history.
             Windows standalone EXE built by GitHub Actions. Close the old EXE before opening.
             AI and TTS require Internet; Facebook publishing requires Page permissions.
             Personal keys remain in the local data folder, never commit them.

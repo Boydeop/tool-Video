@@ -52,7 +52,7 @@ async def _speak_edge(text,voice,target):
 
 def _speak_google(text,language,target):
     from gtts import gTTS
-    gTTS(text=text,lang=language,slow=False,timeout=20).save(str(target))
+    gTTS(text=text,lang=language,slow=False,timeout=network_timeout(20,20)).save(str(target))
 
 def synthesize(text,voice,cache_dir,engine="auto"):
     """Return an MP3 file. Only cache successful files per TTS engine/voice/text."""

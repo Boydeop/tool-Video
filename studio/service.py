@@ -80,7 +80,7 @@ class Service:
     def generate(self,topic,level,count=6,fmt="từ vựng",providers=None):
         from .run_limits import check_budget,budget_active,BudgetExpired,RunCancelled
         if not 1<=count<=30:raise ValueError("Số câu mỗi lần phải từ 1 tới 30.")
-        accepted=[];errors=[];batch_id=uuid.uuid4().hex[:12]
+        accepted=[];errors=[];duplicates=0;batch_id=uuid.uuid4().hex[:12]
         task=_PRODUCTION.get()
         retry_after=0;blocked=False
         for attempt in range(2 if budget_active() else 3):
@@ -99,18 +99,19 @@ class Service:
                 break
             for quiz in rows:
                 try:accepted.append(self.store.insert_question(quiz,provider,batch_id,production_task=task["id"] if task else ""))
-                except DuplicateQuestion:pass
+                except DuplicateQuestion:duplicates+=1
                 if len(accepted)>=count:break
         self.store.log("generation",f"{topic}: accepted={len(accepted)}/{count}, batch={batch_id}")
-        return {"accepted":accepted,"requested":count,"batch_id":batch_id,
+        return {"accepted":accepted,"requested":count,"batch_id":batch_id,"duplicates":duplicates,
                 "errors":errors,"retry_after":retry_after,"blocked":blocked,"message":"Review each Korean answer before rendering."}
 
+    @media_operation
     def verify_generated(self,qid,mode="strict"):
         from .review import verify_quiz
         question=self.store.get_questions([qid])[0]
         origin=self.store.get_question_provider(qid)
         report=verify_quiz(question,self.store,origin,mode=mode)
-        self.store.set_question_qa(qid,report["outcome"],report)
+        self.store.set_question_qa(qid,report["outcome"],report,expected=question)
         return {"id":qid,"status":report["outcome"],
                 "blocked":report.get('blocked',False),"retry_after":report.get('retry_after',0),
                 "tier":report.get("tier","needs_review"),
@@ -256,21 +257,27 @@ class Service:
             raise ValueError("Tên file xuất không hợp lệ.")
         path=Path(config["export_dir"])/name
         if path.exists():raise ValueError("Tên file đã tồn tại.")
-        completed=render(
-            questions,path,theme=theme,width=width or config["width"],
-            fps=config["fps"],think=config["think"],reveal=config["reveal"],
-            with_voice=with_voice,voice_cache=config["cache_dir"],
-            voice_engine=voice_engine,transition=config["transition"],
-            intro=config["intro"],sfx=config["sfx"],sfx_volume=config["sfx_volume"],
-            logo_path=self.production.logo(),logo_position=config["logo_position"],
-            logo_scale=config["logo_scale"],logo_x=config["logo_x"],logo_y=config["logo_y"],
-            progress=progress,shorts_safe=config.get("shorts_safe",True))
-        from .metadata import overwrite_metadata
-        topic_label=questions[0].topic if len({q.topic for q in questions})==1 else "Tổng hợp"
-        level_label=questions[0].level if len({q.level for q in questions})==1 else "TOPIK MIX"
-        tags=self._branding_for_video(topic_label,level_label)
-        overwrite_metadata(completed,tags)
-        self.store.mark_rendered(ids,completed)
+        try:
+            completed=render(
+                questions,path,theme=theme,width=width or config["width"],
+                fps=config["fps"],think=config["think"],reveal=config["reveal"],
+                with_voice=with_voice,voice_cache=config["cache_dir"],
+                voice_engine=voice_engine,transition=config["transition"],
+                intro=config["intro"],sfx=config["sfx"],sfx_volume=config["sfx_volume"],
+                logo_path=self.production.logo(),logo_position=config["logo_position"],
+                logo_scale=config["logo_scale"],logo_x=config["logo_x"],logo_y=config["logo_y"],
+                progress=progress,shorts_safe=config.get("shorts_safe",True))
+            from .metadata import overwrite_metadata
+            topic_label=questions[0].topic if len({q.topic for q in questions})==1 else "Tổng hợp"
+            level_label=questions[0].level if len({q.level for q in questions})==1 else "TOPIK MIX"
+            tags=self._branding_for_video(topic_label,level_label)
+            overwrite_metadata(completed,tags)
+            self.store.mark_rendered(ids,completed,expected=questions)
+        except Exception:
+            # Failed metadata, stale content or a late encoder callback must
+            # never expose an unregistered MP4 as a finished legacy video.
+            path.unlink(missing_ok=True)
+            raise
         try:
             from .thumbnails import ensure_thumbnail
             actual_cfg={**config,"width":width or config["width"]}
@@ -343,9 +350,11 @@ class Service:
                         "error":str(exc)[:500],"partial":True}
         return {"videos":completed,"partial":False}
 
+    @media_operation
     def edit_answer_details(self,qid,fields):
         return self.store.update_answer_details(qid,fields)
 
+    @media_operation
     def enrich_answer_details(self,ids):
         from .answer_enrichment import suggest, DETAIL_KEYS
         if not isinstance(ids,list) or not 1<=len(ids)<=6 or len(set(ids))!=len(ids):
@@ -356,7 +365,7 @@ class Service:
             quiz=self.store.get_questions([qid])[0]
             improved,provider=suggest(quiz)
             changes={k:getattr(improved,k) for k in DETAIL_KEYS}
-            outcome=self.store.update_answer_details(qid,changes)
+            outcome=self.store.update_answer_details(qid,changes,expected=quiz)
             result.append({"id":qid,"provider":provider,"missing":outcome["missing"]})
         return {"updated":result,"requires_review":True}
 

@@ -98,12 +98,13 @@ def fallback(topic,level,count,recent,fmt="từ vựng",providers=None):
     from .keys import get_keys
     candidate_list=(providers if providers is not None else
                     ["gemini","groq","openrouter","ollama"])
-    if budget_active() and providers is None:
+    if providers is None:
         # In a time-bounded Autopilot run, do not try three slow dead APIs
         # for each generation attempt. Honor whichever two are configured.
         candidate_list=[p for p in candidate_list if
                        (p=="ollama" and os.getenv("ENABLE_OLLAMA")=="1")
-                       or (p!="ollama" and get_keys(p))][:2]
+                       or (p!="ollama" and get_keys(p))]
+        if budget_active():candidate_list=candidate_list[:2]
     if not candidate_list:
         raise ProviderError("Chưa có provider AI khả dụng. Kiểm tra key AI trong mục API & Model.",retryable=False)
     for provider in candidate_list:

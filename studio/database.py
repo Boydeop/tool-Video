@@ -7,8 +7,9 @@ import sqlite3
 import threading
 import uuid
 from contextlib import contextmanager
-from .quiz import Quiz, fingerprint, similar, normalize
+from .quiz import Quiz, fingerprint
 from .batch_store import BatchStore
+from .memory import QuestionMemory
 
 class DuplicateQuestion(ValueError):
     pass
@@ -16,7 +17,7 @@ class DuplicateQuestion(ValueError):
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-class Store(BatchStore):
+class Store(BatchStore, QuestionMemory):
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -136,6 +137,22 @@ class Store(BatchStore):
                 c.execute("ALTER TABLE jobs ADD COLUMN title TEXT NOT NULL DEFAULT ''")
 
             self.init_batch_schema(c)
+            self.init_memory(c)
+            # Old machine approvals did not validate the meanings shown below
+            # all four choices. Invalidate those once; preserve human approvals
+            # and completed videos, which retain their original audit evidence.
+            if not c.execute("SELECT 1 FROM app_migrations WHERE name='display_meanings_qa_v4'").fetchone():
+                for row in c.execute("""SELECT q.id,qa.report_json FROM questions q
+                    LEFT JOIN question_qa qa ON qa.question_id=q.id
+                    WHERE q.status='auto_approved'""").fetchall():
+                    try:version=json.loads(row['report_json'] or '{}').get('version',0)
+                    except (ValueError,AttributeError):version=0
+                    if not isinstance(version,int) or version<4:
+                        c.execute("UPDATE questions SET status='draft' WHERE id=?",(row['id'],))
+                        c.execute("""INSERT OR REPLACE INTO question_qa
+                            VALUES(?,'stale',?,?)""",(row['id'],json.dumps({'issues':[
+                            'Cần kiểm chứng lại nghĩa hiển thị cho cả bốn đáp án (QA v4).']}),utcnow()))
+                c.execute("INSERT INTO app_migrations VALUES('display_meanings_qa_v4')")
 
     def krdict_cache_get(self,query,max_age_seconds=2592000):
         import time
@@ -153,13 +170,15 @@ class Store(BatchStore):
                          VALUES(?,?,?)""",
                       (str(query),json.dumps(payload,ensure_ascii=False),int(time.time())))
 
-    def set_question_qa(self,qid,outcome,report):
+    def set_question_qa(self,qid,outcome,report,expected=None):
         """Keep QA outcome independent of production and manual approvals."""
         if outcome not in ("verified","needs_review","unavailable","stale"):
             raise ValueError("Invalid QA outcome")
         with self._lock,self.db(immediate=True) as c:
-            row=c.execute("SELECT status FROM questions WHERE id=?",(qid,)).fetchone()
+            row=c.execute("SELECT status,payload,trashed FROM questions WHERE id=?",(qid,)).fetchone()
             if not row:raise ValueError("Question does not exist")
+            if row['trashed'] or (expected is not None and Quiz.parse(json.loads(row['payload']))!=expected):
+                raise ValueError("Câu đã thay đổi hoặc bị xóa trong lúc kiểm chứng; cần kiểm tra lại.")
             if row["status"]=="rendered":
                 raise ValueError("Cannot modify QA of an already rendered question")
             c.execute("""INSERT OR REPLACE INTO question_qa
@@ -355,17 +374,12 @@ class Store(BatchStore):
         qhash = fingerprint(quiz.question)
         ahash = fingerprint(quiz.correct)
         with self._lock, self.db(immediate=True) as c:
+            self._check_memory(c, quiz)
             exact = c.execute(
                 "SELECT 1 FROM questions WHERE question_hash=? OR answer_hash=?",
                 (qhash, ahash)).fetchone()
             if exact:
                 raise DuplicateQuestion("Trùng câu hỏi hoặc đáp án tiếng Hàn đã lưu.")
-            # For near duplicates, scan question history. Exact hashes are indexed.
-            for r in c.execute("SELECT question, correct FROM questions WHERE trashed=0"):
-                if similar(r["question"], quiz.question) >= 0.89:
-                    raise DuplicateQuestion("Câu hỏi gần trùng với dữ liệu cũ.")
-                if len(normalize(quiz.correct)) > 8 and similar(r["correct"], quiz.correct) >= 0.94:
-                    raise DuplicateQuestion("Đáp án gần trùng với dữ liệu cũ.")
             qid = uuid.uuid4().hex
             c.execute("""INSERT INTO questions
                 (id,topic,question,correct,payload,question_hash,answer_hash,status,provider,created_at,batch_id)
@@ -375,6 +389,7 @@ class Store(BatchStore):
                  qhash,ahash,"draft",provider,utcnow(),batch_id))
             if production_task:
                 c.execute('UPDATE questions SET production_task=? WHERE id=?',(production_task,qid))
+            self._remember(c, quiz.to_dict(), qid)
             return qid
 
     def list_questions(self, status=None, limit=100, trash=False):
@@ -400,6 +415,9 @@ class Store(BatchStore):
             return result
 
     def get_questions(self, ids: list[str], status=None) -> list[Quiz]:
+        if (not isinstance(ids,list) or any(not isinstance(qid,str) for qid in ids)
+                or len(ids)>500 or len(set(ids))!=len(ids)):
+            raise ValueError("Chọn tối đa 500 ID câu hỏi không trùng.")
         if not ids:
             return []
         with self.db() as c:
@@ -414,7 +432,7 @@ class Store(BatchStore):
                 raise ValueError("Câu hỏi phải được duyệt trước khi dựng video.")
             return [Quiz.parse(json.loads(data[i]["payload"])) for i in ids]
 
-    def update_answer_details(self,qid,fields):
+    def update_answer_details(self,qid,fields,expected=None):
         """Update only per-answer educational data; require reapproval."""
         from .answer_enrichment import DETAIL_KEYS
         from dataclasses import replace
@@ -431,6 +449,8 @@ class Store(BatchStore):
             if row["status"]=="rendered":
                 raise ValueError("Không sửa câu đã xuất video. Tạo phiên bản câu mới.")
             quiz=Quiz.parse(json.loads(row["payload"]))
+            if expected is not None and quiz!=expected:
+                raise ValueError("Câu đã đổi trong lúc bổ sung AI; không ghi đè.")
             updated=replace(quiz,**sanitized)
             updated.validate()
             c.execute("""INSERT OR REPLACE INTO question_qa(question_id,outcome,report_json,reviewed_at)
@@ -461,9 +481,8 @@ class Store(BatchStore):
             ahash=fingerprint(after.correct)
             if c.execute('SELECT 1 FROM questions WHERE answer_hash=? AND id!=?',(ahash,qid)).fetchone():
                 raise DuplicateQuestion('Đáp án sửa trùng câu đã lưu; giữ nguyên câu cũ')
-            for other in c.execute('SELECT correct FROM questions WHERE trashed=0 AND id!=?',(qid,)):
-                if len(normalize(after.correct))>8 and similar(other['correct'],after.correct)>=.94:
-                    raise DuplicateQuestion('Đáp án sửa gần trùng câu đã lưu; giữ nguyên câu cũ')
+            self._check_memory(c,after,source_id=qid)
+            self._remember(c,after.to_dict(),qid)
             old=json.dumps(before.to_dict(),ensure_ascii=False)
             new=json.dumps(after.to_dict(),ensure_ascii=False)
             qa=json.dumps(report,ensure_ascii=False)
@@ -503,14 +522,18 @@ class Store(BatchStore):
                 FROM questions WHERE trashed=0 AND production_task='' GROUP BY COALESCE(NULLIF(batch_id,''),'legacy')
                 ORDER BY created_at DESC LIMIT ?""",(limit,))]
 
-    def mark_rendered(self,ids,path):
+    def mark_rendered(self,ids,path,expected=None):
         if not ids:raise ValueError("Empty selection.")
         target=str(Path(path).resolve())
         with self._lock,self.db(immediate=True) as c:
             placeholders=",".join("?" for _ in ids)
-            rows=c.execute("SELECT id,topic,status,production_task FROM questions WHERE id IN ("+placeholders+")",ids).fetchall()
-            if len(rows)!=len(set(ids)) or any(row["status"] not in ("approved","auto_approved") for row in rows):
+            rows=c.execute("SELECT id,topic,status,production_task,payload,trashed FROM questions WHERE id IN ("+placeholders+")",ids).fetchall()
+            if len(ids)!=len(set(ids)) or len(rows)!=len(ids) or any(row['trashed'] or row["status"] not in ("approved","auto_approved") for row in rows):
                 raise ValueError("All questions must be approved and not yet rendered.")
+            if expected is not None:
+                current={row['id']:Quiz.parse(json.loads(row['payload'])) for row in rows}
+                if [current[qid] for qid in ids]!=expected:
+                    raise ValueError("Câu đã đổi trong lúc dựng video; không ghi nhận kết quả cũ.")
             vid=uuid.uuid4().hex
             c.execute("""INSERT INTO video_registry(id,path,question_ids,topic,status,created_at)
                          VALUES(?,?,?,?,'rendered',?)""",
@@ -559,9 +582,7 @@ class Store(BatchStore):
                 raise ValueError("Video already scheduled or not part of Studio registry.")
 
     def recent_prompts(self, limit=40):
-        with self.db() as c:
-            return [r["question"] + " => " + r["correct"] for r in c.execute(
-                "SELECT question,correct FROM questions WHERE trashed=0 ORDER BY created_at DESC LIMIT ?",(limit,))]
+        return self.remembered_prompts(limit)
 
     def topic_counts(self):
         with self.db() as c:

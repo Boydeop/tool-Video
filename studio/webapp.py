@@ -54,8 +54,12 @@ def create_server(service, host="127.0.0.1", port=8765):
             self.wfile.write(payload)
 
         def _check_origin(self):
-            origin = self.headers.get("Origin", "")
             port = self.server.server_address[1]
+            if self.headers.get('Host','').lower() not in (
+                    f'127.0.0.1:{port}', f'localhost:{port}'):
+                self.respond(403, {"error": "Host truy cập không được phép."})
+                return False
+            origin = self.headers.get("Origin", "")
             allowed = ("http://127.0.0.1:" + str(port),
                        "http://localhost:" + str(port))
             if origin and origin not in allowed:
@@ -92,6 +96,8 @@ def create_server(service, host="127.0.0.1", port=8765):
                     self.wfile.write(chunk)
 
         def do_GET(self):
+            if not self._check_origin():
+                return
             url = urlsplit(self.path)
             try:
                 if url.path == "/":
@@ -128,6 +134,22 @@ def create_server(service, host="127.0.0.1", port=8765):
                 elif url.path == "/api/cache/status":
                     self.respond(200,{"cache":service.cache_stats(),
                                       "busy":export_queue.is_running()})
+                elif url.path == "/api/memory/status":
+                    self.respond(200, service.store.memory_stats())
+                elif url.path == "/api/memory/export":
+                    import tempfile
+                    with tempfile.TemporaryDirectory() as folder:
+                        path=Path(folder)/'question-memory.jsonl'
+                        service.store.export_memory(path)
+                        self.send_response(200)
+                        self.send_header('Content-Type','application/x-ndjson; charset=utf-8')
+                        self.send_header('Content-Length',str(path.stat().st_size))
+                        self.send_header('Content-Disposition','attachment; filename="question-memory.jsonl"')
+                        self.send_header('Cache-Control','no-store')
+                        self.end_headers()
+                        with path.open('rb') as stream:
+                            import shutil
+                            shutil.copyfileobj(stream,self.wfile)
                 elif url.path == "/api/platform/status":
                     self.respond(200,{"youtube":youtube.status(),"instagram":instagram.status(),
                                       "outbound":service.store.list_outbound(100)})
@@ -173,6 +195,7 @@ def create_server(service, host="127.0.0.1", port=8765):
                         "cache": service.cache_stats(),
                         "youtube":youtube.status(),"instagram":instagram.status(),
                         "total_questions":service.store.count_questions(),
+                        "question_memory":service.store.memory_stats(),
                         "production": service.production.settings(),
                         "facebook": page_status(),
                         "jobs": service.store.list_jobs(limit=100),
@@ -236,19 +259,33 @@ def create_server(service, host="127.0.0.1", port=8765):
                       "/api/thumbnails/legacy",
                       "/api/youtube/configure", "/api/youtube/connect", "/api/youtube/disconnect",
                       "/api/instagram/connect", "/api/instagram/disconnect",
-                      "/api/platform/schedule")
+                      "/api/platform/schedule", "/api/memory/import")
             if route not in routes:
                 self.respond(404, {"error": "Không tìm thấy chức năng."})
                 return
             try:
+                if self.headers.get_content_type()!='application/json':
+                    raise ValueError("Chỉ nhận Content-Type application/json.")
+                if self.headers.get('Transfer-Encoding'):
+                    raise ValueError("Không hỗ trợ Transfer-Encoding.")
                 length = int(self.headers.get("Content-Length", "0"))
-                limit=MAX_REQUEST if route=="/api/logo/upload" else 180_000
+                limit=(18_000_000 if route=='/api/memory/import' else
+                       MAX_REQUEST if route=="/api/logo/upload" else 180_000)
                 if not 0 < length <= limit:
                     raise ValueError("Dữ liệu gửi vượt giới hạn.")
                 raw = json.loads(self.rfile.read(length))
                 if not isinstance(raw, dict):
                     raise ValueError("Dữ liệu phải ở định dạng JSON.")
-                if route == "/api/generate":
+                if route == '/api/memory/import':
+                    import tempfile
+                    text=raw.get('text')
+                    if not isinstance(text,str) or len(text.encode('utf-8'))>8_000_000:
+                        raise ValueError('Bản sao lưu bộ nhớ tối đa 8 MB qua dashboard; file lớn hơn dùng CLI.')
+                    with tempfile.TemporaryDirectory() as folder:
+                        path=Path(folder)/'import.jsonl'
+                        path.write_text(text,encoding='utf-8')
+                        result=service.store.import_memory(path)
+                elif route == "/api/generate":
                     level = str(raw.get("level", "TOPIK 1"))
                     count = int(raw.get("count", 6))
                     topic = str(raw.get("topic", "")).strip()
