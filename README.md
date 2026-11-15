@@ -584,3 +584,11 @@ Sửa giới hạn timeout khi đồng hồ Windows có độ phân giải thấ
 Đóng bản EXE cũ và sao lưu `%LOCALAPPDATA%\TiengHanSoEasyStudio` trước khi
 nâng cấp. Giữ database để duy trì lịch sử; các câu chỉ được máy duyệt theo QA
 cũ cần kiểm chứng lại. [Báo cáo và giới hạn](AUDIT_LOCAL_MEMORY.md).
+
+
+## v1.4.2 · QA cụm sức khỏe và phục hồi khi AI lỗi
+
+Bổ sung bằng chứng KRDict cho mẫu tân ngữ + 하다 và chủ ngữ + tính từ dạng từ
+điển; vẫn cần AI hỏi ngược. Sinh câu strict ưu tiên dạng mục từ và nhận phản
+hồi QA. Thử provider dự phòng thứ ba đã cấu hình, tôn trọng Retry-After và
+báo rõ lỗi AI 503. [Chi tiết, kiểm thử và giới hạn](HOTFIX_V142.md).

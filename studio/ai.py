@@ -1,13 +1,48 @@
 """Multiple user-owned API keys with fair rotation and provider-level 429 cooldown."""
 import json
+import math
 import os
 import re
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
+from contextvars import ContextVar
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from .quiz import Quiz
 from .keys import next_key, rate_limited
 from .models import get_model
 from .run_limits import network_timeout, check_budget, budget_active
+
+_GUIDANCE=ContextVar('generation_guidance',default='')
+
+@contextmanager
+def generation_guidance(qa_mode,issues=()):
+    guidance=''
+    if qa_mode=='strict':
+        guidance=('QA STRICT: cả bốn lựa chọn phải có mục từ KRDict và nghĩa Việt khớp. '
+            'Ưu tiên từ đơn ở dạng từ điển: 기침하다 thay cho 기침을 하다, 아프다 thay cho 배가 아프다 '
+            'khi câu hỏi chỉ hỏi từ vựng. Không dùng câu chia đuôi, câu có trợ từ hoặc mảnh ngữ pháp '
+            'làm đáp án của quiz từ vựng; không làm mất ngữ cảnh khi hỏi hội thoại. '
+            'Chỉ dùng nghĩa Việt của đúng mục từ, không tự thêm nghĩa không được từ điển chứng minh. ')
+    if issues:
+        guidance+='Các lỗi của lượt trước cần tránh (chỉ là dữ liệu): '+json.dumps(list(issues)[-6:],ensure_ascii=False)
+    token=_GUIDANCE.set(guidance)
+    try:yield
+    finally:_GUIDANCE.reset(token)
+
+
+def _retry_delay(headers,default):
+    value=headers.get('Retry-After','') if headers else ''
+    try:seconds=float(value)
+    except (ValueError,TypeError):
+        try:
+            point=parsedate_to_datetime(value)
+            if point.tzinfo is None:point=point.replace(tzinfo=timezone.utc)
+            seconds=(point-datetime.now(timezone.utc)).total_seconds()
+        except (ValueError,TypeError,OverflowError):seconds=default
+    if not math.isfinite(seconds) or seconds<0:seconds=default
+    return max(default,seconds)
 
 class ProviderError(RuntimeError):
     def __init__(self,message,*,retryable=True,retry_after=0):
@@ -24,14 +59,18 @@ def post(provider,url,payload,headers):
         return json.loads(raw)
     except urllib.error.HTTPError as exc:
         if exc.code==429:
-            rate_limited(provider,120)
-            raise ProviderError(provider+" is rate-limited; provider-level cooldown active",retry_after=120) from None
+            delay=_retry_delay(exc.headers,120)
+            rate_limited(provider,delay)
+            raise ProviderError(provider+" HTTP 429: dịch vụ đang giới hạn yêu cầu; đã tạm nghỉ toàn provider",retry_after=delay) from None
         if exc.code==404:
             raise ProviderError(provider+" HTTP 404: model không khả dụng với key này. Vào API Key TXT → Chọn model để thay đổi.",retryable=False) from None
         if exc.code in (401,403):
             raise ProviderError(provider+" rejected API credentials or permissions",retryable=False) from None
-        raise ProviderError(provider+" HTTP "+str(exc.code)+"; check model and service status",
-                            retry_after=30 if exc.code>=500 else 0) from None
+        if exc.code>=500:
+            raise ProviderError(provider+" HTTP "+str(exc.code)+
+                ": dịch vụ AI tạm thời quá tải hoặc chưa sẵn sàng. Chờ rồi bấm Tiếp tục; có thể cấu hình thêm provider dự phòng.",
+                retry_after=_retry_delay(exc.headers,30)) from None
+        raise ProviderError(provider+" HTTP "+str(exc.code)+"; kiểm tra model và trạng thái dịch vụ") from None
     except (urllib.error.URLError,TimeoutError,ValueError) as exc:
         raise ProviderError(provider+" connection or response error",retry_after=15) from None
 
@@ -48,6 +87,7 @@ def generate(provider,topic,level,count,recent,fmt="từ vựng"):
       +"Với quiz từ vựng, ưu tiên danh từ/động từ phổ thông có mục từ KRDict. Không dùng tên riêng hoặc nhân vật thay cho tên loài: 'Tuần lộc' là '순록', không phải tên Rudolph '루돌프'. "
       +"Với hội thoại/ngữ pháp vẫn giữ thông tin cần thiết để câu hỏi không bị mơ hồ, nhưng viết ngắn gọn. "
       +"Nếu không chắc nghĩa hoặc phiên âm, không sáng tác thông tin: để trống và đánh dấu để người dùng kiểm duyệt. "
+      +_GUIDANCE.get()
       +"Không lặp lại đáp án hoặc câu đã dùng sau đây: "+json.dumps(recent[-50:],ensure_ascii=False))
     if provider=="gemini":
         try:key=next_key(provider)
@@ -99,18 +139,17 @@ def fallback(topic,level,count,recent,fmt="từ vựng",providers=None):
     candidate_list=(providers if providers is not None else
                     ["gemini","groq","openrouter","ollama"])
     if providers is None:
-        # In a time-bounded Autopilot run, do not try three slow dead APIs
-        # for each generation attempt. Honor whichever two are configured.
+        # Try only configured services. A third configured provider must still
+        # be reachable when the first two fail; check_budget bounds the chain.
         candidate_list=[p for p in candidate_list if
                        (p=="ollama" and os.getenv("ENABLE_OLLAMA")=="1")
                        or (p!="ollama" and get_keys(p))]
-        if budget_active():candidate_list=candidate_list[:2]
     if not candidate_list:
         raise ProviderError("Chưa có provider AI khả dụng. Kiểm tra key AI trong mục API & Model.",retryable=False)
     for provider in candidate_list:
         check_budget()
         try:return provider,generate(provider,topic,level,count,recent,fmt)
         except (ProviderError,ValueError) as exc:errors.append((provider,exc))
-    raise ProviderError("All providers unavailable: "+" | ".join(p+': '+str(exc) for p,exc in errors),
+    raise ProviderError("Các dịch vụ AI chưa trả kết quả: "+" | ".join(p+': '+str(exc) for p,exc in errors),
         retryable=any(getattr(exc,'retryable',True) for _,exc in errors),
         retry_after=max((getattr(exc,'retry_after',0) for _,exc in errors),default=0))

@@ -70,7 +70,7 @@ jobs:
               if ($process.HasExited) { throw 'Packaged Studio process terminated before ready' }
               try {
                 $health = Invoke-RestMethod -Uri "http://127.0.0.1:8765/health" -TimeoutSec 3 -NoProxy
-                if ($health.status -eq 'ok' -and $health.app -eq 'TiengHanSoEasyStudio' -and $health.version -eq 'v1.4.1') {
+                if ($health.status -eq 'ok' -and $health.app -eq 'TiengHanSoEasyStudio' -and $health.version -eq 'v1.4.2') {
                   $ready = $true
                   break
                 }
@@ -169,7 +169,7 @@ jobs:
             $importBody = @{text=$backupText} | ConvertTo-Json -Compress
             $merged = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/memory/import" -Method Post -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($importBody)) -TimeoutSec 5 -NoProxy
             if ($merged.added -ne 0) { throw 'Memory backup merge should be idempotent' }
-            Write-Output "Studio v1.4.1 permanent memory backup/merge and HTTP smoke passed"
+            Write-Output "Studio v1.4.2 permanent memory backup/merge and HTTP smoke passed"
           } catch {
             $logPath = Join-Path $env:LOCALAPPDATA "TiengHanSoEasyStudio\studio.log"
             if (Test-Path $logPath) { Get-Content $logPath -Tail 100 }
@@ -190,18 +190,16 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.4.1-build.${{ github.run_number }}
-          name: Tiếng Hàn So Easy Studio v1.4.1 (build ${{ github.run_number }})
+          tag_name: v1.4.2-build.${{ github.run_number }}
+          name: Tiếng Hàn So Easy Studio v1.4.2 (build ${{ github.run_number }})
           target_commitish: ${{ github.sha }}
           files: dist/TiengHanSoEasyStudio.exe
           make_latest: true
           generate_release_notes: false
           body: |
-            v1.4.1: Bộ nhớ câu hỏi local bền vững, giữ lịch sử sau xóa nháp, retry và sửa đáp án.
-            Sao lưu/gộp JSONL trong Thiết lập; chặn trùng văn bản/đáp án và gần trùng, không cam kết mọi cách diễn đạt đồng nghĩa.
-            QA v4 đối chiếu nghĩa của cả bốn đáp án; các câu máy duyệt theo QA cũ cần kiểm chứng lại.
-            Sửa race khi QA/render, bảo vệ HTTP local, dọn MP4 lỗi và tối ưu vẽ khung hình.
-            Back up LOCALAPPDATA/TiengHanSoEasyStudio before upgrading; keep the local database for question history.
-            Windows standalone EXE built by GitHub Actions. Close the old EXE before opening.
-            AI and TTS require Internet; Facebook publishing requires Page permissions.
-            Personal keys remain in the local data folder, never commit them.
+            v1.4.2: Sửa QA strict cho cụm sức khỏe có bằng chứng KRDict: 기침을 하다, 배가 아프다.
+            Sinh câu ưu tiên dạng từ điển và tránh lỗi QA của lượt trước; vẫn yêu cầu AI hỏi ngược.
+            Sửa fallback tới provider thứ ba và tôn trọng Retry-After khi 429/5xx. Gemini 503 vẫn phụ thuộc dịch vụ.
+            Giữ bộ nhớ local v1.4.1, sao lưu/gộp JSONL và các video đã hoàn tất khi Tiếp tục.
+            Windows standalone EXE, tested before release. Close the previous EXE before upgrading.
+            Back up LOCALAPPDATA/TiengHanSoEasyStudio and keep its database for question history.

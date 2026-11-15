@@ -83,6 +83,7 @@ def run_pipeline(service,plan:Plan,update,on_result=None,cancel=None,topics=None
     to finish its current MP4 before the worker stops.
     """
     from .events import choose_production_topics
+    from .ai import generation_guidance
     from .run_limits import (topic_budget,check_budget,check_cancel,
                              BudgetExpired,RunCancelled)
     if topics is not None:
@@ -123,7 +124,9 @@ def run_pipeline(service,plan:Plan,update,on_result=None,cancel=None,topics=None
                         count=min(10,remaining+2)
                         stage("AI tạo câu (lượt "+str(attempt+1)+"/3)",.03+.10*attempt)
                         try:
-                            generated=service.generate(topic,level,count,fmt=fmt)
+                            hints=[issue for row in problems for issue in row.get('issues',[])]
+                            with generation_guidance(plan.qa_mode,hints):
+                                generated=service.generate(topic,level,count,fmt=fmt)
                             generation_errors.extend(generated.get("errors",[]))
                             if generated.get('retry_after'):item['retry_after']=generated['retry_after']
                             if generated.get('blocked'):item['blocked']=True
@@ -210,7 +213,7 @@ def run_pipeline(service,plan:Plan,update,on_result=None,cancel=None,topics=None
                 item["reason"]=("Chỉ có "+str(len(good))+"/"+
                     str(plan.per_video)+" câu đủ điều kiện. "+
                     (examples or "API chưa trả đủ câu hoặc câu trùng.")+
-                    " Tác vụ sẽ tạo lại nội dung nếu còn lượt thử.")
+                    " Không xuất video từ câu chưa đạt QA.")
                 rejected.extend(problems)
                 stage(item["reason"],.98)
                 continue

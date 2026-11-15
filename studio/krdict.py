@@ -59,6 +59,9 @@ def lookup_evidence(client,word,*,fresh=False):
     parts=word.split()
     if not 2<=len(parts)<=3 or any(not re.fullmatch(r'[가-힣]{1,20}',p) for p in parts):
         return result
+    if len(parts)==2:
+        predicate=_predicate_evidence(client,parts,fresh=fresh)
+        if predicate is not None:return predicate
     units=[];choices=[]
     for part in parts:
         check_budget()
@@ -81,6 +84,63 @@ def lookup_evidence(client,word,*,fresh=False):
             'entries':[{'word':word,'glosses':meanings,'meanings':meanings,
                         'target_code':'','definitions':[]}],
             'reason':'component_evidence'}
+
+
+def _particle_stem(token, pairs):
+    """Strip only an explicit, correctly selected subject/object particle."""
+    for consonant,vowel in pairs:
+        if len(token)<2:continue
+        stem,particle=token[:-1],token[-1]
+        if not all('가'<=ch<='힣' for ch in stem):continue
+        has_final=(ord(stem[-1])-0xAC00)%28!=0
+        if particle==(consonant if has_final else vowel):return stem
+    return None
+
+
+def _predicate_evidence(client,parts,*,fresh=False):
+    """Ground limited dictionary-form predicates; never guess conjugations.
+
+    Object+하다 first needs the complete compound in KRDict (기침을 하다 ->
+    기침하다). Subject+predicate needs both a noun and an adjective, and
+    still requires blind AI agreement for the whole phrase in strict QA.
+    """
+    first,predicate=parts
+    def lookup(value):
+        check_budget()
+        return client.lookup(value,fresh=True) if fresh else client.lookup(value)
+    obj=_particle_stem(first,[("을","를")])
+    if obj and predicate=='하다':
+        lemma=obj+'하다'
+        data=lookup(lemma)
+        entries=[entry for entry in data.get('entries',[]) if
+                 entry.get('pos')=='동사' and entry.get('glosses')]
+        if data.get('exact') and entries:
+            return {'exact':False,'supported':True,'compound':True,
+                'components':[{'word':lemma,'surface':first+' '+predicate,
+                    'headword_codes':[e.get('target_code','') for e in entries]}],
+                'entries':entries,'reason':'dictionary_predicate_lemma'}
+        return None
+    subject=_particle_stem(first,[("이","가")])
+    if not subject or not predicate.endswith('다'):return None
+    units=[];choices=[]
+    for word,allowed in ((subject,{'명사'}),(predicate,{'형용사'})):
+        data=lookup(word)
+        glosses=[];codes=[]
+        for entry in data.get('entries',[]):
+            if entry.get('pos') not in allowed:continue
+            codes.append(entry.get('target_code',''))
+            for gloss in entry.get('glosses',[]):
+                for variant in re.split(r'[,;/]+',gloss):
+                    variant=variant.strip()
+                    if variant and len(variant)<=45 and variant not in glosses:glosses.append(variant)
+        if not data.get('exact') or not glosses:return None
+        units.append({'word':word,'glosses':glosses[:6],'headword_codes':codes[:5]})
+        choices.append(glosses[:6])
+    meanings=[' '.join(values) for values in product(*choices)]
+    return {'exact':False,'supported':True,'compound':True,'components':units,
+        'entries':[{'word':' '.join(parts),'glosses':meanings,'meanings':meanings,
+                    'target_code':'','definitions':[]}],
+        'reason':'subject_predicate_components'}
 
 def sense_overlap(vietnamese,translations):
     """Conservative lexical evidence; NOT a semantic equivalence classifier."""
