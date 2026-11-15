@@ -122,7 +122,7 @@ class QuestionMemory:
         temp = target.with_name(target.name + "." + uuid.uuid4().hex + ".tmp")
         count = 0
         try:
-            with self.db() as c, temp.open("w", encoding="utf-8") as out:
+            with self.db() as c, temp.open("w", encoding="utf-8", newline="\n") as out:
                 out.write(json.dumps({"format": "thse-question-memory", "version": 1}) + "\n")
                 for row in c.execute("SELECT kind,value,source_id,topic,first_seen FROM question_memory ORDER BY id"):
                     out.write(json.dumps(dict(row), ensure_ascii=False) + "\n")

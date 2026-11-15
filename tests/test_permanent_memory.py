@@ -1,5 +1,6 @@
 """History retention, migration, portable backups and concurrent admission."""
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from dataclasses import replace
 import json
 from pathlib import Path
@@ -115,7 +116,7 @@ class PermanentMemoryTests(unittest.TestCase):
         # A minimal legacy database, created without the new memory schema.
         path=self.root/'legacy.sqlite3'
         before=quiz();after=replace(before,correct='생수')
-        with sqlite3.connect(path) as c:
+        with closing(sqlite3.connect(path)) as c, c:
             c.executescript('''CREATE TABLE questions(id TEXT PRIMARY KEY,topic TEXT,question TEXT,correct TEXT,
               payload TEXT,question_hash TEXT UNIQUE,answer_hash TEXT UNIQUE,status TEXT,provider TEXT,created_at TEXT,
               trashed INTEGER DEFAULT 0);

@@ -283,7 +283,10 @@ def create_server(service, host="127.0.0.1", port=8765):
                         raise ValueError('Bản sao lưu bộ nhớ tối đa 8 MB qua dashboard; file lớn hơn dùng CLI.')
                     with tempfile.TemporaryDirectory() as folder:
                         path=Path(folder)/'import.jsonl'
-                        path.write_text(text,encoding='utf-8')
+                        # Preserve uploaded CRLF verbatim: Windows text-mode
+                        # translation would turn CRLF into CRCRLF and introduce
+                        # blank JSONL records when opened with universal newlines.
+                        path.write_bytes(text.encode('utf-8'))
                         result=service.store.import_memory(path)
                 elif route == "/api/generate":
                     level = str(raw.get("level", "TOPIK 1"))

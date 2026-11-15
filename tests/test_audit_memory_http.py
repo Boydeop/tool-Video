@@ -57,11 +57,17 @@ class AuditHTTPTests(unittest.TestCase):
         self.assertEqual(status,200);self.assertEqual(json.loads(body)['answers'],1)
         status,body=self.request('GET','/api/memory/export')
         self.assertEqual(status,200)
+        self.assertNotIn(b'\r',body)
         backup=Path(self.temp.name)/'download.jsonl';backup.write_bytes(body)
         self.assertEqual(store.import_memory(backup)['added'],0)
         status,response=self.request('POST','/api/memory/import',
             json.dumps({'text':body.decode('utf-8')}),{'Content-Type':'application/json'})
-        self.assertEqual(status,200)
+        self.assertEqual(status,200,response)
+        self.assertEqual(json.loads(response)['added'],0)
+        crlf=body.decode('utf-8').replace('\n','\r\n')
+        status,response=self.request('POST','/api/memory/import',
+            json.dumps({'text':crlf}),{'Content-Type':'application/json'})
+        self.assertEqual(status,200,response)
         self.assertEqual(json.loads(response)['added'],0)
         status,_=self.request('POST','/api/memory/import',
             json.dumps({'text':'not a backup'}),{'Content-Type':'application/json'})
