@@ -72,12 +72,17 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 .queue-run details{margin-top:12px}.card>summary{font-weight:700;cursor:pointer;color:var(--deep);padding:5px}
 #manualWorkspace>summary{padding:10px}#videoShelf .table{min-width:650px}
 @media(max-width:760px){.toolbar{display:grid;grid-template-columns:1fr}.toolbar>*{width:100%}.auto-prefs{grid-template-columns:1fr!important}}
+#crossPlatform{border:1px solid var(--border,#dbe4ef);border-radius:12px;padding:12px;display:flex;flex-wrap:wrap;gap:14px;min-width:0}
+#crossPlatform label{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px}
+#crossPlatform input{width:auto;accent-color:#215ac4}
+#crossPrivacyField,#crossUrlField{display:grid;gap:8px}
+#crossUrlField input{width:100%;box-sizing:border-box}
 </style>
 </head>
 <body>
 <div class="app">
 <aside class="sidebar">
- <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.4.2</small></div>
+ <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.5.0</small></div>
  <nav class="nav" aria-label="Điều hướng">
   <button data-nav="autopilot" class="active"><span class="num">1</span> Sản xuất</button>
   <button data-nav="questions"><span class="num">2</span> Kho video</button>
@@ -88,7 +93,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
  <div class="sidehelp"><b>Gợi ý bắt đầu</b><p>Thiết lập API một lần, chọn 1–100 video rồi bắt đầu. Tác vụ lỗi tự tạo lại; mở Kho video để xem kết quả. Không cần xử lý câu thừa.</p></div>
 </aside>
 <main class="content">
- <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.4.2</span></header>
+ <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.5.0</span></header>
  <div class="metrics">
   <div class="metric"><span class="name">Bản nháp đang dùng</span><strong id="statQuestions">0</strong></div>
   <div class="metric"><span class="name">Bản nháp sẵn sàng</span><strong id="statApproved">0</strong></div>
@@ -406,31 +411,59 @@ YOUR_KRDICT_API_KEY</div></details>
 
  <section class="panel" id="panel-publish">
   <div class="card">
+    <div class="sectiontitle"><h2>📅 Lịch đăng đa nền tảng</h2></div>
+    <p class="note">Chọn một hoặc nhiều nền tảng để đăng cùng video, cùng tiêu đề/mô tả và cùng giờ. Các lượt tải lên bắt đầu song song, thời điểm hiển thị phụ thuộc từng nền tảng. Studio phải đang chạy; Instagram cần URL HTTPS MP4 công khai.</p>
+    <div class="fieldrow">
+      <div class="field"><label for="crossVideo">Chọn MP4</label><select id="crossVideo"><option value="">Chọn MP4…</option></select></div>
+      <fieldset id="crossPlatform"><legend>Nền tảng nhận video</legend>
+        <label><input type="checkbox" value="facebook"> Facebook Reels</label>
+        <label><input type="checkbox" value="youtube"> YouTube Shorts</label>
+        <label><input type="checkbox" value="instagram"> Instagram Reels</label>
+      </fieldset>
+      <div class="field compact"><label for="crossAt">Ngày giờ địa phương</label><input id="crossAt" type="datetime-local"></div>
+    </div>
+    <div style="display:flex;gap:15px;align-items:center;margin:15px 0;background:#f5f8fd;padding:12px;border-radius:12px">
+      <img id="crossThumbnail" alt="Thumbnail tự tạo từ khung mở đầu" style="width:68px;height:121px;object-fit:cover;border-radius:7px;display:none">
+      <div><strong>Ảnh bìa tự động</strong>
+        <p class="note">YouTube: đợi xử lý video xong rồi gửi thumbnail qua API riêng, không đăng lại MP4. Instagram/Facebook: file JPG dùng thủ công khi API chưa hỗ trợ gắn ảnh bìa.</p>
+        <a id="crossThumbDownload" class="btn secondary small" style="display:none;text-decoration:none" download>↓ Tải JPG</a>
+      </div>
+    </div>
+    <div class="actions"><button class="btn secondary" id="generateSeo">✨ AI tạo tiêu đề &amp; mô tả SEO</button></div>
+    <div class="field"><label for="crossTitle">Tiêu đề video</label><input id="crossTitle" type="text" maxlength="100"></div>
+    <div class="field"><label for="crossCaption">Mô tả, hashtag</label><textarea id="crossCaption" rows="4"></textarea></div>
+    <div class="fieldrow">
+      <div class="field compact" id="crossPrivacyField"><label for="crossPrivacy">Quyền xem YouTube</label>
+        <select id="crossPrivacy"><option value="private" selected>Riêng tư (an toàn mặc định)</option><option value="unlisted">Không công khai</option><option value="public">Công khai</option></select></div>
+      <div class="field" id="crossUrlField" style="display:none"><label for="crossUrl">URL HTTPS MP4 công khai cho Instagram</label>
+        <input id="crossUrl" type="url" placeholder="https://media.example.com/video.mp4"></div>
+    </div>
+    <div class="actions"><button class="btn" id="crossSchedule">Lên lịch các nền tảng đã chọn</button><button class="btn secondary" id="crossPublishNow">Đăng ngay các nền tảng đã chọn</button></div>
+    <div class="tablewrap"><table class="table"><thead><tr><th>Nền tảng</th><th>Video</th><th>Thời gian</th><th>Trạng thái</th></tr></thead>
+      <tbody id="crossJobs"></tbody></table></div>
+  </div>
+
+  <div class="card">
    <div class="sectiontitle"><h2>🔗 Kết nối Facebook Page</h2><span class="pill" id="pageConnectionStatus">Chưa kết nối</span></div>
+   <p class="note">Đăng nhập Facebook bằng OAuth, cấp quyền rồi chọn Fanpage bạn quản lý. Meta App cần Facebook Login, quyền Page và App Review/Advanced Access phù hợp. Cấu hình redirect URI chính xác như bên dưới; Meta phải chấp nhận URI này cho ứng dụng của bạn.</p>
+   <details><summary>Cấu hình Meta App (một lần)</summary>
+    <div class="fieldrow"><div class="field"><label for="fbAppId">Meta App ID</label><input id="fbAppId" autocomplete="off"></div>
+    <div class="field"><label for="fbAppSecret">Meta App Secret</label><input id="fbAppSecret" type="password" autocomplete="off"></div></div>
+    <p class="note">Redirect URI: <code id="fbRedirect"></code>. App Secret chỉ dùng trên máy của bạn; không chia sẻ file cấu hình.</p>
+    <button class="btn secondary" id="fbConfigure">Lưu Meta App</button>
+   </details>
+   <div class="actions"><button class="btn" id="fbOAuth">Đăng nhập Facebook qua OAuth</button><button class="btn secondary" id="fbLoadPages">Tải Page sau khi đăng nhập</button></div>
+   <div class="field"><label for="fbPages">Fanpage được cấp quyền</label><select id="fbPages"><option value="">Đăng nhập trước để tải Page</option></select></div>
+   <button class="btn" id="fbSelectPage">Kết nối Page đã chọn</button>
+   <details style="margin-top:16px"><summary>Hoặc kết nối bằng Page Access Token</summary>
    <p class="note">Dùng Page ID và <b>Page Access Token</b> hợp lệ của trang bạn quản lý. Studio sẽ kiểm tra Page qua Meta Graph API rồi lưu token được mã hóa bằng Windows DPAPI trên máy. Kết nối đọc được Page không đồng nghĩa đã có quyền đăng.</p>
    <div class="fieldrow">
      <div class="field"><label for="pageId">Facebook Page ID</label><input id="pageId" type="text" placeholder="ID dạng số"></div>
      <div class="field"><label for="pageToken">Page Access Token</label><input id="pageToken" type="password" autocomplete="off" placeholder="Dán Page token riêng tư, không phải mật khẩu Facebook"></div>
    </div>
    <div class="actions"><button class="btn" id="connectPage">✓ Kết nối & kiểm tra Page</button><button class="btn outline" id="disconnectPage">Ngắt kết nối</button></div>
-   <p class="note" id="pageInfo">Cần quyền pages_manage_posts và các quyền Meta tương ứng. Chức năng này không tự đăng nhập Facebook hay lấy token thay bạn.</p>
-  </div>
-  <div class="card">
-   <div class="sectiontitle"><h2>4. Lên lịch đăng Facebook Page</h2><span class="pill">Reels</span></div>
-   <p class="note">Chọn video đã xuất, yêu cầu AI soạn title/mô tả SEO rồi chỉnh sửa trước khi lên lịch. Studio chỉ đăng tới Page đã kết nối và khi ứng dụng đang chạy.</p>
-   <div class="field"><label for="videoSelect">Video đã tạo</label><select id="videoSelect"><option value="">Chưa có video</option></select></div>
-   <div class="actions" style="margin:14px 0"><button class="btn secondary" id="generateSeo">✨ AI tạo tiêu đề & mô tả SEO</button><span class="note">Bản nháp cần bạn duyệt, có thể dùng hạn mức API.</span></div>
-   <div class="field"><label for="seoTitle">Tiêu đề Reels / SEO</label><input id="seoTitle" type="text" maxlength="160" placeholder="Tiêu đề thu hút nhưng chính xác"></div>
-   <div class="flexrow" style="margin-top:14px">
-    <div class="field"><label for="scheduledAt">Ngày giờ đăng (múi giờ máy tính)</label><input type="datetime-local" id="scheduledAt"></div>
-    <div class="field"><label for="caption">Chú thích bài đăng</label><textarea id="caption" rows="5">Học tiếng Hàn mỗi ngày cùng Tiếng Hàn So Easy! 🇰🇷 #tienghansoeasy</textarea></div>
-   </div>
-   <div class="actions" style="margin-top:17px"><button id="schedule" class="btn">📆 Lên lịch đăng video lên Page đã kết nối</button></div>
-   <p class="note" style="margin-top:15px">Lịch đăng chỉ hoạt động khi ứng dụng đang chạy. Những bài lỗi không tự đăng lại để tránh trùng lặp trên Page.</p>
-  </div>
-  <div class="card"><div class="sectiontitle"><h2>Danh sách lịch đăng</h2></div>
-   <div id="emptyJobs" class="empty">Chưa có video nào được lên lịch.</div>
-   <div class="tablewrap"><table class="table"><thead><tr><th>Thời gian</th><th>Trạng thái</th><th>Video</th><th>Ghi chú</th></tr></thead><tbody id="jobRows"></tbody></table></div>
+   </details>
+   <p class="note" id="pageInfo">Cần quyền pages_manage_posts và các quyền Meta tương ứng. Có thể dùng OAuth ở trên hoặc Page token thủ công.</p>
   </div>
   <div class="card">
     <div class="sectiontitle"><h2>▶ YouTube Shorts · OAuth chính thức</h2><span class="pill" id="ytStatus">Chưa kết nối</span></div>
@@ -452,34 +485,6 @@ YOUR_KRDICT_API_KEY</div></details>
     <div class="actions"><button class="btn" id="igConnect">Xác minh Instagram</button>
       <button class="btn outline" id="igDisconnect">Ngắt kết nối</button></div>
     <p class="note" id="igInfo">Kết nối đọc được tài khoản không đồng nghĩa Meta đã duyệt quyền đăng.</p>
-  </div>
-  <div class="card">
-    <div class="sectiontitle"><h2>📅 Lịch đăng đa nền tảng</h2></div>
-    <p class="note">Bạn chọn từng nền tảng và đặt lịch. YouTube dùng file MP4 trên máy qua OAuth; Instagram cần URL video công khai; Facebook tiếp tục dùng lịch Page ở trên. Studio phải đang chạy khi đến giờ đăng.</p>
-    <div class="fieldrow">
-      <div class="field"><label for="crossVideo">Chọn MP4</label><select id="crossVideo"><option value="">Chọn MP4…</option></select></div>
-      <div class="field compact"><label for="crossPlatform">Nền tảng</label>
-        <select id="crossPlatform"><option value="youtube">YouTube Shorts</option><option value="instagram">Instagram Reels</option></select></div>
-      <div class="field compact"><label for="crossAt">Ngày giờ địa phương</label><input id="crossAt" type="datetime-local"></div>
-    </div>
-    <div style="display:flex;gap:15px;align-items:center;margin:15px 0;background:#f5f8fd;padding:12px;border-radius:12px">
-      <img id="crossThumbnail" alt="Thumbnail tự tạo từ khung mở đầu" style="width:68px;height:121px;object-fit:cover;border-radius:7px;display:none">
-      <div><strong>Ảnh bìa tự động</strong>
-        <p class="note">YouTube: đợi xử lý video xong rồi gửi thumbnail qua API riêng, không đăng lại MP4. Instagram/Facebook: file JPG dùng thủ công khi API chưa hỗ trợ gắn ảnh bìa.</p>
-        <a id="crossThumbDownload" class="btn secondary small" style="display:none;text-decoration:none" download>↓ Tải JPG</a>
-      </div>
-    </div>
-    <div class="field"><label for="crossTitle">Tiêu đề video</label><input id="crossTitle" type="text" maxlength="100"></div>
-    <div class="field"><label for="crossCaption">Mô tả, hashtag</label><textarea id="crossCaption" rows="4"></textarea></div>
-    <div class="fieldrow">
-      <div class="field compact" id="crossPrivacyField"><label for="crossPrivacy">Quyền xem YouTube</label>
-        <select id="crossPrivacy"><option value="private" selected>Riêng tư (an toàn mặc định)</option><option value="unlisted">Không công khai</option><option value="public">Công khai</option></select></div>
-      <div class="field" id="crossUrlField" style="display:none"><label for="crossUrl">URL HTTPS MP4 công khai cho Instagram</label>
-        <input id="crossUrl" type="url" placeholder="https://media.example.com/video.mp4"></div>
-    </div>
-    <div class="actions"><button class="btn" id="crossSchedule">Thêm lịch đăng lên nền tảng đã chọn</button></div>
-    <div class="tablewrap"><table class="table"><thead><tr><th>Nền tảng</th><th>Video</th><th>Thời gian</th><th>Trạng thái</th></tr></thead>
-      <tbody id="crossJobs"></tbody></table></div>
   </div>
   <div class="card">
     <div class="sectiontitle"><h2>♪ TikTok · Gói đăng thủ công hợp lệ</h2></div>
@@ -860,7 +865,7 @@ async function startExport(batch){
        state.selection.clear();
        await loadStatus();
        $("questionFilter").value="ready";state.questionPage=1;renderQuestions();
-       if(created.length)$("videoSelect").value=state.lastVideo;
+       if(created.length)$("crossVideo").value=state.lastVideo;
        notice(report.status==="completed"?
          "Đã xuất thành công "+created.length+" MP4.":
          "Đã lưu "+created.length+" MP4. Lỗi: "+report.error,
@@ -917,18 +922,6 @@ $("saveManual").addEventListener("click",async()=>{
  const result=await run(()=>api("/api/keys/import",{text:text,provider:$("keyProvider").value,replace:$("replaceImportedKeys").checked}));
  if(result){input.value="";$("replaceImportedKeys").checked=false;await loadStatus();notice(result.mode==="replace"?"Đã thay bộ key trên máy của bạn.":"Đã thêm key vào máy của bạn.","success")}
 });
-$("schedule").addEventListener("click",async()=>{
- const video=$("videoSelect").value,time=$("scheduledAt").value;
- if(!video){notice("Chưa có video. Hãy xuất MP4 trước khi lên lịch.");return}
- if(!time){notice("Chọn ngày giờ đăng trước.");return}
- const dt=new Date(time);
- if(isNaN(dt.getTime())||dt.getTime()<=Date.now()){notice("Ngày giờ đăng phải ở tương lai.","error");return}
- if(!state.facebook.connected){notice("Vui lòng kết nối Facebook Page trước.","error");return}
- const result=await run(()=>api("/api/schedule",{video_path:video,caption:$("caption").value,
-                  title:$("seoTitle").value,scheduled_at:dt.toISOString()}));
- if(result){await loadStatus();notice("Đã lên lịch. Giữ Studio chạy và cấu hình Meta Page token hợp lệ.","success")}
-});
-
 function currentModelProvider(){return $("modelProvider").value}
 function selectedModelId(){
  const manual=$("modelManual").value.trim();
@@ -1008,16 +1001,13 @@ $("saveModel").addEventListener("click",async()=>{
 });
 
 function renderVideos(){
- const sel=$("videoSelect"),chosen=state.lastVideo||sel.value;
- const cross=$("crossVideo"),crossChosen=cross.value;
+
+ const cross=$("crossVideo"),crossChosen=state.lastVideo||cross.value;
  cross.replaceChildren();const emptyCross=make("option","Chọn MP4");emptyCross.value="";cross.append(emptyCross);
  const meta=$("metadataVideoSelect"),metaChosen=meta.value;
  meta.replaceChildren();
  const defaultMeta=make("option","Chọn MP4 để ghi metadata");defaultMeta.value="";
  meta.append(defaultMeta);
- sel.replaceChildren();
- const first=make("option",state.videos.length?"Chọn video MP4…":"Chưa có video MP4");
- first.value="";sel.append(first);
  const library=$("videoLibrary");library.replaceChildren();
  $("libraryCount").textContent=state.videos.length+" video";
  const pages=Math.max(1,Math.ceil(state.videos.length/20));
@@ -1026,8 +1016,6 @@ function renderVideos(){
  $("videoPrev").disabled=state.videoPage===1;$("videoNext").disabled=state.videoPage===pages;
  $("emptyVideos").style.display=state.videos.length?"none":"block";
  for(const [index,video] of state.videos.entries()){
-   const opt=make("option",video.name+" · "+video.status+" · "+video.size_mb+" MB");
-   opt.value=video.path;sel.append(opt);
    const crossOption=make("option",video.name+" · "+video.status);
    crossOption.value=video.path;cross.append(crossOption);
    const option=make("option",video.name+" · "+video.status);
@@ -1056,7 +1044,6 @@ function renderVideos(){
    }
    row.append(last);library.append(row);
  }
- if(state.videos.some(v=>v.path===chosen))sel.value=chosen;
  if(state.videos.some(v=>v.path===crossChosen))cross.value=crossChosen;
  if(state.videos.some(v=>v.path===metaChosen))meta.value=metaChosen;
  else if(state.videos.length)meta.value=state.videos[0].path;
@@ -1285,6 +1272,28 @@ $("previewMotion").addEventListener("click",async()=>{
  }
 });
 
+$("fbRedirect").textContent="http://127.0.0.1:"+location.port+"/api/facebook/oauth/callback";
+$("fbConfigure").addEventListener("click",async()=>{
+ const result=await run(()=>api("/api/facebook/oauth/configure",{app_id:$("fbAppId").value.trim(),app_secret:$("fbAppSecret").value.trim()}));
+ if(result){$("fbAppSecret").value="";notice("Đã lưu Meta App. Có thể đăng nhập Facebook.","success")}
+});
+$("fbOAuth").addEventListener("click",async()=>{
+ const popup=window.open("about:blank","thse-facebook-oauth");
+ const result=await run(()=>api("/api/facebook/oauth/start",{}));
+ if(result){if(popup)popup.location=result.authorization_url;else notice("Trình duyệt chặn cửa sổ đăng nhập. Cho phép popup rồi thử lại.","error")}
+ else if(popup)popup.close();
+});
+$("fbLoadPages").addEventListener("click",async()=>{
+ const result=await run(()=>api("/api/facebook/oauth/pages"));
+ if(!result)return;
+ const list=$("fbPages");list.replaceChildren();
+ for(const page of result.pages){const option=make("option",page.name+" · "+page.id);option.value=page.id;list.append(option)}
+ if(!result.pages.length)notice("Chưa có Page. Hoàn tất OAuth, kiểm tra quyền Page hoặc đăng nhập lại nếu phiên hết hạn.","error");
+});
+$("fbSelectPage").addEventListener("click",async()=>{
+ const result=await run(()=>api("/api/facebook/oauth/select",{page_id:$("fbPages").value}));
+ if(result){state.facebook=result;$("fbPages").replaceChildren();updateFacebookPanel();notice("Đã kết nối Fanpage.","success")}
+});
 function updateFacebookPanel(){
  const page=state.facebook||{},connected=page.connected===true;
  $("pageConnectionStatus").textContent=connected?
@@ -1293,9 +1302,9 @@ function updateFacebookPanel(){
  $("pageInfo").textContent=connected
    ?"Page: "+page.page_name+" · ID "+page.page_id+
      ". Đã kiểm tra quyền đọc. Quyền đăng chỉ xác minh sau khi Meta chấp nhận Reel."
-   :"Cần Page Access Token và các quyền Meta phù hợp để đăng Reels. Không tự lấy token Facebook.";
+   :"Cần Page Access Token và các quyền Meta phù hợp để đăng Reels. Chọn đăng nhập OAuth hoặc nhập Page token thủ công.";
  $("disconnectPage").disabled=!connected;
- $("schedule").disabled=!connected;
+
 }
 $("connectPage").addEventListener("click",async()=>{
  const page_id=$("pageId").value.trim(),token=$("pageToken").value.trim();
@@ -1310,23 +1319,17 @@ $("disconnectPage").addEventListener("click",async()=>{
  if(result){state.facebook=result;updateFacebookPanel();notice("Đã ngắt kết nối Page.","success")}
 });
 $("generateSeo").addEventListener("click",async()=>{
- const path=$("videoSelect").value;
+ const path=$("crossVideo").value;
  if(!path){notice("Chọn một video đã xuất để phân tích SEO.","error");return}
  const name=path.replace(/^.*[\\\/]/,"");
  notice("AI đang đọc chủ đề/câu hỏi của video và soạn SEO…");
  const seo=await run(()=>api("/api/seo",{video_name:name}));
  if(seo){
-   $("seoTitle").value=seo.title;
-   $("caption").value=seo.caption;
+   $("crossTitle").value=seo.title;
+   $("crossCaption").value=seo.caption;
    notice("Đã tạo bản nháp SEO. Hãy kiểm tra tiêu đề và mô tả trước khi lên lịch.","success");
  }
 });
-$("videoSelect").addEventListener("change",()=>{
- const current=state.videos.find(v=>v.path===$("videoSelect").value);
- if(current){$("seoTitle").value=current.seo_title||"";if(current.seo_caption)$("caption").value=current.seo_caption}
-});
-
-
 function renderUpcomingEvents(){
  const list=state.upcomingEvents||[],first=list[0];
  $("eventCountdown").textContent=first?(first.days_until===0?"Hôm nay: "+first.name:
@@ -1485,7 +1488,9 @@ function updatePlatforms(){
  $("igStatus").textContent=ig.connected?"Đã xác minh: "+(ig.username||ig.ig_id):"Chưa kết nối";
  $("igInfo").textContent=ig.note||"Cần Instagram Professional và URL video công khai";
  const rows=$("crossJobs");rows.replaceChildren();
- for(const post of state.outbound||[]){
+ const posts=[...(state.outbound||[]),...(state.jobs||[]).map(job=>({...job,platform:"facebook",publish_at:job.scheduled_at}))];
+ posts.sort((a,b)=>new Date(b.publish_at)-new Date(a.publish_at));
+ for(const post of posts){
    const tr=make("tr");
    const thumbJob=(state.youtubeThumbJobs||[]).find(x=>x.video_path===post.video_path);
    const coverState=post.platform==="youtube"?
@@ -1543,11 +1548,12 @@ $("igDisconnect").addEventListener("click",async()=>{
  if(data){state.instagram=data;updatePlatforms();notice("Đã ngắt Instagram.","success")}
 });
 function crossPlatformUI(){
- const instagram=$("crossPlatform").value==="instagram";
+ const instagram=document.querySelector('#crossPlatform input[value="instagram"]').checked;
  $("crossUrlField").style.display=instagram?"block":"none";
- $("crossPrivacyField").style.display=instagram?"none":"block";
+ $("crossPrivacyField").style.display=document.querySelector('#crossPlatform input[value="youtube"]').checked?"block":"none";
 }
 $("crossPlatform").addEventListener("change",crossPlatformUI);
+crossPlatformUI();
 $("crossVideo").addEventListener("change",()=>{
  const item=state.videos.find(v=>v.path===$("crossVideo").value);
  const cover=$("crossThumbnail"),link=$("crossThumbDownload");
@@ -1561,18 +1567,25 @@ $("crossVideo").addEventListener("change",()=>{
    link.href=uri;link.download=item.thumbnail_name;link.style.display="inline-block";
  }
 });
-$("crossSchedule").addEventListener("click",async()=>{
+async function schedulePlatforms(publishNow){
  const video=$("crossVideo").value,when=$("crossAt").value;
- if(!video||!when){notice("Chọn MP4 và giờ đăng trước.","error");return}
- const platform=$("crossPlatform").value;
- const result=await run(()=>api("/api/platform/schedule",{
-  platform,video_name:video.replace(/^.*[\\/]/,""),
+ const platforms=Array.from(document.querySelectorAll('#crossPlatform input:checked')).map(x=>x.value);
+ if(!video||!platforms.length||(!publishNow&&!when)){notice("Chọn MP4, nền tảng và giờ đăng (nếu lên lịch).","error");return}
+ if(!publishNow&&(!Number.isFinite(new Date(when).getTime())||new Date(when)<=new Date())){notice("Giờ đăng phải ở tương lai.","error");return}
+ if(publishNow&&!confirm("Gửi video ngay tới: "+platforms.join(", ")+"?"))return;
+ $("crossSchedule").disabled=true;$("crossPublishNow").disabled=true;
+ try{
+ const result=await run(()=>api("/api/platforms/schedule",{
+  platforms,video_name:video,
   title:$("crossTitle").value.trim(),caption:$("crossCaption").value.trim(),
-  scheduled_at:new Date(when).toISOString(),
+  publish_now:publishNow,scheduled_at:publishNow?"":new Date(when).toISOString(),
   public_url:$("crossUrl").value.trim(),privacy:$("crossPrivacy").value
  }));
- if(result){await loadStatus();notice("Đã thêm lịch "+platform+". Studio cần đang chạy lúc tới giờ.","success")}
-});
+ if(result){await loadStatus();notice("Đã tạo tác vụ cho "+Object.keys(result.jobs).join(", ")+". Theo dõi kết quả từng nền tảng bên dưới; giữ Studio chạy.","success")}
+ }finally{$("crossSchedule").disabled=false;$("crossPublishNow").disabled=false}
+}
+$("crossSchedule").addEventListener("click",()=>schedulePlatforms(false));
+$("crossPublishNow").addEventListener("click",()=>schedulePlatforms(true));
 $("copyTikTokCaption").addEventListener("click",async()=>{
  const contents=$("crossCaption").value.trim();
  if(!contents){notice("Nhập mô tả ở ô phía trên trước.","error");return}
@@ -1630,19 +1643,6 @@ $("generateOldThumbnails").addEventListener("click",async()=>{
         " · Lỗi "+answer.errors.length,
         answer.errors.length?"error":"success");
 });
-function renderJobs(){
- const body=$("jobRows");body.replaceChildren();$("emptyJobs").style.display=state.jobs.length?"none":"block";
- for(const job of state.jobs){
-  const row=make("tr");
-  const when=new Date(job.scheduled_at);
-  row.append(make("td",isNaN(when.getTime())?job.scheduled_at:when.toLocaleString("vi-VN")),
-             make("td",({scheduled:"Đã lên lịch",publishing:"Đang gửi",
-              submitted:"Meta đã nhận, cần kiểm tra Page",
-              published:"Đã đăng",needs_review:"Cần kiểm tra",
-              cancelled:"Đã hủy"}[job.status]||job.status)),make("td",job.video_path.replace(/^.*[\\\/]/,"")),make("td",job.error||""));
-  body.append(row);
- }
-}
 async function loadStatus(){
  const data=await api("/api/status");
  state.questions=data.questions||[];state.trash=data.trash_questions||[];state.batches=data.batches||[];
@@ -1670,7 +1670,7 @@ async function loadStatus(){
  $("setupTip").style.display=Number($("statKeys").textContent)?"none":"block";
  $("draftSummary").textContent=state.questions.filter(q=>q.status!=="rendered").length+" bản nháp";
  $("openTrash").textContent="Thùng rác ("+state.trash.length+")";
- renderBatches();renderQuestions();renderVideos();renderJobs();updateModelPanel();
+ renderBatches();renderQuestions();renderVideos();updateModelPanel();
  updateProductionPanel();updateFacebookPanel();updateAutopilotHistory();updatePlatforms();updateMaintenance(data.cache);renderUpcomingEvents();
 }
 $("memoryImport").addEventListener("click",()=>run(async()=>{

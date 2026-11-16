@@ -110,7 +110,9 @@ def _read_json(provider, req):
             body = response.read(MAX_RESPONSE_BYTES + 1)
         if len(body) > MAX_RESPONSE_BYTES:
             raise ModelError("Danh sách model quá lớn.")
-        return json.loads(body)
+        data=json.loads(body)
+        if not isinstance(data,dict):raise ValueError("Expected provider object")
+        return data
     except urllib.error.HTTPError as exc:
         if exc.code == 429:
             rate_limited(provider, 120)

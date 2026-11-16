@@ -29,15 +29,21 @@ class Plan:
         if not isinstance(raw,dict):raise ValueError("Invalid plan")
         levels=raw.get("levels",["TOPIK 1"])
         formats=raw.get("formats",["từ vựng"])
-        plan=cls(videos=int(raw.get("videos",3)),per_video=int(raw.get("per_video",4)),
+        if not isinstance(levels,(list,tuple)) or not isinstance(formats,(list,tuple)):
+            raise ValueError("Levels và formats phải là danh sách.")
+        try:
+            videos=int(raw.get("videos",3));per_video=int(raw.get("per_video",4))
+            width=int(raw.get("width",1080));max_attempts=int(raw.get("max_attempts",3))
+        except (TypeError,ValueError,OverflowError):raise ValueError("Thông số số lượng/kích thước không hợp lệ.") from None
+        plan=cls(videos=videos,per_video=per_video,
                  levels=tuple(levels),formats=tuple(formats),
                  theme=str(raw.get("theme","hanji")),
                  voice=raw.get("with_voice") is True,
                  engine=str(raw.get("voice_engine","auto")),
-                 width=int(raw.get("width",1080)),seo=raw.get("auto_seo") is True,
+                 width=width,seo=raw.get("auto_seo") is True,
                  event_mode=str(raw.get("event_mode","random")),
                  qa_mode=str(raw.get("qa_mode","strict")),
-                 max_attempts=int(raw.get("max_attempts",3)))
+                 max_attempts=max_attempts)
         if not 1<=plan.videos<=100 or not 1<=plan.per_video<=6:
             raise ValueError("Maximum 100 videos per run, 1-6 questions/video")
         if not 1<=plan.max_attempts<=5:raise ValueError("Chỉ thử lại tối đa 5 lần/video")

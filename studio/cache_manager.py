@@ -42,8 +42,13 @@ class CacheManager:
         if not isinstance(older_than_days,int) or not 0<=older_than_days<=3650:
             raise ValueError("Days must be from 0 to 3650")
         threshold=time.time()-older_than_days*86400
-        candidates=[p for p in self._files() if p.stat().st_mtime<=threshold]
+        candidates=[]
         removed=0;total_bytes=0;errors=[]
+        for path in self._files():
+            try:
+                if path.stat().st_mtime<=threshold:candidates.append(path)
+            except FileNotFoundError:continue
+            except OSError as exc:errors.append(path.name+":"+type(exc).__name__)
         for path in candidates:
             try:
                 length=path.stat().st_size

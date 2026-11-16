@@ -432,6 +432,13 @@ def draw_frame(quiz:Quiz,idx,total,theme,elapsed,think=5.5,width=540,
     return im
 
 
+def _steady_frame_key(elapsed,prompt,think,answer):
+    """Only reuse fully visible static frames, never countdown or fades."""
+    if .5<=elapsed<prompt:return "prompt"
+    if prompt+think<=elapsed<=prompt+think+answer:return "answer"
+    return None
+
+
 def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
            think=5.5,reveal=2.8,with_voice=False,voice_cache=None,
            voice_engine="auto",transition=.8,intro=1.5,sfx=True,sfx_volume=.34,
@@ -498,13 +505,19 @@ def render(questions:list[Quiz],destination,theme="hanji",width=540,fps=24,
                 if frames_done%step==0:report(24+65*frames_done/frames_total,"Đang vẽ khung video")
             for i,(q,scene) in enumerate(zip(questions,scenes),1):
                 frames=int(round(scene.duration*fps))
+                stills={}  # At most two RGB frames; released after each question.
                 for tick in range(frames):
-                    im=draw_frame(q,i,len(questions),theme,tick/fps,think,width,
-                                  reveal,transition,logo_path,logo_position,logo_scale,
-                                  prompt_duration=scene.prompt_duration,
-                                  answer_duration=scene.answer_duration,
-                                  logo_x=logo_x,logo_y=logo_y,shorts_safe=shorts_safe)
-                    proc.stdin.write(im.tobytes())
+                    key=_steady_frame_key(tick/fps,scene.prompt_duration,think,scene.answer_duration)
+                    pixels=stills.get(key) if key else None
+                    if pixels is None:
+                        im=draw_frame(q,i,len(questions),theme,tick/fps,think,width,
+                                      reveal,transition,logo_path,logo_position,logo_scale,
+                                      prompt_duration=scene.prompt_duration,
+                                      answer_duration=scene.answer_duration,
+                                      logo_x=logo_x,logo_y=logo_y,shorts_safe=shorts_safe)
+                        pixels=im.tobytes()
+                        if key:stills[key]=pixels
+                    proc.stdin.write(pixels)
                     frames_done+=1
                     if frames_done%step==0:report(24+65*frames_done/frames_total,
                                                  "Đang dựng câu "+str(i)+"/"+str(len(questions)))

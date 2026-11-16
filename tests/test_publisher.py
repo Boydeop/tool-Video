@@ -31,6 +31,7 @@ class PublisherTests(unittest.TestCase):
                     vid=publish_reel(video,"Mô tả #TiengHan","Tiêu đề SEO")
             self.assertEqual(vid,"12345678")
             self.assertEqual(len(requests),3)
+            self.assertEqual(requests[1].get_header("Content-length"),str(video.stat().st_size))
             from urllib.parse import parse_qs
             form=parse_qs(requests[2].data.decode("utf-8"))
             self.assertEqual(form["title"][0],"Tiêu đề SEO")

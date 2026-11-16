@@ -5,7 +5,7 @@ AI text is always a draft for human review; never automatically scheduled.
 from __future__ import annotations
 import json
 import re
-from .ai import post,ProviderError
+from .ai import post,ProviderError,response_text
 from .keys import next_key
 from .run_limits import check_budget, BudgetExpired, RunCancelled
 from .models import get_model
@@ -32,19 +32,20 @@ def draft(questions,providers=("gemini","groq","openrouter")):
                   {"contents":[{"parts":[{"text":prompt}]}],
                    "generationConfig":{"responseMimeType":"application/json"}},
                   {"x-goog-api-key":key})
-                text="".join(p.get("text","") for p in result["candidates"][0]["content"]["parts"])
+                text=response_text(provider,result)
             else:
                 endpoint=("https://api.groq.com/openai/v1/chat/completions" if provider=="groq"
                           else "https://openrouter.ai/api/v1/chat/completions")
                 result=post(provider,endpoint,{"model":model,"temperature":0.6,
                     "messages":[{"role":"user","content":prompt}]},
                     {"Authorization":"Bearer "+key})
-                text=result["choices"][0]["message"]["content"]
+                text=response_text(provider,result)
             try:payload=json.loads(text)
             except ValueError:
                 obj=re.search(r"\{[\s\S]*\}",text)
                 if not obj:raise ValueError("AI did not return JSON")
                 payload=json.loads(obj.group())
+            if not isinstance(payload,dict):raise ValueError("AI SEO must be an object")
             title=str(payload.get("title") or "").strip()[:95]
             description=str(payload.get("description") or "").strip()[:950]
             tags=payload.get("hashtags") or []

@@ -136,6 +136,14 @@ class Store(BatchStore, QuestionMemory):
             if "title" not in job_cols:
                 c.execute("ALTER TABLE jobs ADD COLUMN title TEXT NOT NULL DEFAULT ''")
 
+            # Existing jobs have no provable account binding. Hold them for
+            # manual reconciliation rather than redirecting to the current login.
+            for table in ("jobs","outbound_posts","youtube_thumbnail_jobs"):
+                cols={row["name"] for row in c.execute("PRAGMA table_info("+table+")")}
+                if "target_key" not in cols:
+                    c.execute("ALTER TABLE "+table+" ADD COLUMN target_key TEXT NOT NULL DEFAULT ''")
+                    c.execute("UPDATE "+table+" SET status='needs_review',error='Lịch cũ chưa gắn tài khoản; kiểm tra trước khi đặt lại' WHERE status IN ('scheduled','pending','publishing','processing')")
+            c.execute("CREATE INDEX IF NOT EXISTS outbound_video ON outbound_posts(video_path)")
             self.init_batch_schema(c)
             self.init_memory(c)
             # Old machine approvals did not validate the meanings shown below
@@ -264,15 +272,15 @@ class Store(BatchStore, QuestionMemory):
             c.execute("UPDATE jobs SET status='needs_review',error='App restarted during Page upload; check Page before retry',updated_at=? WHERE status='publishing'",
                       (utcnow(),))
 
-    def enqueue_youtube_thumbnail(self,video_path,video_id):
+    def enqueue_youtube_thumbnail(self,video_path,video_id,target_key=""):
         from .thumbnails import thumbnail_path
         file=thumbnail_path(video_path)
         if not file.is_file():return False
         with self._lock,self.db(immediate=True) as c:
             c.execute("""INSERT OR IGNORE INTO youtube_thumbnail_jobs
-                (video_id,video_path,image_path,status,next_attempt,updated_at)
-                VALUES(?,?,?,'pending',?,?)""",
-                (str(video_id),str(Path(video_path).resolve()),str(file),utcnow(),utcnow()))
+                (video_id,video_path,image_path,status,next_attempt,updated_at,target_key)
+                VALUES(?,?,?,'pending',?,?,?)""",
+                (str(video_id),str(Path(video_path).resolve()),str(file),utcnow(),utcnow(),target_key))
         return True
 
     def claim_youtube_thumbnails(self,limit=1):
@@ -312,31 +320,40 @@ class Store(BatchStore, QuestionMemory):
 
     def schedule_outbound(self,video_path,platform,title,caption,when,
                           public_url="",privacy="private"):
-        from datetime import timedelta
-        if platform not in ("youtube","instagram"):
-            raise ValueError("Unsupported automated publishing platform")
+        return self.schedule_outbound_batch(video_path,[platform],title,caption,when,
+                                            public_url,privacy)[platform]
+
+    def schedule_outbound_batch(self,video_path,platforms,title,caption,when,
+                                public_url="",privacy="private",targets=None):
+        if (not isinstance(platforms,list) or not platforms or len(platforms)>3
+            or len(set(platforms))!=len(platforms)
+            or any(p not in ("facebook","youtube","instagram") for p in platforms)):
+            raise ValueError("Chọn Facebook, YouTube hoặc Instagram, mỗi nền tảng một lần.")
         point=datetime.fromisoformat(str(when).replace("Z","+00:00"))
         if point.tzinfo is None or point.astimezone(timezone.utc)<=datetime.now(timezone.utc):
             raise ValueError("Schedule must be in the future with timezone")
         path=Path(video_path).resolve()
-        if path.suffix.lower()!=".mp4" or not path.is_file():
-            raise ValueError("Missing MP4")
-        if privacy not in ("private","unlisted","public"):
-            raise ValueError("Unknown YouTube privacy")
-        if len(title)>150 or len(caption)>2000:raise ValueError("Publishing text is too long")
-        jid=uuid.uuid4().hex
+        if path.suffix.lower()!=".mp4" or not path.is_file():raise ValueError("Missing MP4")
+        if privacy not in ("private","unlisted","public"):raise ValueError("Unknown YouTube privacy")
+        if len(title)>(100 if "youtube" in platforms else 150) or len(caption)>2000:
+            raise ValueError("Publishing text is too long")
+        jobs={p:uuid.uuid4().hex for p in platforms}
         with self._lock,self.db(immediate=True) as c:
-            if c.execute("SELECT 1 FROM outbound_posts WHERE video_path=? AND platform=?",
-                         (str(path),platform)).fetchone():
-                raise ValueError("MP4 đã được lên lịch trên nền tảng này; kiểm tra danh sách lịch.")
-            c.execute("""INSERT INTO outbound_posts
-              (id,video_path,platform,title,caption,publish_at,public_url,privacy,status,created_at,updated_at)
-              VALUES(?,?,?,?,?,?,?,?,'scheduled',?,?)""",
-              (jid,str(path),platform,title,caption,point.astimezone(timezone.utc).isoformat(),
-               public_url,privacy,utcnow(),utcnow()))
-        return jid
+            for platform,jid in jobs.items():
+                if c.execute("SELECT 1 FROM outbound_posts WHERE video_path=? AND platform=?",
+                             (str(path),platform)).fetchone():
+                    raise ValueError("MP4 đã được lên lịch trên "+platform+"; kiểm tra danh sách lịch.")
+                if platform=="facebook" and c.execute(
+                    "SELECT 1 FROM jobs WHERE video_path=? AND status!='cancelled'",(str(path),)).fetchone():
+                    raise ValueError("MP4 đã có lịch Facebook cũ; kiểm tra danh sách lịch.")
+                c.execute("""INSERT INTO outbound_posts
+                  (id,video_path,platform,title,caption,publish_at,public_url,privacy,status,created_at,updated_at,target_key)
+                  VALUES(?,?,?,?,?,?,?,?,'scheduled',?,?,?)""",
+                  (jid,str(path),platform,title,caption,point.astimezone(timezone.utc).isoformat(),
+                   public_url,privacy,utcnow(),utcnow(),(targets or {}).get(platform,"")))
+        return jobs
 
-    def claim_outbound(self,limit=2):
+    def claim_outbound(self,limit=3):
         with self._lock,self.db(immediate=True) as c:
             rows=c.execute("""SELECT * FROM outbound_posts WHERE status='scheduled'
                               AND publish_at<=? ORDER BY publish_at LIMIT ?""",
@@ -593,7 +610,7 @@ class Store(BatchStore, QuestionMemory):
         with self.db() as c:
             return c.execute("SELECT COUNT(*) FROM questions WHERE trashed=0 AND production_task=''").fetchone()[0]
 
-    def add_job(self, video_path, caption, scheduled_at, title=""):
+    def add_job(self, video_path, caption, scheduled_at, title="",target_key=""):
         run_at = datetime.fromisoformat(scheduled_at.replace("Z","+00:00"))
         if run_at.tzinfo is None:
             raise ValueError("Cần thời gian ISO 8601 có múi giờ.")
@@ -604,14 +621,16 @@ class Store(BatchStore, QuestionMemory):
             raise ValueError("Không tìm thấy video MP4.")
         jid=uuid.uuid4().hex
         with self._lock, self.db(immediate=True) as c:
+            if c.execute("SELECT 1 FROM outbound_posts WHERE video_path=? AND platform='facebook' AND status!='cancelled'",(str(path),)).fetchone():
+                raise ValueError("Video đã có lịch Facebook trong hàng đợi đa nền tảng.")
             existing=c.execute("SELECT 1 FROM jobs WHERE video_path=? AND status IN ('scheduled','publishing','submitted','published','needs_review')",
                                (str(path),)).fetchone()
             if existing:
                 raise ValueError("Video đã được lên lịch hoặc đã gửi Meta; kiểm tra lịch sử trước khi đặt lại.")
-            c.execute("""INSERT INTO jobs(id,video_path,caption,scheduled_at,status,created_at,updated_at,title)
-                         VALUES(?,?,?,?,'scheduled',?,?,?)""",
+            c.execute("""INSERT INTO jobs(id,video_path,caption,scheduled_at,status,created_at,updated_at,title,target_key)
+                         VALUES(?,?,?,?,'scheduled',?,?,?,?)""",
                       (jid,str(path),caption[:2000],run_at.astimezone(timezone.utc).isoformat(),
-                       utcnow(),utcnow(),str(title)[:160]))
+                       utcnow(),utcnow(),str(title)[:160],target_key))
         return jid
 
     def list_jobs(self, limit=100):

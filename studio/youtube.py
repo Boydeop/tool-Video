@@ -5,11 +5,10 @@ Upload/thumbnail writes use youtube.upload; processing status uses youtube.reado
 """
 from __future__ import annotations
 import json
-import os
 from pathlib import Path
 import re
 import threading
-from .facebook import _protect,_unprotect
+from .local_storage import load_private,save_private
 
 SCOPE="https://www.googleapis.com/auth/youtube.upload"
 SCOPES=[SCOPE,"https://www.googleapis.com/auth/youtube.readonly"]
@@ -24,21 +23,8 @@ class YouTubeAccount:
         self._status="idle"
         self._error=""
 
-    @staticmethod
-    def _load_private(path):
-        if not path.is_file():return None
-        obj=json.loads(path.read_text("utf-8"))
-        return json.loads(_unprotect(obj["encrypted"]))
-
-    @staticmethod
-    def _save_private(path,content):
-        temp=path.with_suffix(".tmp")
-        try:
-            temp.write_text(json.dumps({"encrypted":_protect(json.dumps(content,ensure_ascii=False))}),
-                            encoding="utf-8")
-            if os.name!="nt":os.chmod(temp,0o600)
-            temp.replace(path)
-        finally:temp.unlink(missing_ok=True)
+    _load_private=staticmethod(load_private)
+    _save_private=staticmethod(save_private)
 
     def configure(self,client):
         if not isinstance(client,dict):raise ValueError("OAuth client JSON không hợp lệ.")
@@ -94,11 +80,15 @@ class YouTubeAccount:
             self._status="idle";self._error=""
         return self.status()
 
-    def credentials(self):
+    def credentials(self,target_key=""):
         from google.oauth2.credentials import Credentials
         from google.auth.transport.requests import Request
         token=self._load_private(self.token_path)
         if not token:raise ValueError("Chưa kết nối YouTube.")
+        if target_key:
+            from .publishing_accounts import fingerprint_account
+            if fingerprint_account("youtube",token.get("refresh_token",""))!=target_key:
+                raise ValueError("YouTube đã đổi tài khoản sau khi đặt lịch; không tải lên.")
         granted=token.get("scopes") or []
         if isinstance(granted,str):granted=granted.split()
         if not set(SCOPES).issubset(granted):
@@ -110,23 +100,23 @@ class YouTubeAccount:
             self._save_private(self.token_path,json.loads(creds.to_json()))
         return creds
 
-    def processing_status(self,video_id):
+    def processing_status(self,video_id,target_key=""):
         """Return processing state without uploading the MP4 again."""
         from googleapiclient.discovery import build
-        api=build("youtube","v3",credentials=self.credentials(),cache_discovery=False)
+        api=build("youtube","v3",credentials=self.credentials(target_key),cache_discovery=False)
         result=api.videos().list(part="processingDetails",id=str(video_id)).execute()
         rows=result.get("items",[])
         if not rows:raise RuntimeError("YouTube chưa trả thông tin xử lý video")
         return str(rows[0].get("processingDetails",{}).get("processingStatus","processing"))
 
-    def set_thumbnail(self,video_id,image_path):
+    def set_thumbnail(self,video_id,image_path,target_key=""):
         """Can be called repeatedly for the same video, never re-uploads MP4."""
         from googleapiclient.discovery import build
         from googleapiclient.http import MediaFileUpload
         path=Path(image_path).resolve()
         if path.suffix.lower() not in (".jpg",".jpeg",".png") or not path.is_file():
             raise ValueError("Thumbnail JPEG/PNG không tồn tại.")
-        api=build("youtube","v3",credentials=self.credentials(),cache_discovery=False)
+        api=build("youtube","v3",credentials=self.credentials(target_key),cache_discovery=False)
         request=api.thumbnails().set(videoId=str(video_id),
                    media_body=MediaFileUpload(str(path),mimetype="image/jpeg",resumable=False))
         answer=request.execute()
@@ -134,7 +124,7 @@ class YouTubeAccount:
             raise RuntimeError("YouTube chưa xác nhận thumbnail.")
         return True
 
-    def upload(self,path,title,caption,privacy="private"):
+    def upload(self,path,title,caption,privacy="private",target_key=""):
         from googleapiclient.discovery import build
         from googleapiclient.http import MediaFileUpload
         if privacy not in ("private","unlisted","public"):
@@ -142,7 +132,7 @@ class YouTubeAccount:
         target=Path(path).resolve()
         if not target.is_file() or target.suffix.lower()!=".mp4":
             raise ValueError("Không tìm thấy MP4.")
-        api=build("youtube","v3",credentials=self.credentials(),cache_discovery=False)
+        api=build("youtube","v3",credentials=self.credentials(target_key),cache_discovery=False)
         body={"snippet":{"title":str(title)[:100],"description":str(caption)[:4500],
                          "categoryId":"27","defaultLanguage":"vi"},
               "status":{"privacyStatus":privacy,"selfDeclaredMadeForKids":False}}

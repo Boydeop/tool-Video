@@ -95,11 +95,15 @@ class InstagramAccount:
         self.path.unlink(missing_ok=True)
         return self.status()
 
-    def publish(self,public_video_url,caption):
+    def publish(self,public_video_url,caption,target_key=""):
         url=validate_public_url(public_video_url)
         row=self._read()
         if not row:raise ValueError("Chưa kết nối Instagram Professional.")
         ig_id,token=row["ig_id"],row["token"]
+        if target_key:
+            from .publishing_accounts import fingerprint_account
+            if fingerprint_account("instagram",ig_id)!=target_key:
+                raise ValueError("Instagram đã đổi tài khoản sau khi đặt lịch; không đăng.")
         created=_graph(ig_id+"/media",token,
              {"media_type":"REELS","video_url":url,"caption":str(caption)[:2000],
               "share_to_feed":"true"},method="POST")

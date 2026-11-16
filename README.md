@@ -592,3 +592,56 @@ Bổ sung bằng chứng KRDict cho mẫu tân ngữ + 하다 và chủ ngữ + 
 điển; vẫn cần AI hỏi ngược. Sinh câu strict ưu tiên dạng mục từ và nhận phản
 hồi QA. Thử provider dự phòng thứ ba đã cấu hình, tôn trọng Retry-After và
 báo rõ lỗi AI 503. [Chi tiết, kiểm thử và giới hạn](HOTFIX_V142.md).
+
+## Facebook OAuth và đăng đa nền tảng
+
+Trong **Đăng video**, dùng một form chung: chọn MP4, tích **Facebook Reels**,
+**YouTube Shorts**, **Instagram Reels**, sửa tiêu đề/mô tả rồi chọn **Lên lịch**
+hoặc **Đăng ngay**. Studio lưu toàn bộ lựa chọn trong một giao dịch; nếu một
+nền tảng chưa kết nối hoặc đã có lịch cho MP4 này thì không tạo lịch dở dang.
+Các lượt tải lên được chạy song song (tối đa ba lượt), có trạng thái riêng.
+Thời điểm video xuất hiện tùy thời gian xử lý của từng nền tảng; không bảo đảm
+hiển thị cùng một giây. “Đăng ngay” vào hàng đợi và chạy ở lượt worker kế tiếp
+(thông thường trong 30 giây nếu worker rảnh). Giữ Studio chạy.
+Lịch Facebook cũ được giữ lại và hiển thị cùng lịch đa nền tảng. Khi kết quả
+upload không chắc chắn, tác vụ chuyển `needs_review`, không tự đăng lại.
+
+Để kết nối Fanpage qua OAuth:
+
+1. Tạo Meta App của bạn và cấu hình Facebook Login. Trong phần kết nối
+   Facebook của Studio, mở **Cấu hình Meta App**, nhập App ID và App Secret
+   trên máy cục bộ, rồi lưu. Không dùng mật khẩu Facebook.
+2. Cấu hình redirect URI chính xác như Studio hiển thị (mặc định
+   `http://127.0.0.1:8765/api/facebook/oauth/callback`). Meta phải chấp nhận
+   URI loopback này cho cấu hình/phương thức phát triển của App; không tắt
+   kiểm tra redirect hoặc công khai dashboard để vượt yêu cầu HTTPS của Meta.
+   Nếu App không cho phép callback cục bộ, dùng Page Access Token thủ công.
+3. Chọn **Đăng nhập Facebook qua OAuth**, cấp quyền `pages_show_list`,
+   `pages_read_engagement`, `pages_manage_posts`. App ở chế độ development
+   bị giới hạn theo vai trò/tester và quyền tài sản; sử dụng rộng hơn cần
+   các điều kiện App Review/Advanced Access/Business Verification của Meta.
+4. Sau khi trình duyệt báo hoàn tất, quay lại Studio, **Tải Page**, chọn Page
+   rồi **Kết nối Page đã chọn**. Phiên chọn Page hết hạn sau 10 phút.
+
+OAuth code/state dùng một lần; Page token chỉ ở máy chủ cục bộ, không đưa
+vào danh sách Page trên trình duyệt. App Secret được lưu như OAuth client
+YouTube: Windows DPAPI trên Windows; Linux dùng file riêng với quyền 0600
+(không mã hóa bằng DPAPI). Token có thể hết hạn/bị thu hồi và cần kết nối lại.
+Đọc được Page chưa chứng minh quyền đăng Reels.
+
+YouTube vẫn cần Google OAuth Desktop client; mặc định upload **riêng tư**,
+đổi sang **công khai** nếu muốn phát hành công khai. Instagram cần tài khoản
+Professional và URL HTTPS công khai chứa chính MP4 đã chọn; Studio không tự
+host file. TikTok hiện vẫn dùng gói đăng thủ công.
+
+OAuth và upload thật cần kiểm chứng riêng với Meta App/tài khoản của bạn.
+Các kiểm thử offline dùng API giả lập, không thay thế App Review hay lần
+đăng thử thực tế.
+
+## v1.5.0 · Audit, Facebook OAuth và đăng chung nhiều nền tảng
+
+Xem [báo cáo audit v1.5.0](AUDIT_V150.md) để biết lỗi, nguyên nhân, bản sửa,
+benchmark và giới hạn. Lịch mới giữ binding tài khoản đích; lịch cũ thiếu binding
+chuyển `needs_review` để kiểm tra thủ công trước khi đăng lại. Chọn MP4 bằng đường
+dẫn chính xác trong form đa nền tảng; không còn chọn nhầm giữa các file trùng tên.
+Đóng EXE cũ và sao lưu thư mục dữ liệu trước khi cập nhật.

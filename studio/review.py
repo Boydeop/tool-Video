@@ -10,7 +10,7 @@ import json
 import os
 import random
 import re
-from .ai import post,ProviderError
+from .ai import post,ProviderError,response_text
 from .models import get_model
 from .keys import next_key,get_keys
 from .krdict import KRDict,KRDictError,sense_overlap,lookup_evidence
@@ -28,7 +28,7 @@ def _model_review(provider,prompt):
             {"contents":[{"parts":[{"text":prompt}]}],
              "generationConfig":{"responseMimeType":"application/json","temperature":0.05}},
              {"x-goog-api-key":key})
-        raw="".join(x.get("text","") for x in data["candidates"][0]["content"]["parts"])
+        raw=response_text(provider,data)
     elif provider in ("groq","openrouter"):
         endpoints={"groq":"https://api.groq.com/openai/v1/chat/completions",
                    "openrouter":"https://openrouter.ai/api/v1/chat/completions"}
@@ -38,13 +38,13 @@ def _model_review(provider,prompt):
              "messages":[{"role":"system","content":"You verify Korean vocabulary. Output ONLY JSON."},
                          {"role":"user","content":prompt}]},
              {"Authorization":"Bearer "+key})
-        raw=data["choices"][0]["message"]["content"]
+        raw=response_text(provider,data)
     elif provider=="ollama" and os.getenv("ENABLE_OLLAMA")=="1":
         data=post("ollama","http://127.0.0.1:11434/v1/chat/completions",
             {"model":os.getenv("OLLAMA_MODEL","qwen2.5:7b"),"temperature":0.05,
              "messages":[{"role":"user","content":prompt}]},
             {"Authorization":"Bearer local"})
-        raw=data["choices"][0]["message"]["content"]
+        raw=response_text(provider,data)
     else:raise ProviderError("No configured AI reviewer")
     try:
         obj=json.loads(raw)

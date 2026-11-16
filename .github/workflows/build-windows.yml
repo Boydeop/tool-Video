@@ -70,7 +70,7 @@ jobs:
               if ($process.HasExited) { throw 'Packaged Studio process terminated before ready' }
               try {
                 $health = Invoke-RestMethod -Uri "http://127.0.0.1:8765/health" -TimeoutSec 3 -NoProxy
-                if ($health.status -eq 'ok' -and $health.app -eq 'TiengHanSoEasyStudio' -and $health.version -eq 'v1.4.2') {
+                if ($health.status -eq 'ok' -and $health.app -eq 'TiengHanSoEasyStudio' -and $health.version -eq 'v1.5.0') {
                   $ready = $true
                   break
                 }
@@ -169,7 +169,14 @@ jobs:
             $importBody = @{text=$backupText} | ConvertTo-Json -Compress
             $merged = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/memory/import" -Method Post -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($importBody)) -TimeoutSec 5 -NoProxy
             if ($merged.added -ne 0) { throw 'Memory backup merge should be idempotent' }
-            Write-Output "Studio v1.4.2 permanent memory backup/merge and HTTP smoke passed"
+            $pages = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/facebook/oauth/pages" -TimeoutSec 5 -NoProxy
+            if ($null -eq $pages.pages) { throw 'Facebook OAuth module missing from packaged EXE' }
+            if ($homePage.Content -notmatch 'fbOAuth' -or $homePage.Content -notmatch 'crossPublishNow') {
+              throw 'Facebook OAuth or unified publishing UI missing'
+            }
+            $invalidPost = Invoke-WebRequest -Uri "http://127.0.0.1:8765/api/platforms/schedule" -Method Post -ContentType 'application/json' -Body '{}' -NoProxy -SkipHttpErrorCheck
+            if ($invalidPost.StatusCode -ne 400) { throw 'Unified schedule validation missing' }
+            Write-Output "Studio v1.5.0 permanent memory backup/merge and HTTP smoke passed"
           } catch {
             $logPath = Join-Path $env:LOCALAPPDATA "TiengHanSoEasyStudio\studio.log"
             if (Test-Path $logPath) { Get-Content $logPath -Tail 100 }
@@ -190,16 +197,20 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.4.2-build.${{ github.run_number }}
-          name: Tiếng Hàn So Easy Studio v1.4.2 (build ${{ github.run_number }})
+          tag_name: v1.5.0-build.${{ github.run_number }}
+          name: Tiếng Hàn So Easy Studio v1.5.0 (build ${{ github.run_number }})
           target_commitish: ${{ github.sha }}
           files: dist/TiengHanSoEasyStudio.exe
           make_latest: true
           generate_release_notes: false
           body: |
-            v1.4.2: Sửa QA strict cho cụm sức khỏe có bằng chứng KRDict: 기침을 하다, 배가 아프다.
-            Sinh câu ưu tiên dạng từ điển và tránh lỗi QA của lượt trước; vẫn yêu cầu AI hỏi ngược.
-            Sửa fallback tới provider thứ ba và tôn trọng Retry-After khi 429/5xx. Gemini 503 vẫn phụ thuộc dịch vụ.
-            Giữ bộ nhớ local v1.4.1, sao lưu/gộp JSONL và các video đã hoàn tất khi Tiếp tục.
-            Windows standalone EXE, tested before release. Close the previous EXE before upgrading.
-            Back up LOCALAPPDATA/TiengHanSoEasyStudio and keep its database for question history.
+            v1.5.0: Facebook OAuth và form đăng chung Facebook / YouTube / Instagram.
+            Đăng ngay hoặc lên lịch nhiều nền tảng; mỗi nền tảng có kết quả độc lập.
+            Gắn lịch đăng với tài khoản ban đầu; lịch cũ thiếu binding chuyển needs_review.
+            Sửa nhầm video trùng tên, ghi đè QA khi bận, parse AI lỗi và kiểm tra logo trước giải mã.
+            Tái sử dụng khung hình tĩnh, giữ nguyên pixel video; lưu OAuth private/atomic.
+            Meta OAuth cần App ID/Secret và quyền/redirect hợp lệ. Instagram cần URL MP4 HTTPS.
+            YouTube mặc định riêng tư. Chưa xác minh OAuth/upload thật bằng tài khoản người dùng.
+            Xem AUDIT_V150.md để biết phạm vi kiểm thử và giới hạn.
+            Windows standalone EXE, unit-tested and packaged HTTP smoke-tested before release.
+            Close the previous EXE and back up LOCALAPPDATA/TiengHanSoEasyStudio before upgrading.

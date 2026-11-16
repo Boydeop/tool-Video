@@ -119,6 +119,7 @@ class Service:
                 "dictionary":report.get("dictionary",{}),
                 "reviewer":report.get("reviewer",{})}
 
+    @media_operation
     def verify_pending_questions(self,limit=8,mode="strict"):
         if not isinstance(limit,int) or not 1<=limit<=12:
             raise ValueError("Chỉ kiểm tra tối đa 12 câu mỗi lượt")
@@ -129,7 +130,8 @@ class Service:
             try:results.append(self.verify_generated(row["id"],mode))
             except Exception as exc:
                 explanation=type(exc).__name__
-                self.store.set_question_qa(row["id"],"unavailable",{"issues":[explanation]})
+                # Failed/stale checks must not overwrite a newer successful QA.
+                # verify_generated commits only when its content snapshot matches.
                 results.append({"id":row["id"],"status":"unavailable",
                                 "issues":[explanation]})
         return {"processed":len(results),"verified":sum(x["status"]=="verified" for x in results),
@@ -170,12 +172,18 @@ class Service:
         return list(dict.fromkeys(Path(p).resolve() for p in candidates))
 
     def video_path(self,name):
+        if isinstance(name,str) and Path(name).is_absolute():
+            path=Path(name).resolve()
+            if path.parent in self.output_folders() and path.suffix.lower()==".mp4" and path.is_file():return path
+            raise ValueError("Video không thuộc thư mục xuất của Studio.")
         if not isinstance(name,str) or Path(name).name!=name or not name.endswith(".mp4"):
             raise ValueError("Tên video không hợp lệ.")
-        for directory in self.output_folders():
-            path=(directory/name).resolve()
-            if path.parent==directory and path.is_file():
-                return path
+        folders=self.output_folders()
+        candidates=[(directory/name).resolve() for directory in folders]
+        matches=list(dict.fromkeys(p for p in candidates if p.parent in folders and p.is_file()))
+        if len(matches)>1:
+            raise ValueError("Có nhiều video trùng tên; chọn đường dẫn đầy đủ trong danh sách xuất.")
+        if matches:return matches[0]
         raise ValueError("Không tìm thấy MP4.")
 
     def list_videos(self,limit=80):
@@ -187,16 +195,19 @@ class Service:
             if folder.is_dir():
                 for file in folder.glob("*.mp4"):
                     if file.name in reserved and str(file.resolve()) not in registry:continue
-                    try:found[str(file.resolve())]=file
-                    except OSError:pass
-        sorted_files=sorted(found.values(),key=lambda p:p.stat().st_mtime,reverse=True)
+                    try:
+                        resolved=file.resolve()
+                        if resolved.parent!=folder or not file.is_file():continue
+                        found[str(resolved)]=(file,file.stat())
+                    except OSError:continue
+        sorted_files=sorted(found.values(),key=lambda pair:pair[1].st_mtime,reverse=True)
         output=[]
-        for file in sorted_files[:limit]:
+        for file,stat in sorted_files[:limit]:
             item=registry.get(str(file.resolve())) or {}
             from .thumbnails import thumbnail_path
             thumb=thumbnail_path(file)
             output.append({"name":file.name,"path":str(file.resolve()),
-                "size_mb":round(file.stat().st_size/1048576,1),
+                "size_mb":round(stat.st_size/1048576,1),
                 "status":item.get("status","legacy"),"seo_title":item.get("seo_title",""),
                 "seo_caption":item.get("seo_caption",""),"topic":item.get("topic",""),
                 "thumbnail_available":thumb.is_file(),
@@ -473,18 +484,25 @@ class Service:
 
     def schedule_platform(self,name,platform,title,caption,when,
                           public_url="",privacy="private"):
-        from .instagram import validate_public_url
+        return self.schedule_platforms(name,[platform],title,caption,when,public_url,privacy)[platform]
+
+    def schedule_platforms(self,name,platforms,title,caption,when,public_url="",privacy="private"):
+        from .instagram import InstagramAccount,validate_public_url
+        from .youtube import YouTubeAccount
+        if not isinstance(platforms,list) or any(not isinstance(p,str) for p in platforms):
+            raise ValueError("Danh sách nền tảng không hợp lệ.")
         path=self.video_path(name)
-        if platform=="instagram":
+        if "facebook" in platforms and not all(credentials(self.root/"facebook.local.json")):
+            raise ValueError("Chưa kết nối Facebook Page.")
+        if "instagram" in platforms:
             validate_public_url(public_url)
-        elif platform=="youtube":
-            from .youtube import YouTubeAccount
-            if not YouTubeAccount(self.root).status()["connected"]:
-                raise ValueError("YouTube chưa được kết nối bằng OAuth.")
-        else:
-            raise ValueError("Nền tảng không được hỗ trợ.")
-        return self.store.schedule_outbound(path,platform,title,caption,when,
-                                           public_url,privacy)
+            if not InstagramAccount(self.root).status()["connected"]:
+                raise ValueError("Chưa kết nối Instagram Professional.")
+        if "youtube" in platforms and not YouTubeAccount(self.root).status()["connected"]:
+            raise ValueError("YouTube chưa được kết nối bằng OAuth.")
+        from .publishing_accounts import account_key
+        targets={p:account_key(self.root,p) for p in platforms}
+        return self.store.schedule_outbound_batch(path,platforms,title,caption,when,public_url,privacy,targets=targets)
 
     def seo_video(self,name):
         from .seo import draft
@@ -500,12 +518,13 @@ class Service:
         folders=self.output_folders()
         if target.parent not in folders or not target.is_file() or target.suffix.lower()!=".mp4":
             raise ValueError("Video không thuộc thư mục xuất của Studio.")
-        page,token=credentials()
+        page,token=credentials(self.root/"facebook.local.json")
         if not page or not token:
             raise ValueError("Chưa kết nối Facebook Page. Vào tab Lịch đăng Page.")
         if len(title)>160 or len(caption)>2000:
             raise ValueError("Tiêu đề hoặc mô tả quá dài.")
-        job_id=self.store.add_job(target,caption,at,title)
+        from .publishing_accounts import account_key
+        job_id=self.store.add_job(target,caption,at,title,target_key=account_key(self.root,"facebook"))
         try:self.store.mark_scheduled(target)
         except ValueError:pass  # Legacy video, already tracked in jobs.
         return job_id

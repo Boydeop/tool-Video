@@ -9,10 +9,14 @@ from .facebook import credentials
 
 class PublishingError(RuntimeError): pass
 
-def publish_reel(video_path,caption,title=""):
-    page,token=credentials()
+def publish_reel(video_path,caption,title="",account=None,target_key=""):
+    page,token=account if account is not None else credentials()
     page=page.strip()
     token=token.strip()
+    if target_key:
+        from .publishing_accounts import fingerprint_account
+        if fingerprint_account("facebook",page)!=target_key:
+            raise PublishingError("Facebook đã đổi Page sau khi đặt lịch; không đăng.")
     version=os.getenv("META_GRAPH_VERSION","v24.0")
     if not page.isdigit() or not token: raise PublishingError("Set valid Page ID and Page access token")
     if not version.startswith("v") or not version[1:].replace(".","").isdigit():
@@ -34,7 +38,7 @@ def publish_reel(video_path,caption,title=""):
     with path.open("rb") as stream:
         req=urllib.request.Request(upload_url,data=stream,method="POST",headers={
             "Authorization":"OAuth "+token,"offset":"0",
-            "file_size":str(path.stat().st_size),
+            "file_size":str(path.stat().st_size),"Content-Length":str(path.stat().st_size),
             "Content-Type":"application/octet-stream"})
         try:
             with urllib.request.urlopen(req,timeout=900) as r: response=json.load(r)

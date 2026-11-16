@@ -74,6 +74,19 @@ def post(provider,url,payload,headers):
     except (urllib.error.URLError,TimeoutError,ValueError) as exc:
         raise ProviderError(provider+" connection or response error",retry_after=15) from None
 
+def response_text(provider,data):
+    """Reject malformed/empty provider envelopes so fallback can continue."""
+    try:
+        if provider=="gemini":
+            parts=data["candidates"][0]["content"]["parts"]
+            text="".join(part.get("text","") for part in parts)
+        else:text=data["choices"][0]["message"]["content"]
+        if not isinstance(text,str) or not text.strip():raise ValueError("empty content")
+        return text
+    except (KeyError,IndexError,TypeError,AttributeError,ValueError):
+        raise ProviderError(provider+" trả nội dung trống hoặc sai định dạng") from None
+
+
 def generate(provider,topic,level,count,recent,fmt="từ vựng"):
     if not 1<=count<=30:raise ValueError("1-30 questions per request")
     prompt=("Tạo "+str(count)+" câu trắc nghiệm tiếng Hàn cho người Việt. "
@@ -97,8 +110,7 @@ def generate(provider,topic,level,count,recent,fmt="từ vựng"):
         data=post(provider,"https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent",
             {"contents":[{"parts":[{"text":prompt}]}],
              "generationConfig":{"responseMimeType":"application/json"}},{"x-goog-api-key":key})
-        try:content="".join(x.get("text","") for x in data["candidates"][0]["content"]["parts"])
-        except (KeyError,IndexError,TypeError) as exc:raise ProviderError("Empty Gemini response") from exc
+        content=response_text(provider,data)
     else:
         presets={
           "groq":("https://api.groq.com/openai/v1/chat/completions","GROQ_MODEL","llama-3.3-70b-versatile"),
@@ -115,8 +127,7 @@ def generate(provider,topic,level,count,recent,fmt="từ vựng"):
             except RuntimeError as exc:raise ProviderError(str(exc),retry_after=120 if 'tạm nghỉ' in str(exc) else 0) from None
         data=post(provider,url,{"model":get_model(provider) if provider!="ollama" else os.getenv(model_env,default),"temperature":0.85,
               "messages":[{"role":"user","content":prompt}]},{"Authorization":"Bearer "+key})
-        try:content=data["choices"][0]["message"]["content"]
-        except (KeyError,IndexError,TypeError) as exc:raise ProviderError("Empty provider response") from exc
+        content=response_text(provider,data)
     try:raw=json.loads(content)
     except ValueError:
         match=re.search(r"\[[\s\S]*\]",content)

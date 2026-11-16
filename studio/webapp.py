@@ -12,7 +12,7 @@ from .keys import import_txt, readiness, write_keys
 from .exports import ExportQueue
 from .youtube import YouTubeAccount
 from .instagram import InstagramAccount
-from .facebook import connect as connect_page, disconnect as disconnect_page, page_status
+from .facebook import connect as connect_page, page_status
 from .models import list_models, selected_models, set_model, test_model
 from .quiz import TOPICS
 from .scheduler import Scheduler
@@ -33,9 +33,14 @@ def _ui_path() -> Path:
 
 def create_server(service, host="127.0.0.1", port=8765):
     export_queue=ExportQueue(service)
+    from .facebook_oauth import FacebookOAuth
+    facebook_oauth=FacebookOAuth(service.root)
     youtube=YouTubeAccount(service.root)
     instagram=InstagramAccount(service.root)
     class Handler(BaseHTTPRequestHandler):
+        def log_request(self, code="-", size="-"):
+            LOGGER.info("%s %s %s",self.command,urlsplit(self.path).path,code)
+
         def log_message(self, fmt, *args):
             # PyInstaller --windowed uses sys.stderr=None; never write there.
             # Do not log POST bodies, uploaded TXT contents or key values.
@@ -50,6 +55,7 @@ def create_server(service, host="127.0.0.1", port=8765):
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Referrer-Policy", "no-referrer")
             self.end_headers()
             self.wfile.write(payload)
 
@@ -100,7 +106,16 @@ def create_server(service, host="127.0.0.1", port=8765):
                 return
             url = urlsplit(self.path)
             try:
-                if url.path == "/":
+                if url.path == "/api/facebook/oauth/callback":
+                    try:
+                        facebook_oauth.callback(parse_qs(url.query))
+                        message="Facebook đã cấp quyền. Quay lại Studio, tải danh sách Page rồi chọn Page cần kết nối."
+                    except ValueError as exc:
+                        message=str(exc)
+                    self.respond(200,message,"text/plain")
+                elif url.path == "/api/facebook/oauth/pages":
+                    self.respond(200,facebook_oauth.list_pages())
+                elif url.path == "/":
                     content = _ui_path().read_text(encoding="utf-8")
                     self.respond(200, content, "text/html")
                 elif url.path == "/health":
@@ -251,6 +266,8 @@ def create_server(service, host="127.0.0.1", port=8765):
                       "/api/models/select", "/api/models/test", "/api/voice/test",
                       "/api/production/settings", "/api/production/choose", "/api/logo/upload",
                       "/api/facebook/connect", "/api/facebook/disconnect", "/api/seo",
+                      "/api/facebook/oauth/configure", "/api/facebook/oauth/start", "/api/facebook/oauth/select",
+                      "/api/platforms/schedule",
                       "/api/render/batch", "/api/preview/clip", "/api/render/start",
                       "/api/answers/enrich", "/api/answers/save", "/api/answers/repair", "/api/videos/metadata",
                       "/api/videos/metadata/inspect", "/api/videos/metadata/repair_bulk",
@@ -320,10 +337,24 @@ def create_server(service, host="127.0.0.1", port=8765):
                     result=service.production.choose_directory(str(raw.get("kind","")))
                 elif route == "/api/logo/upload":
                     result=service.set_logo(raw.get("base64",""))
+                elif route == "/api/facebook/oauth/configure":
+                    result=facebook_oauth.configure(str(raw.get("app_id","")),str(raw.get("app_secret","")))
+                elif route == "/api/facebook/oauth/start":
+                    redirect="http://127.0.0.1:"+str(self.server.server_address[1])+"/api/facebook/oauth/callback"
+                    result=facebook_oauth.start(redirect)
+                elif route == "/api/facebook/oauth/select":
+                    result=facebook_oauth.select(str(raw.get("page_id","")))
+                elif route == "/api/platforms/schedule":
+                    from datetime import datetime,timezone,timedelta
+                    when=(datetime.now(timezone.utc)+timedelta(seconds=1)).isoformat() if raw.get("publish_now") is True else str(raw.get("scheduled_at",""))
+                    jobs=service.schedule_platforms(str(raw.get("video_name","")),raw.get("platforms"),
+                        str(raw.get("title","")),str(raw.get("caption","")),when,
+                        str(raw.get("public_url","")),str(raw.get("privacy","private")))
+                    result={"jobs":jobs,"status":"scheduled"}
                 elif route == "/api/facebook/connect":
                     result=connect_page(str(raw.get("page_id","")),str(raw.get("token","")))
                 elif route == "/api/facebook/disconnect":
-                    result=disconnect_page()
+                    result=facebook_oauth.disconnect()
                 elif route == "/api/seo":
                     result=service.seo_video(str(raw.get("video_name","")))
                 elif route == "/api/preview/clip":

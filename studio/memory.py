@@ -105,11 +105,13 @@ class QuestionMemory:
         with self.db() as c:
             result=[]
             seen=set()
-            for row in c.execute("SELECT source_id,value FROM question_memory WHERE kind='prompt' ORDER BY id DESC LIMIT ?", (2*limit,)):
+            for row in c.execute("""SELECT p.source_id,p.value,
+                    (SELECT a.value FROM question_memory a WHERE a.kind='answer'
+                     AND a.source_id=p.source_id ORDER BY a.id DESC LIMIT 1) answer
+                FROM question_memory p WHERE p.kind='prompt' ORDER BY p.id DESC LIMIT ?""",(2*limit,)):
                 if row['source_id'] in seen:continue
                 seen.add(row['source_id'])
-                answer=c.execute("SELECT value FROM question_memory WHERE kind='answer' AND source_id=? ORDER BY id DESC LIMIT 1",(row['source_id'],)).fetchone()
-                result.append(row['value']+' => '+(answer['value'] if answer else ''))
+                result.append(row['value']+' => '+(row['answer'] or ''))
                 if len(result)>=limit:break
         return result
 

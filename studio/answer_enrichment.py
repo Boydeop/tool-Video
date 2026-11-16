@@ -5,7 +5,7 @@ Credentials remain in user's local key store and never go to the browser.
 """
 import json
 from dataclasses import replace
-from .ai import post, ProviderError
+from .ai import post, ProviderError, response_text
 from .keys import next_key
 from .run_limits import check_budget, BudgetExpired, RunCancelled
 from .models import get_model
@@ -38,14 +38,14 @@ def suggest(quiz:Quiz,providers=("gemini","groq","openrouter")):
                     {"contents":[{"parts":[{"text":prompt}]}],
                      "generationConfig":{"responseMimeType":"application/json"}},
                     {"x-goog-api-key":key})
-                response="".join(t.get("text","") for t in result["candidates"][0]["content"]["parts"])
+                response=response_text(provider,result)
             else:
                 endpoint=("https://api.groq.com/openai/v1/chat/completions"
                          if provider=="groq" else "https://openrouter.ai/api/v1/chat/completions")
                 result=post(provider,endpoint,{"model":model,"temperature":0.25,
                     "messages":[{"role":"user","content":prompt}]},
                     {"Authorization":"Bearer "+key})
-                response=result["choices"][0]["message"]["content"]
+                response=response_text(provider,result)
             data=json.loads(response)
             if not isinstance(data,dict):raise ValueError("AI details must be a JSON object")
             fields={}

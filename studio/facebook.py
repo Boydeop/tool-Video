@@ -77,8 +77,8 @@ def _unprotect(value):
         kernel.LocalFree(ctypes.cast(dest.pbData,ctypes.c_void_p))
     return plain
 
-def _read():
-    path=_path()
+def _read(path=None):
+    path=Path(path) if path is not None else _path()
     if not path.is_file():return {}
     try:return json.loads(path.read_text(encoding="utf-8"))
     except (OSError,ValueError):return {}
@@ -91,8 +91,8 @@ def page_status():
             "publishing_verified":False,
             "note":"Xác minh Page đọc được. Quyền đăng Reel chỉ xác nhận qua lần đăng thật."}
 
-def credentials():
-    data=_read()
+def credentials(path=None):
+    data=_read(path)
     if data.get("token"):
         return str(data["page_id"]),_unprotect(str(data["token"]))
     return os.getenv("FB_PAGE_ID",""),os.getenv("FB_PAGE_ACCESS_TOKEN","")
