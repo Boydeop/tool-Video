@@ -97,7 +97,8 @@ def repair_quiz(quiz,store,origin='',progress=None,proposer=None,dictionary=None
                 word=getattr(candidate,key)
                 if progress:progress('Tra KRDict cho từ thay thế · '+word)
                 result=lookup_headword(client,word,fresh=True)
-                glosses=[g for entry in result.get('entries',[]) for g in entry.get('glosses',[])]
+                glosses=[part.strip() for entry in result.get('entries',[]) for gloss in entry.get('glosses',[])
+                         for part in re.split(r'[,;/]+',gloss) if part.strip()]
                 if not (result.get('exact') or result.get('supported')) or not glosses:
                     raise ValueError('Không có bản dịch mục từ KRDict cho '+word)
                 meaning_key='meaning' if index==0 else key+'_meaning'

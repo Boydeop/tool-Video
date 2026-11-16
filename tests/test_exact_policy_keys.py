@@ -181,6 +181,21 @@ class GeminiKeyTests(unittest.TestCase):
                     call()
                 self.assertEqual([c.args[0].get_header('X-goog-api-key') for c in network.call_args_list],['key-one','key-two'])
 
+class HeadwordSenseTests(unittest.TestCase):
+    def test_repair_selects_one_matching_translation_from_multi_gloss_headword(self):
+        from studio.repair import repair_quiz
+        source=replace(quiz(),correct='가짜단어')
+        def lookup(word,**kwargs):
+            data=dictionary(word)
+            if word=='물':data['entries'][0]['glosses']=['nước; nước uống']
+            return data
+        with patch('studio.repair.get_keys',side_effect=lambda p:['fake'] if p=='gemini' else []):
+            candidate,report,_=repair_quiz(source,Mock(),dictionary=Mock(lookup=Mock(side_effect=lookup)),
+                proposer=Mock(return_value=quiz()),reviewer=judge)
+        self.assertIsNotNone(candidate);self.assertEqual(candidate.meaning,'nước')
+        self.assertEqual(report['outcome'],'verified')
+
+
 class ReplacementIntegrationTests(unittest.TestCase):
     def test_repair_service_saves_certified_topic_replacement_and_history(self):
         from studio import review
