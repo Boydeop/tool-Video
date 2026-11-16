@@ -147,10 +147,14 @@ class Service:
             initial=initial or self.verify_generated(qid,mode='strict')
             if initial['status']=='verified':
                 return {**initial,'repaired':False}
+            if initial.get('blocked') or initial.get('retry_after'):
+                return {**initial,'repaired':False,'repair_issues':['Chờ dịch vụ kiểm chứng phục hồi; giữ nguyên câu và đáp án.']}
             candidate,report,failures=repair_quiz(before,self.store,
                 self.store.get_question_provider(qid),progress=progress)
             if candidate is None:
-                return {**initial,'repaired':False,'repair_issues':failures}
+                return {**initial,'repaired':False,'repair_issues':failures,
+                        'blocked':(report or {}).get('blocked',initial.get('blocked',False)),
+                        'retry_after':(report or {}).get('retry_after',initial.get('retry_after',0))}
             self.store.apply_repair(qid,before,candidate,report)
             return {'id':qid,'status':'verified','repaired':True,
                     'changes':report['repair']['changes'],'issues':[],

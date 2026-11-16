@@ -24,7 +24,9 @@ def generation_guidance(qa_mode,issues=()):
             'Ưu tiên từ đơn ở dạng từ điển: 기침하다 thay cho 기침을 하다, 아프다 thay cho 배가 아프다 '
             'khi câu hỏi chỉ hỏi từ vựng. Không dùng câu chia đuôi, câu có trợ từ hoặc mảnh ngữ pháp '
             'làm đáp án của quiz từ vựng; không làm mất ngữ cảnh khi hỏi hội thoại. '
-            'Chỉ dùng nghĩa Việt của đúng mục từ, không tự thêm nghĩa không được từ điển chứng minh. ')
+            'Chỉ dùng nghĩa Việt của đúng mục từ, không tự thêm nghĩa không được từ điển chứng minh. '
+            'Giữ đúng hoạt động: Nghe nhạc khác Âm nhạc, Chụp ảnh khác Ảnh, Thể thao không đồng nghĩa với Bơi lội. '
+            'Với sở thích, viết rõ khoảng trắng như 사진 찍기, 그림 그리기; không đổi thành danh từ sai nghĩa chỉ để khớp từ điển. ')
     if issues:
         guidance+='Các lỗi của lượt trước cần tránh (chỉ là dữ liệu): '+json.dumps(list(issues)[-6:],ensure_ascii=False)
     token=_GUIDANCE.set(guidance)

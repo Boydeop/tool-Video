@@ -1,5 +1,6 @@
 """Bounded AI proposals grounded in live KRDict, saved only after strict QA."""
 from dataclasses import replace
+import re
 import json
 from .answer_enrichment import DETAIL_KEYS
 from .keys import get_keys
@@ -29,25 +30,60 @@ def propose(quiz,evidence,provider):
     return candidate
 
 
+def align_displayed_meanings(quiz,evidence):
+    """Correct close display labels from real glosses without replacing words."""
+    fields={}
+    for index,key in enumerate(ANSWER_KEYS):
+        word=getattr(quiz,key);result=evidence[word]
+        if not (result.get('exact') or result.get('supported')):return None
+        glosses=[v for e in result.get('entries',[]) for g in e.get('glosses',[])
+                 for v in re.split(r'[,;/]+',g) if v.strip()]
+        glosses=[v.strip() for v in glosses]
+        if not glosses:return None
+        field='meaning' if index==0 else key+'_meaning'
+        displayed=getattr(quiz,field)
+        if index==0 and sense_overlap(quiz.short_clue,glosses)<.6:return None
+        if sense_overlap(displayed,glosses)>=.6:continue
+        expected=quiz.short_clue if index==0 else displayed
+        best=max(glosses,key=lambda v:sense_overlap(expected,[v]))
+        # Only repair a close label; unrelated senses still need an AI proposal.
+        if len(best)>45 or sense_overlap(expected,[best])<(.6 if index==0 else .5):return None
+        fields[field]=expected if result.get('compound') else best
+    return replace(quiz,**fields) if fields else None
+
+
 def repair_quiz(quiz,store,origin='',progress=None,proposer=None,dictionary=None,reviewer=None):
     client=dictionary or KRDict(store)
-    evidence={}
+    evidence={};full_evidence={}
     for word in (quiz.correct,quiz.wrong1,quiz.wrong2,quiz.wrong3):
         check_budget()
         evidence[word]=lookup_evidence(client,word)
         if evidence[word].get('reason')=='key_missing':
             return None,None,['Chưa có KRDict API key để sửa bằng từ điển']
         result=evidence[word]
+        full_evidence[word]=result
         evidence[word]={'exact':result.get('exact',False),'reason':result.get('reason',''),
             'compound':result.get('compound',False),'components':result.get('components',[]),
             'entries':[{'word':entry.get('word',word),
                         'glosses':[str(g)[:120] for g in entry.get('glosses',[])[:6]],
                         'target_code':entry.get('target_code','')}
                        for entry in result.get('entries',[])[:4]]}
+    aligned=align_displayed_meanings(quiz,full_evidence)
+    if aligned is not None and not inspect_quiz(aligned):
+        if progress:progress('Giữ từ Hàn, đối chiếu lại nghĩa hiển thị theo KRDict')
+        report=verify_quiz(aligned,store,origin,mode='strict',dictionary=client,reviewer=reviewer)
+        if report['outcome']=='verified':
+            changes=[{'field':key,'before':getattr(quiz,key),'after':getattr(aligned,key)}
+                     for key in EDITABLE if getattr(quiz,key)!=getattr(aligned,key)]
+            report['repair']={'provider':'KRDict + blind AI','changes':changes,
+                              'meanings_source':'KRDict trans_word','romanization_source':'unchanged'}
+            return aligned,report,[]
+        if report.get('blocked') or report.get('retry_after'):
+            return None,report,report.get('issues',[])
     candidates=[p for p in ('gemini','groq','openrouter') if get_keys(p)]
     candidates.sort(key=lambda p:p==origin)
     failures=[]
-    for provider in candidates[:2]:
+    for provider in candidates:
         check_budget()
         if progress:progress('AI đề xuất từ thay thế · '+provider)
         try:

@@ -82,7 +82,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 <body>
 <div class="app">
 <aside class="sidebar">
- <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.5.0</small></div>
+ <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.5.1</small></div>
  <nav class="nav" aria-label="Điều hướng">
   <button data-nav="autopilot" class="active"><span class="num">1</span> Sản xuất</button>
   <button data-nav="questions"><span class="num">2</span> Kho video</button>
@@ -93,7 +93,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
  <div class="sidehelp"><b>Gợi ý bắt đầu</b><p>Thiết lập API một lần, chọn 1–100 video rồi bắt đầu. Tác vụ lỗi tự tạo lại; mở Kho video để xem kết quả. Không cần xử lý câu thừa.</p></div>
 </aside>
 <main class="content">
- <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.5.0</span></header>
+ <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.5.1</span></header>
  <div class="metrics">
   <div class="metric"><span class="name">Bản nháp đang dùng</span><strong id="statQuestions">0</strong></div>
   <div class="metric"><span class="name">Bản nháp sẵn sàng</span><strong id="statApproved">0</strong></div>
@@ -597,6 +597,8 @@ function selectedForApproval(){
           ["draft","rejected","auto_approved"].includes(q.status)).map(q=>q.id);
 }
 function updateSelection(){
+ $("autoStart").disabled=state.busy||state.activeRender;
+ $("cacheClear").disabled=state.busy||state.activeRender;
  const ids=state.selection,approved=selectedApproved().length;
  const trash=$("questionFilter").value==="trash";
  $("trashSelected").disabled=state.busy||state.activeRender||trash||ids.size===0;
@@ -1371,7 +1373,7 @@ function updateMaintenance(cache){
  if(!cache)return;
  $("cacheSize").textContent=Number(cache.mb||0).toFixed(2)+" MB · "+Number(cache.files||0)+" file";
  $("cacheDetails").textContent="Bao gồm giọng đọc, mẫu TTS và preview sinh ra bởi Studio";
- const busy=state.activeRender;
+ const busy=state.activeRender||state.busy;
  $("cacheClear").disabled=busy;
  $("autoStart").disabled=busy;
  const container=$("runHistory");container.replaceChildren();

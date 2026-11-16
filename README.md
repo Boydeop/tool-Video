@@ -645,3 +645,11 @@ benchmark và giới hạn. Lịch mới giữ binding tài khoản đích; lị
 chuyển `needs_review` để kiểm tra thủ công trước khi đăng lại. Chọn MP4 bằng đường
 dẫn chính xác trong form đa nền tảng; không còn chọn nhầm giữa các file trùng tên.
 Đóng EXE cũ và sao lưu thư mục dữ liệu trước khi cập nhật.
+
+## v1.5.1 · QA sở thích và khôi phục nút sản xuất
+
+Nhận diện cấu trúc sở thích `사진찍기`, `그림그리기`, `음악감상` bằng thành phần
+KRDict + AI hỏi ngược. Ưu tiên sửa nghĩa hiển thị thay vì đổi từ Hàn đang đúng;
+không viết lại đáp án khi reviewer chỉ bị lỗi dịch vụ. Sửa nút sản xuất bị khóa
+sau tác vụ tự sửa. Gemini 503 vẫn cần dịch vụ phục hồi hoặc provider dự phòng
+đã cấu hình. Xem [ghi chú hotfix](HOTFIX_V151.md).

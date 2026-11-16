@@ -49,23 +49,42 @@ def _tokens(value):
 
 
 def lookup_evidence(client,word,*,fresh=False):
-    """Recognize spaced noun phrases, without claiming an exact headword.
-
-    Component coverage is lexical evidence only; strict QA must also obtain
-    blind AI agreement for the meaning of the complete phrase.
-    """
-    result=client.lookup(word,fresh=True) if fresh else client.lookup(word)
+    """Bounded phrase analysis; composed glosses still need blind AI review."""
+    cache={}
+    def lookup(value,**_):
+        check_budget()
+        if value not in cache:
+            cache[value]=client.lookup(value,fresh=True) if fresh else client.lookup(value)
+        return cache[value]
+    from types import SimpleNamespace
+    cached=SimpleNamespace(lookup=lookup)
+    result=lookup(word)
     if result.get('exact') or result.get('reason')=='key_missing':return result
     parts=word.split()
-    if not 2<=len(parts)<=3 or any(not re.fullmatch(r'[가-힣]{1,20}',p) for p in parts):
-        return result
+    if 2<=len(parts)<=3 and all(re.fullmatch(r'[가-힣]{1,20}',p) for p in parts):
+        return _phrase_evidence(cached,parts) or result
+    # Explicit hobby constructions only. Do not guess arbitrary syllable splits
+    # (e.g. an unknown Christmas compound must not trigger a dictionary scan).
+    if re.fullmatch(r'[가-힣]{4,10}',word):
+        for ending in ('그리기','찍기','하기','감상'):
+            if not word.endswith(ending) or len(word)<=len(ending):continue
+            parts=[word[:-len(ending)],ending]
+            composed=_phrase_evidence(cached,parts)
+            if composed:
+                return {**composed,'surface':word,'analysis':'compact_hobby_construction'}
+    return result
+
+
+def _phrase_evidence(client,parts):
     if len(parts)==2:
-        predicate=_predicate_evidence(client,parts,fresh=fresh)
+        predicate=_predicate_evidence(client,parts)
         if predicate is not None:return predicate
+        action=_action_evidence(client,parts)
+        if action is not None:return action
     units=[];choices=[]
     for part in parts:
         check_budget()
-        data=client.lookup(part,fresh=True) if fresh else client.lookup(part)
+        data=client.lookup(part)
         glosses=[]
         for entry in data.get('entries',[]):
             if entry.get('pos') and entry['pos']!='명사':continue
@@ -73,17 +92,53 @@ def lookup_evidence(client,word,*,fresh=False):
                 for variant in re.split(r'[,;/]+',gloss):
                     variant=variant.strip()
                     if variant and len(variant)<=45 and variant not in glosses:glosses.append(variant)
-        if not data.get('exact') or not glosses:return result
+        if not data.get('exact') or not glosses:return None
         units.append({'word':part,'glosses':glosses[:6],
                       'headword_codes':[e.get('target_code','') for e in data.get('entries',[])][:5]})
         choices.append(glosses[:6])
     # Vietnamese noun/modifier order differs from Korean. Token matching is
     # order independent; AI reverse review checks the actual composed meaning.
     meanings=[' '.join(values) for values in product(*choices)]
-    return {**result,'supported':True,'compound':True,'components':units,
-            'entries':[{'word':word,'glosses':meanings,'meanings':meanings,
+    return {'exact':False,'supported':True,'compound':True,'components':units,
+            'entries':[{'word':' '.join(parts),'glosses':meanings,'meanings':meanings,
                         'target_code':'','definitions':[]}],
             'reason':'component_evidence'}
+
+
+
+def _action_evidence(client,parts):
+    noun,surface=parts
+    # Productive -기 nominalization: 찍기 -> 찍다, 그리기 -> 그리다.
+    # Only regular dictionary spelling is proposed, and the API must confirm it.
+    verb=surface[:-1]+'다' if surface.endswith('기') else surface
+    if not verb.endswith('다') or len(verb)<2:return None
+    if verb=='하다':
+        data=client.lookup(noun+'하다')
+        entries=[e for e in data.get('entries',[]) if e.get('pos')=='동사' and e.get('glosses')]
+        if not data.get('exact') or not entries:return None
+        return {'exact':False,'supported':True,'compound':True,
+                'components':[{'word':noun+'하다','surface':' '.join(parts),
+                    'headword_codes':[e.get('target_code','') for e in entries]}],
+                'entries':entries,'reason':'dictionary_nominalized_lemma'}
+    units=[];choices=[]
+    for word,pos in ((noun,'명사'),(verb,'동사')):
+        data=client.lookup(word)
+        entries=[e for e in data.get('entries',[]) if e.get('pos')==pos and e.get('glosses')]
+        glosses=[]
+        for e in entries:
+            for gloss in e['glosses']:
+                for value in re.split(r'[,;/]+',gloss):
+                    value=value.strip()
+                    if value and len(value)<=45 and value not in glosses:glosses.append(value)
+        if not data.get('exact') or not glosses:return None
+        units.append({'word':word,'surface':noun if pos=='명사' else surface,
+                      'glosses':glosses[:6],'headword_codes':[e.get('target_code','') for e in entries][:5]})
+        choices.append(glosses[:6])
+    meanings=[' '.join(values) for values in product(*choices)]
+    return {'exact':False,'supported':True,'compound':True,'components':units,
+            'entries':[{'word':' '.join(parts),'glosses':meanings,'meanings':meanings,
+                        'target_code':'','definitions':[]}],
+            'reason':'noun_action_components'}
 
 
 def _particle_stem(token, pairs):
@@ -142,9 +197,25 @@ def _predicate_evidence(client,parts,*,fresh=False):
                     'target_code':'','definitions':[]}],
         'reason':'subject_predicate_components'}
 
+_HOBBY_EQUIVALENTS=(
+    ('nghe nhạc','thưởng thức âm nhạc','sự thưởng thức âm nhạc'),
+    ('xem phim','thưởng thức phim','sự thưởng thức phim'),
+    ('chụp ảnh','chụp hình','việc chụp ảnh','việc chụp hình'),
+)
+_HOBBY_TOKEN_GROUPS=[({frozenset(_tokens(phrase)) for phrase in group},_tokens(group[0]))
+                     for group in _HOBBY_EQUIVALENTS]
+
+
+def _meaning_tokens(value):
+    tokens=_tokens(value)
+    for group,canonical in _HOBBY_TOKEN_GROUPS:
+        if frozenset(tokens) in group:return canonical
+    return tokens
+
+
 def sense_overlap(vietnamese,translations):
     """Conservative lexical evidence; NOT a semantic equivalence classifier."""
-    expected=_tokens(vietnamese)
+    expected=_meaning_tokens(vietnamese)
     if not expected:return 0.0
     maximum=0.0
     for candidate in translations:
@@ -152,7 +223,7 @@ def sense_overlap(vietnamese,translations):
         candidate=re.sub(r"\([^()]*\)","",candidate)
         variants=re.split(r"[,;/]+",candidate)
         for part in variants:
-            other=_tokens(part)
+            other=_meaning_tokens(part)
             if other:
                 maximum=max(maximum,len(expected&other)/len(expected|other))
                 # Loanword and compound matching can vary; leave below-threshold

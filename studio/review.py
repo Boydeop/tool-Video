@@ -15,7 +15,7 @@ from .models import get_model
 from .keys import next_key,get_keys
 from .krdict import KRDict,KRDictError,sense_overlap,lookup_evidence
 from .quality import inspect_quiz
-from .run_limits import (check_budget, budget_active, BudgetExpired, RunCancelled)
+from .run_limits import (check_budget, BudgetExpired, RunCancelled)
 
 def _model_review(provider,prompt):
     if provider=="gemini":
@@ -76,7 +76,7 @@ def blind_review(quiz,generation_provider="",call=None):
                    p!="ollama" and get_keys(p)]
     candidates.sort(key=lambda p:(p==generation_provider,p=="ollama"))
     errors=[];failures=[]
-    for provider in (candidates[:2] if budget_active() else candidates):
+    for provider in candidates:
         check_budget()
         try:
             answer=(call or _model_review)(provider,prompt)
@@ -96,12 +96,12 @@ def blind_review(quiz,generation_provider="",call=None):
         except (BudgetExpired,RunCancelled):
             raise
         except (RuntimeError,ValueError,KeyError,TypeError) as exc:
-            errors.append(provider+": "+type(exc).__name__)
+            errors.append(provider+": "+(str(exc)[:220] if isinstance(exc,ProviderError) else type(exc).__name__))
             failures.append(exc)
     return {"available":False,"reason":"Không có AI reviewer trả kết quả hợp lệ",
             "errors":errors[:3],
             "blocked":not candidates or (bool(failures) and all(not getattr(exc,'retryable',True) for exc in failures)),
-            "retry_after":max((getattr(exc,'retry_after',0) for exc in failures),default=0)}
+            "retry_after":max((getattr(exc,'retry_after',0) or (15 if getattr(exc,'retryable',True) else 0) for exc in failures),default=0)}
 
 def verify_quiz(quiz,store,generation_provider="",mode="strict",
                 dictionary=None,reviewer=None):
@@ -194,7 +194,9 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
     blind=(reviewer or blind_review)(quiz,generation_provider)
     report["reviewer"]=blind
     if not blind.get("available"):
-        report["issues"].append("Không có xác nhận ngược từ AI reviewer")
+        errors=blind.get("errors",[])[:3]
+        report["issues"].append("AI reviewer chưa khả dụng: "+" | ".join(errors) if errors else
+                                "Không có xác nhận ngược từ AI reviewer")
         report['blocked']=blind.get('blocked',False)
         report['retry_after']=blind.get('retry_after',0)
     else:
