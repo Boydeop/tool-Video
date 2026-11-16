@@ -82,7 +82,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 <body>
 <div class="app">
 <aside class="sidebar">
- <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.6.0</small></div>
+ <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.6.1</small></div>
  <nav class="nav" aria-label="Điều hướng">
   <button data-nav="autopilot" class="active"><span class="num">1</span> Sản xuất</button>
   <button data-nav="questions"><span class="num">2</span> Kho video</button>
@@ -93,7 +93,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
  <div class="sidehelp"><b>Gợi ý bắt đầu</b><p>Thiết lập API một lần, chọn 1–100 video rồi bắt đầu. Tác vụ lỗi tự tạo lại; mở Kho video để xem kết quả. Không cần xử lý câu thừa.</p></div>
 </aside>
 <main class="content">
- <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.6.0</span></header>
+ <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.6.1</span></header>
  <div class="metrics">
   <div class="metric"><span class="name">Bản nháp đang dùng</span><strong id="statQuestions">0</strong></div>
   <div class="metric"><span class="name">Bản nháp sẵn sàng</span><strong id="statApproved">0</strong></div>
@@ -673,6 +673,9 @@ function renderQuestions(){
          "Máy cũ · Chưa kiểm chứng",
        rendered:"Đã xuất video",rejected:"Đã từ chối"};
    status.append(make("span",labels[q.status]||q.status,"status "+q.status));
+   if(q.qa_report?.dictionary_confirmed!==undefined)
+     status.append(make("small","KRDict: "+q.qa_report.dictionary_confirmed+"/4 nguyên mục từ · "+
+       (q.qa_outcome==="verified"?"QA đã đạt":"QA chưa đạt")));
    const reason=(q.qa_report?.issues||q.qa_report?.structural_issues||[]).slice(0,2).join("; ");
    if(reason)status.append(make("small","QA: "+reason));
    if(q.qa_report?.tier)status.append(make("small","Bằng chứng: "+

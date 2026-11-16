@@ -206,7 +206,8 @@ class ReplacementIntegrationTests(unittest.TestCase):
             return review.verify_quiz(candidate,store,provider,dictionary=client,reviewer=judge)
         with tempfile.TemporaryDirectory() as root:
             service=Service(root);qid=service.store.insert_question(source,'gemini')
-            with patch('studio.repair.repair_quiz',return_value=(None,None,['Không có mục từ'])), \
+            with patch('studio.dictionary_bank.repair_from_bank',return_value=(None,None,[])), \
+                 patch('studio.repair.repair_quiz',return_value=(None,None,['Không có mục từ'])), \
                  patch('studio.repair.get_keys',return_value=['fake']), \
                  patch('studio.repair.KRDict',return_value=client), \
                  patch('studio.repair._model_review',return_value=quiz().to_dict()), \

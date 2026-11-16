@@ -237,7 +237,7 @@ def sense_overlap(vietnamese,translations):
                 # matches for AI + manual review rather than guessing.
     return round(maximum,3)
 
-def parse_search(xml_bytes,expected):
+def parse_search(xml_bytes,expected=None):
     if not isinstance(xml_bytes,bytes) or len(xml_bytes)>MAX_XML_BYTES:
         raise ValueError("KRDict response too large")
     try:root=ET.fromstring(xml_bytes)
@@ -259,7 +259,7 @@ def parse_search(xml_bytes,expected):
     found=[]
     for entry in root.findall("./item"):
         word=(entry.findtext("word") or "").strip()
-        if unicodedata.normalize("NFC",word)!=unicodedata.normalize("NFC",expected.strip()):
+        if expected is not None and unicodedata.normalize("NFC",word)!=unicodedata.normalize("NFC",expected.strip()):
             continue  # search may return fuzzy matches; exact headword only
         meanings=[];glosses=[];definitions=[]
         for sense in entry.findall("./sense"):
@@ -279,17 +279,17 @@ def parse_search(xml_bytes,expected):
                       "meanings":meanings,
                       "glosses":glosses,"definitions":definitions,
                       "link":(entry.findtext("link") or "").strip()})
-    return {"exact":bool(found),"entries":found}
+    return {"exact":expected is not None and bool(found),"entries":found}
 
 class KRDict:
     def __init__(self,store,transport=None):
         self.store=store
         self.transport=transport
 
-    def _request(self,word,key):
+    def _request(self,word,key,*,whole_word=True):
         query=urllib.parse.urlencode({
             "key":key,"q":word,"translated":"y","trans_lang":"7",
-            "part":"word","num":"100"})
+            "part":"word","num":"100","method":"exact" if whole_word else "include"})
         req=urllib.request.Request(ENDPOINT+"?"+query,headers={"User-Agent":UA})
         try:
             if self.transport:
@@ -299,7 +299,7 @@ class KRDict:
                     if handle.geturl().split("?")[0]!=ENDPOINT:
                         raise RuntimeError("KRDict unexpected redirect")
                     raw=handle.read(MAX_XML_BYTES+1)
-            return parse_search(raw,word)
+            return parse_search(raw,word if whole_word else None)
         except urllib.error.HTTPError as exc:
             hint=("Kiểm tra key và quyền API." if exc.code in (401,403) else
                   "Đã chạm giới hạn yêu cầu; thử lại sau." if exc.code==429 else
@@ -319,6 +319,27 @@ class KRDict:
                 message="Không kết nối được krdict.korean.go.kr. Kiểm tra DNS, proxy hoặc tường lửa."
                 code="network_error"
             raise KRDictError(code,message) from None
+
+    def search(self,query):
+        """Retrieve official headwords; a search query is never an answer proof."""
+        query=unicodedata.normalize('NFC',str(query).strip())
+        if not re.fullmatch(r'[가-힣 ]{1,20}',query):raise ValueError('Từ tra KRDict cần là tiếng Hàn ngắn')
+        check_budget()
+        keys=get_keys('krdict')
+        if not keys:raise KRDictError('key_missing','Chưa có KRDict API key',retryable=False)
+        data=self._request(query,keys[0],whole_word=False)
+        entries=[entry for entry in data.get('entries',[]) if entry.get('word') and
+                 entry.get('target_code') and entry.get('glosses')]
+        # Cache only actual returned headwords under their own spelling. Never
+        # turn the query itself into an exact hit or synthesize headword IDs.
+        by_word={}
+        for entry in entries:by_word.setdefault(entry['word'],[]).append(entry)
+        for word,rows in by_word.items():
+            previous=self.store.krdict_cache_get(word)
+            old=previous.get('entries',[]) if isinstance(previous,dict) and previous.get('cache_version')==CACHE_VERSION else []
+            merged={str(row['target_code']):row for row in [*old,*rows] if row.get('target_code') and row.get('word')==word}
+            self.store.krdict_cache_put(word,{'exact':True,'entries':list(merged.values()),'cache_version':CACHE_VERSION})
+        return {'entries':entries,'source':'KRDict','query':query}
 
     def lookup(self,word,*,fresh=False):
         word=unicodedata.normalize("NFC",str(word).strip())

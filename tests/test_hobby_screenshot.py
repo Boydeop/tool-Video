@@ -85,7 +85,7 @@ class ReviewerOutageTests(unittest.TestCase):
         def call(provider,prompt):
             calls.append(provider)
             if len(calls)<3:raise ProviderError('temporary outage',retry_after=30)
-            return {'selected':q.correct,'back_translation':q.short_clue,'ambiguous':False}
+            return {'selected':q.correct,'back_translation':q.short_clue,'ambiguous':False,'topic_fit':True}
         with patch('studio.review.get_keys',return_value=['fake']),topic_budget():
             result=blind_review(q,call=call)
         self.assertTrue(result['available']);self.assertEqual(len(calls),3)

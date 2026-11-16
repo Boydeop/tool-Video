@@ -665,3 +665,11 @@ Gemini 503 thử lần lượt các key còn lại trong pool cho tạo câu/QA/
 hiển thị số key đang thử. Giữ giới hạn thời gian, Retry-After và nghỉ toàn
 provider khi 429. Câu cũ thiếu QA v5 cần kiểm chứng lại; video đã xuất giữ nguyên.
 Xem [quy tắc và kiểm chứng v1.6.0](QA_V160.md).
+
+## v1.6.1 · Lấy mục từ KRDict trước khi chọn câu thay thế
+
+Luồng sửa lấy danh sách mục từ và nghĩa Việt thật từ KRDict, rồi cho AI chọn
+mã trong danh sách để tạo câu thay thế cùng chủ đề. Sửa lỗi `Invalid blind
+review fields` bằng schema, mã lựa chọn A–D và thử lại lỗi định dạng có giới hạn.
+Hiển thị riêng số câu đủ bốn mục từ và số câu đạt QA; giữ kiểm tra nghiêm ngặt,
+lịch sử và bộ nhớ chống trùng. Xem [nguyên nhân và kiểm chứng](QA_V161.md).

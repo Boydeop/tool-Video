@@ -38,6 +38,7 @@ class Service:
         self.root=Path(root).resolve()
         self.root.mkdir(parents=True,exist_ok=True)
         self._media_lock=threading.RLock()
+        self._dictionary_banks={}
         os.environ["THSE_KEYS_FILE"]=str(self.root/"keys.local.json")
         os.environ["THSE_MODELS_FILE"]=str(self.root/"models.local.json")
         os.environ["THSE_FACEBOOK_PATH"]=str(self.root/"facebook.local.json")
@@ -117,6 +118,7 @@ class Service:
                 "tier":report.get("tier","needs_review"),
                 "issues":report.get("issues",[]),
                 "dictionary":report.get("dictionary",{}),
+                "dictionary_confirmed":report.get("dictionary_confirmed",0),
                 "reviewer":report.get("reviewer",{})}
 
     @media_operation
@@ -140,6 +142,7 @@ class Service:
     @media_operation
     def repair_generated(self,qid,initial=None,progress=None):
         from .repair import repair_quiz,replace_in_topic
+        from .dictionary_bank import repair_from_bank
         from .run_limits import topic_budget,budget_active
         from contextlib import nullcontext
         before=self.store.repair_source(qid)
@@ -149,9 +152,23 @@ class Service:
                 return {**initial,'repaired':False}
             if initial.get('blocked') or initial.get('retry_after'):
                 return {**initial,'repaired':False,'repair_issues':['Chờ dịch vụ kiểm chứng phục hồi; giữ nguyên câu và đáp án.']}
-            candidate,report,failures=repair_quiz(before,self.store,
-                self.store.get_question_provider(qid),progress=progress,source_id=qid)
-            if candidate is None and not ((report or {}).get('blocked') or (report or {}).get('retry_after')):
+            if initial.get('reviewer',{}).get('failure_kind')=='format' and initial.get('dictionary_confirmed')==4:
+                return {**initial,'repaired':False,'repair_issues':['KRDict đã có đủ 4 mục từ; AI reviewer cần trả đúng định dạng, giữ nguyên câu.']}
+            bank_key=(before.topic,before.level)
+            if bank_key not in self._dictionary_banks:
+                if len(self._dictionary_banks)>=8:self._dictionary_banks.pop(next(iter(self._dictionary_banks)))
+                self._dictionary_banks[bank_key]={'entries':{},'loaded':False}
+            candidate,report,failures=repair_from_bank(before,self.store,
+                self.store.get_question_provider(qid),progress=progress,source_id=qid,
+                bank_state=self._dictionary_banks[bank_key])
+            def held(report):
+                return bool(report and (report.get('blocked') or report.get('retry_after') or
+                    report.get('reviewer',{}).get('failure_kind')=='format'))
+            if candidate is None and not held(report):
+                candidate,report,more=repair_quiz(before,self.store,
+                    self.store.get_question_provider(qid),progress=progress,source_id=qid)
+                failures.extend(more)
+            if candidate is None and not held(report):
                 candidate,report,replacement_failures=replace_in_topic(before,self.store,
                     self.store.get_question_provider(qid),progress=progress,source_id=qid)
                 failures.extend(replacement_failures)
@@ -161,7 +178,7 @@ class Service:
                         'retry_after':(report or {}).get('retry_after',initial.get('retry_after',0))}
             if report.get("replacement"):self.store.apply_topic_replacement(qid,before,candidate,report)
             else:self.store.apply_repair(qid,before,candidate,report)
-            return {'id':qid,'status':'verified','repaired':True,'replaced':bool(report.get('replacement')),
+            return {'id':qid,'status':'verified','repaired':True,'replaced':bool(report.get('replacement')),'dictionary_confirmed':4,
                     'changes':report['repair']['changes'],'issues':[],
                     'tier':report['tier']}
 

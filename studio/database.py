@@ -496,6 +496,15 @@ class Store(BatchStore, QuestionMemory):
                 raise ValueError('Chỉ sửa câu chưa xuất, chưa bị loại; không sửa MP4 đã dựng.')
             return Quiz.parse(json.loads(row['payload']))
 
+    def remembered_dictionary_answers(self,words,source_id=''):
+        from .memory import canonical,digest
+        by_word={word:digest(canonical(word,'answer')) for word in words}
+        if not by_word:return set()
+        with self.db() as c:
+            marks=','.join('?' for _ in by_word)
+            used={row['digest'] for row in c.execute("SELECT digest FROM question_memory WHERE kind='answer' AND digest IN ("+marks+") AND source_id!=?",[*by_word.values(),source_id])}
+        return {word for word,key in by_word.items() if key in used}
+
     def check_replacement_candidate(self,source_id,quiz):
         quiz.validate()
         with self.db() as c:self._check_memory(c,quiz,source_id=source_id)

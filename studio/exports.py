@@ -101,7 +101,7 @@ class ExportQueue:
             verified=sum(row['status']=='verified' for row in results)
             self.service.store.update_production_run(jid,'completed',results)
             self._update(jid,status='completed',percent=100,results=results,
-                         phase=f'Đã sửa/thay {repaired}/{len(ids)} câu · {sum(bool(r.get("replaced")) for r in results)} câu thay trong chủ đề · {verified} câu đạt QA')
+                         phase=f'KRDict đủ 4 mục từ: {sum(r.get("dictionary_confirmed")==4 for r in results)}/{len(ids)} câu · QA đạt {verified}/{len(ids)} · đã sửa/thay {repaired} câu')
         except Exception as exc:
             self.service.store.update_production_run(jid,'failed',results,type(exc).__name__)
             self._update(jid,status='failed',error=type(exc).__name__,results=results)

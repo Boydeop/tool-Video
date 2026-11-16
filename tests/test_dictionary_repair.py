@@ -123,6 +123,8 @@ class RepairEngineTests(unittest.TestCase):
 
 class RepairPersistenceTests(unittest.TestCase):
     def setUp(self):
+        bank=patch('studio.dictionary_bank.repair_from_bank',return_value=(None,None,[]))
+        bank.start();self.addCleanup(bank.stop)
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.service=Service(self.temp.name)
         self.qid=self.service.store.insert_question(original(),provider='gemini',batch_id='batch')
