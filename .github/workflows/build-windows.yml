@@ -70,7 +70,7 @@ jobs:
               if ($process.HasExited) { throw 'Packaged Studio process terminated before ready' }
               try {
                 $health = Invoke-RestMethod -Uri "http://127.0.0.1:8765/health" -TimeoutSec 3 -NoProxy
-                if ($health.status -eq 'ok' -and $health.app -eq 'TiengHanSoEasyStudio' -and $health.version -eq 'v1.5.1') {
+                if ($health.status -eq 'ok' -and $health.app -eq 'TiengHanSoEasyStudio' -and $health.version -eq 'v1.6.0') {
                   $ready = $true
                   break
                 }
@@ -176,7 +176,7 @@ jobs:
             }
             $invalidPost = Invoke-WebRequest -Uri "http://127.0.0.1:8765/api/platforms/schedule" -Method Post -ContentType 'application/json' -Body '{}' -NoProxy -SkipHttpErrorCheck
             if ($invalidPost.StatusCode -ne 400) { throw 'Unified schedule validation missing' }
-            Write-Output "Studio v1.5.1 permanent memory backup/merge and HTTP smoke passed"
+            Write-Output "Studio v1.6.0 permanent memory backup/merge and HTTP smoke passed"
           } catch {
             $logPath = Join-Path $env:LOCALAPPDATA "TiengHanSoEasyStudio\studio.log"
             if (Test-Path $logPath) { Get-Content $logPath -Tail 100 }
@@ -197,18 +197,19 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.5.1-build.${{ github.run_number }}
-          name: Tiếng Hàn So Easy Studio v1.5.1 (build ${{ github.run_number }})
+          tag_name: v1.6.0-build.${{ github.run_number }}
+          name: Tiếng Hàn So Easy Studio v1.6.0 (build ${{ github.run_number }})
           target_commitish: ${{ github.sha }}
           files: dist/TiengHanSoEasyStudio.exe
           make_latest: true
           generate_release_notes: false
           body: |
-            v1.5.1: Sửa QA cho cụm sở thích 사진찍기 / 그림그리기 / 음악감상 với bằng chứng thành phần KRDict + AI hỏi ngược.
-            Không đổi từ đúng khi reviewer mất kết nối; thử provider dự phòng thứ ba trong ngân sách thời gian.
-            Sửa nghĩa hiển thị gần khớp từ KRDict trước khi đề xuất thay từ Hàn.
-            Sửa nút Bắt đầu sản xuất bị khóa sau tác vụ tự sửa câu.
-            Gemini HTTP 503 vẫn phụ thuộc dịch vụ; bản cập nhật không bảo đảm API luôn sẵn sàng.
-            Xem HOTFIX_V151.md để biết phạm vi và giới hạn kiểm chứng.
+            v1.6.0: Bắt buộc cả 4 đáp án là nguyên mục từ KRDict có mã mục từ và nghĩa Việt.
+            Bỏ duyệt bằng ghép nghĩa hoặc AI-only; kiểm tra lại bằng chứng trước khi duyệt tay/xuất video.
+            Không tìm được từ đúng nghĩa: tìm câu thay thế cùng chủ đề, xác minh KRDict + AI hỏi ngược, lưu lịch sử.
+            Gemini HTTP 503 thử lần lượt các key còn lại trong pool cho tạo câu/QA/sửa/SEO; hiển thị số key đang thử.
+            Tôn trọng Retry-After và ngân sách thời gian. HTTP 429 nghỉ toàn provider, không xoay key để né quota.
+            Câu cũ chưa có QA v5 về bản nháp; giữ video hoàn tất, lịch sử và bộ nhớ chống trùng.
+            Xem QA_V160.md để biết quy tắc và giới hạn.
             Windows standalone EXE, unit-tested and packaged HTTP smoke-tested before release.
             Close the previous EXE and back up LOCALAPPDATA/TiengHanSoEasyStudio before upgrading.

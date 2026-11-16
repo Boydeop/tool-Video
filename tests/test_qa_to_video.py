@@ -2,6 +2,7 @@
 Exercise actual UI functions in Node and the HTTP approval/export pipeline.
 """
 from dataclasses import replace
+from qa_fixtures import grant_qa,report_for
 import json
 from pathlib import Path
 import shutil
@@ -39,6 +40,14 @@ const nodes={};const $=id=>nodes[id]??=(
 const document={querySelector:()=>({value:'hanji'})};
 const state={selection:new Set(),questions:[],trash:[],busy:false,activeRender:false,questionPage:1};
 const calls=[];
+function certify(q){
+ q.correct='물';q.wrong1='차';q.wrong2='우유';q.wrong3='맥주';
+ q.qa_report={version:5,mode:'strict',outcome:'verified',marker:'evidence',
+  dictionary:Object.fromEntries([q.correct,q.wrong1,q.wrong2,q.wrong3].map(w=>[w,{exact:true,translations:['fixture'],headword_codes:['fixture']}])) ,
+  reviewer:{available:true,topic_fit:true,selected:q.correct,ambiguous:false,conflicting_choices:[]}};
+ return q;
+}
+
 function notice(){} function showPanel(){} function renderQuestions(){}
 async function saveProduction(){return true} async function loadStatus(){}
 async function run(fn){return await fn()}
@@ -57,7 +66,7 @@ async function api(url,body){
 '''
         assertions=r'''
 (async()=>{
- for(let n=0;n<8;n++)state.questions.push({id:'q'+n,status:'auto_approved',batch_id:'batch',qa_report:{marker:'evidence'}});
+ for(let n=0;n<8;n++)state.questions.push(certify({id:'q'+n,status:'auto_approved',batch_id:'batch'}));
  $('questionFilter').value='auto_approved';$('batchFilter').value='all';
  state.selection=new Set(state.questions.map(q=>q.id));
  updateSelection();
@@ -79,7 +88,7 @@ async function api(url,body){
   {id:'machine',status:'auto_approved',batch_id:'A'},
   {id:'draft',status:'draft',batch_id:'A'},
   {id:'old',status:'rendered',batch_id:'A'},
-  {id:'elsewhere',status:'auto_approved',batch_id:'B'}];
+  {id:'elsewhere',status:'auto_approved',batch_id:'B'}].map(certify);
  $('batchFilter').value='A';selectReadyQuestions();
  assert.deepEqual([...state.selection],['human','machine']);
  state.selection=new Set(['human','machine','draft']);
@@ -103,7 +112,7 @@ class ApprovalExportHTTPTests(unittest.TestCase):
                 q=Quiz(topic='Từ vựng',question='Bài '+str(n),correct=word,
                        wrong1='봄',wrong2='여름',wrong3='가을')
                 ids.append(service.store.insert_question(q,provider='gemini'))
-                service.store.set_question_qa(ids[-1],'verified',{'tier':'dictionary+blind_ai','marker':'evidence'})
+                grant_qa(service.store,[ids[-1]],marker='evidence')
             server=create_server(service,port=0)
             thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
             base='http://127.0.0.1:'+str(server.server_address[1])

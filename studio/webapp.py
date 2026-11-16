@@ -323,7 +323,7 @@ def create_server(service, host="127.0.0.1", port=8765):
                     if not isinstance(ids, list) or not ids or len(ids) > 300:
                         raise ValueError("Vui lòng chọn câu hỏi trước.")
                     status = str(raw.get("status", "approved"))
-                    service.store.approve(ids, status=status)
+                    service.approve_questions(ids, status=status)
                     result = {"updated": len(ids), "status": status}
                 elif route == "/api/voice/test":
                     language=str(raw.get("language",""))

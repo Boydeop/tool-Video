@@ -37,7 +37,7 @@ def health_quiz():
 
 
 def reviewer(q,provider):
-    return {'available':True,'selected':q.correct,'back_translation':q.short_clue,
+    return {'topic_fit':True,'available':True,'selected':q.correct,'back_translation':q.short_clue,
             'ambiguous':False,'conflicting_choices':[]}
 
 
@@ -58,15 +58,15 @@ class HealthPhraseTests(unittest.TestCase):
         self.assertEqual(result['entries'][0]['glosses'],['bụng đau'])
         self.assertTrue(all(row['headword_codes'] for row in result['components']))
 
-    def test_screenshot_phrases_pass_only_with_dictionary_and_blind_review(self):
+    def test_screenshot_phrases_require_whole_headwords(self):
         q=health_quiz();client=Mock(lookup=Mock(side_effect=dictionary))
         report=verify_quiz(q,Mock(),dictionary=client,reviewer=reviewer)
-        self.assertEqual(report['outcome'],'verified',report['issues'])
-        self.assertEqual(report['tier'],'dictionary_components+blind_ai')
+        self.assertEqual(report['outcome'],'needs_review',report['issues'])
+        self.assertEqual(report['tier'],'needs_review')
         unavailable=Mock(return_value={'available':False})
         result=verify_quiz(q,Mock(),dictionary=client,reviewer=unavailable)
         self.assertEqual(result['outcome'],'needs_review')
-        unavailable.assert_called_once()
+        unavailable.assert_not_called()
 
     def test_same_meaning_distractor_still_fails(self):
         q=replace(health_quiz(),wrong3='기침하다',wrong3_meaning='Ho')
@@ -101,10 +101,10 @@ class GenerationOutageTests(unittest.TestCase):
         response={'candidates':[{'content':{'parts':[{'text':json.dumps([q])}]}}]}
         with patch('studio.ai.next_key',return_value='synthetic'),patch('studio.ai.get_model',return_value='test'),patch('studio.ai.post',return_value=response) as call:
             with generation_guidance('strict',['Không có mục từ cho đáp án nhiễu']):
-                generate('gemini','Cơ thể','TOPIK 1',1,[])
+                generate('gemini',q['topic'],'TOPIK 1',1,[])
             prompt=call.call_args.args[2]['contents'][0]['parts'][0]['text']
             self.assertIn('QA STRICT',prompt);self.assertIn('Không có mục từ',prompt)
-            generate('gemini','Cơ thể','TOPIK 1',1,[])
+            generate('gemini',q['topic'],'TOPIK 1',1,[])
             prompt=call.call_args.args[2]['contents'][0]['parts'][0]['text']
             self.assertNotIn('QA STRICT',prompt)
 
@@ -115,7 +115,7 @@ class GenerationOutageTests(unittest.TestCase):
         self.assertEqual(provider,'openrouter');self.assertEqual(len(rows),1)
         self.assertEqual([item.args[0] for item in call.call_args_list],['gemini','groq','openrouter'])
 
-    def test_503_honors_retry_after_and_does_not_rotate_keys(self):
+    def test_503_without_configured_key_header_honors_retry_after(self):
         error=urllib.error.HTTPError('https://example.invalid',503,'Unavailable',{'Retry-After':'90'},None)
         with patch('studio.ai.urllib.request.urlopen',side_effect=error) as request,patch('studio.ai.rate_limited') as cooldown:
             with self.assertRaises(ProviderError) as caught:post('gemini','https://example.invalid',{}, {})

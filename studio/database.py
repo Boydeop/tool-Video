@@ -162,6 +162,19 @@ class Store(BatchStore, QuestionMemory):
                             'Cần kiểm chứng lại nghĩa hiển thị cho cả bốn đáp án (QA v4).']}),utcnow()))
                 c.execute("INSERT INTO app_migrations VALUES('display_meanings_qa_v4')")
 
+            from .qa_policy import certified
+            if not c.execute("SELECT 1 FROM app_migrations WHERE name='krdict_exact_v5'").fetchone():
+                for row in c.execute("""SELECT q.id,q.payload,qa.report_json FROM questions q
+                    LEFT JOIN question_qa qa ON qa.question_id=q.id
+                    WHERE q.status IN ('approved','auto_approved')""").fetchall():
+                    try:report=json.loads(row['report_json'] or '{}')
+                    except ValueError:report={}
+                    if not certified(Quiz.parse(json.loads(row['payload'])),report):
+                        c.execute("UPDATE questions SET status='draft' WHERE id=?",(row['id'],))
+                        c.execute("INSERT OR REPLACE INTO question_qa VALUES(?,'stale',?,?)",
+                            (row['id'],json.dumps({'issues':['Cần kiểm chứng nguyên mục từ KRDict cho cả 4 đáp án (QA v5).']}),utcnow()))
+                c.execute("INSERT INTO app_migrations VALUES('krdict_exact_v5')")
+
     def krdict_cache_get(self,query,max_age_seconds=2592000):
         import time
         with self.db() as c:
@@ -483,11 +496,21 @@ class Store(BatchStore, QuestionMemory):
                 raise ValueError('Chỉ sửa câu chưa xuất, chưa bị loại; không sửa MP4 đã dựng.')
             return Quiz.parse(json.loads(row['payload']))
 
-    def apply_repair(self,qid,before,after,report):
+    def check_replacement_candidate(self,source_id,quiz):
+        quiz.validate()
+        with self.db() as c:self._check_memory(c,quiz,source_id=source_id)
+
+    def apply_repair(self,qid,before,after,report,*,_topic_replacement=False):
         after.validate()
         if report.get('outcome')!='verified' or report.get('mode')!='strict':
             raise ValueError('Bản sửa chưa vượt qua kiểm chứng KRDict + AI strict')
-        if (before.topic,before.question,before.clue,before.level)!=(after.topic,after.question,after.clue,after.level):
+        if _topic_replacement:
+            from .qa_policy import certified
+            if (not report.get('replacement') or not certified(after,report)
+                or report.get('reviewer',{}).get('topic_fit') is not True
+                or (before.topic,before.level)!=(after.topic,after.level)):
+                raise ValueError('Câu thay thế chưa có đủ bằng chứng KRDict và chủ đề')
+        elif (before.topic,before.question,before.clue,before.level)!=(after.topic,after.question,after.clue,after.level):
             raise ValueError('Không đổi câu hỏi khi sửa đáp án')
         with self._lock,self.db(immediate=True) as c:
             row=c.execute('SELECT payload,status FROM questions WHERE trashed=0 AND id=?',(qid,)).fetchone()
@@ -495,6 +518,9 @@ class Store(BatchStore, QuestionMemory):
                 raise ValueError('Câu hỏi đã xuất hoặc đã đổi trạng thái; không ghi đè')
             if Quiz.parse(json.loads(row['payload']))!=before:
                 raise ValueError('Câu đã được chỉnh sửa trong lúc tra từ; không ghi đè')
+            qhash=fingerprint(after.question)
+            if c.execute('SELECT 1 FROM questions WHERE question_hash=? AND id!=?',(qhash,qid)).fetchone():
+                raise DuplicateQuestion('Câu thay thế đã có trong ngân hàng')
             ahash=fingerprint(after.correct)
             if c.execute('SELECT 1 FROM questions WHERE answer_hash=? AND id!=?',(ahash,qid)).fetchone():
                 raise DuplicateQuestion('Đáp án sửa trùng câu đã lưu; giữ nguyên câu cũ')
@@ -505,9 +531,12 @@ class Store(BatchStore, QuestionMemory):
             qa=json.dumps(report,ensure_ascii=False)
             c.execute('INSERT INTO question_revisions(question_id,before_json,after_json,report_json,created_at) VALUES(?,?,?,?,?)',
                       (qid,old,new,qa,utcnow()))
-            c.execute("UPDATE questions SET correct=?,answer_hash=?,payload=?,status='auto_approved' WHERE id=?",
-                      (after.correct,ahash,new,qid))
+            c.execute("UPDATE questions SET question=?,question_hash=?,correct=?,answer_hash=?,payload=?,status='auto_approved' WHERE id=?",
+                      (after.question,qhash,after.correct,ahash,new,qid))
             c.execute('INSERT OR REPLACE INTO question_qa VALUES(?,?,?,?)',(qid,'verified',qa,utcnow()))
+
+    def apply_topic_replacement(self,qid,before,after,report):
+        return self.apply_repair(qid,before,after,report,_topic_replacement=True)
 
     def repair_history(self,qid):
         with self.db() as c:

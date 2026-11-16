@@ -224,6 +224,21 @@ def next_key(provider):
         return keys[index]
 
 
+def request_key_order(provider,first):
+    """Snapshot each configured key once, continuing after the selected key."""
+    with _LOCK:
+        keys=get_keys(provider)
+        if first not in keys:return [first]
+        index=keys.index(first)
+        return keys[index:]+keys[:index]
+
+
+def mark_key_used(provider,key):
+    with _LOCK:
+        keys=get_keys(provider)
+        if key in keys:_CURSOR[provider]=(keys.index(key)+1)%len(keys)
+
+
 def rate_limited(provider, seconds=120):
     with _LOCK:
         _BLOCKED_UNTIL[provider] = max(_BLOCKED_UNTIL.get(provider, 0), time.monotonic() + seconds)

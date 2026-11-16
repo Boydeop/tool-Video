@@ -12,7 +12,7 @@ from contextlib import contextmanager
 
 _PRODUCTION=ContextVar("production_task",default=None)
 
-from .ai import fallback
+from .ai import fallback,ai_progress
 from .database import DuplicateQuestion,Store
 from .facebook import credentials
 from .production import Production
@@ -139,24 +139,29 @@ class Service:
 
     @media_operation
     def repair_generated(self,qid,initial=None,progress=None):
-        from .repair import repair_quiz
+        from .repair import repair_quiz,replace_in_topic
         from .run_limits import topic_budget,budget_active
         from contextlib import nullcontext
         before=self.store.repair_source(qid)
-        with (nullcontext() if budget_active() else topic_budget(120)):
+        with (nullcontext() if budget_active() else topic_budget(120)),ai_progress(progress):
             initial=initial or self.verify_generated(qid,mode='strict')
             if initial['status']=='verified':
                 return {**initial,'repaired':False}
             if initial.get('blocked') or initial.get('retry_after'):
                 return {**initial,'repaired':False,'repair_issues':['Chờ dịch vụ kiểm chứng phục hồi; giữ nguyên câu và đáp án.']}
             candidate,report,failures=repair_quiz(before,self.store,
-                self.store.get_question_provider(qid),progress=progress)
+                self.store.get_question_provider(qid),progress=progress,source_id=qid)
+            if candidate is None and not ((report or {}).get('blocked') or (report or {}).get('retry_after')):
+                candidate,report,replacement_failures=replace_in_topic(before,self.store,
+                    self.store.get_question_provider(qid),progress=progress,source_id=qid)
+                failures.extend(replacement_failures)
             if candidate is None:
                 return {**initial,'repaired':False,'repair_issues':failures,
                         'blocked':(report or {}).get('blocked',initial.get('blocked',False)),
                         'retry_after':(report or {}).get('retry_after',initial.get('retry_after',0))}
-            self.store.apply_repair(qid,before,candidate,report)
-            return {'id':qid,'status':'verified','repaired':True,
+            if report.get("replacement"):self.store.apply_topic_replacement(qid,before,candidate,report)
+            else:self.store.apply_repair(qid,before,candidate,report)
+            return {'id':qid,'status':'verified','repaired':True,'replaced':bool(report.get('replacement')),
                     'changes':report['repair']['changes'],'issues':[],
                     'tier':report['tier']}
 
@@ -250,11 +255,24 @@ class Service:
                 results["errors"].append({"video":name,"reason":type(exc).__name__})
         return results
 
+    def require_dictionary_qa(self,ids):
+        from .qa_policy import certified
+        questions=self.store.get_questions(ids)
+        for qid,quiz in zip(ids,questions):
+            if not certified(quiz,self.store.get_question_qa(qid)['report']):
+                raise ValueError("Cần kiểm chứng KRDict v5 cho cả bốn đáp án trước khi duyệt/xuất. Bấm Kiểm chứng & thay từ KRDict.")
+        return questions
+
+    def approve_questions(self,ids,status="approved"):
+        if status=="approved":self.require_dictionary_qa(ids)
+        return self.store.approve(ids,status=status)
+
     @media_operation
     def render_approved(self,ids,theme="hanji",filename=None,width=None,
                         with_voice=False,voice_engine="auto",progress=None):
         questions=self.store.get_questions(ids,status=("approved","auto_approved"))
         if not questions:raise ValueError("Chọn ít nhất một câu đã duyệt.")
+        self.require_dictionary_qa(ids)
         config=self.production.settings()
         task=_PRODUCTION.get()
         if task:

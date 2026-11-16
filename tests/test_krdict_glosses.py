@@ -20,7 +20,7 @@ def seasons():
 
 
 def entry(word,gloss,definition):
-    xml=f'''<channel><total>1</total><item><word>{word}</word>
+    xml=f'''<channel><total>1</total><item><target_code>{sum(ord(c) for c in word)}</target_code><word>{word}</word>
       <sense><translation><trans_lang>베트남어</trans_lang>
       <trans_word>{gloss}</trans_word><trans_dfn>{definition}</trans_dfn>
       </translation></sense></item></channel>'''.encode()
@@ -28,7 +28,7 @@ def entry(word,gloss,definition):
 
 
 def reviewer(q,provider):
-    return {'available':True,'selected':q.correct,'back_translation':q.clue,
+    return {'topic_fit':True,'available':True,'selected':q.correct,'back_translation':q.clue,
             'ambiguous':False,'conflicting_choices':[]}
 
 

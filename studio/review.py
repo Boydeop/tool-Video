@@ -13,7 +13,7 @@ import re
 from .ai import post,ProviderError,response_text
 from .models import get_model
 from .keys import next_key,get_keys
-from .krdict import KRDict,KRDictError,sense_overlap,lookup_evidence
+from .krdict import KRDict,KRDictError,sense_overlap,lookup_headword
 from .quality import inspect_quiz
 from .run_limits import (check_budget, BudgetExpired, RunCancelled)
 
@@ -65,7 +65,7 @@ def blind_review(quiz,generation_provider="",call=None):
         "Trả JSON object với trường selected (giữ nguyên ký tự đáp án), "
         "back_translation (dịch tự nhiên đáp án đã chọn về tiếng Việt), "
         "ambiguous (boolean), conflicting_choices (array các đáp án có cùng nghĩa), "
-        "reason (tối đa 100 ký tự). Tuyệt đối không mặc định đáp án đầu tiên. "
+        "reason (tối đa 100 ký tự), topic_fit (boolean: câu hỏi và cả bốn lựa chọn thuộc context_type). Tuyệt đối không mặc định đáp án đầu tiên. "
         "Dữ liệu: "+json.dumps({
           "prompt_vi":quiz.short_clue,
           "level":quiz.level,
@@ -90,7 +90,7 @@ def blind_review(quiz,generation_provider="",call=None):
                     "different_provider":provider!=generation_provider,
                     "selected":selected,"back_translation":
                     str(answer.get("back_translation",""))[:110],
-                    "ambiguous":ambiguous,
+                    "ambiguous":ambiguous,"topic_fit":answer.get("topic_fit") is True,
                     "conflicting_choices":[x for x in other if x in options][:4],
                     "reason":str(answer.get("reason",""))[:160]}
         except (BudgetExpired,RunCancelled):
@@ -106,8 +106,9 @@ def blind_review(quiz,generation_provider="",call=None):
 def verify_quiz(quiz,store,generation_provider="",mode="strict",
                 dictionary=None,reviewer=None):
     if mode not in ("strict","assisted"):raise ValueError("Invalid QA mode")
+    mode="strict"  # Legacy assisted settings cannot bypass dictionary evidence.
     problems=inspect_quiz(quiz)
-    report={"version":4,"mode":mode,"outcome":"needs_review",
+    report={"version":5,"mode":mode,"outcome":"needs_review",
             "structural_issues":problems,"dictionary":{},"reviewer":{},
             "issues":[],"provenance":["KRDict headword and Vietnamese senses",
                                      "blind AI reverse choice"]}
@@ -124,13 +125,13 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
             entries[word]=dict(dictionary_failure)
             continue
         try:
-            data=lookup_evidence(dict_client,word)
+            data=lookup_headword(dict_client,word)
             exact=data.get("exact",False)
             # Definitions can mention other choices: spring is described as
             # the season after winter. Only translated headword glosses count
             # as evidence of equivalence, never words inside definitions.
             meanings=[v for entry in data.get("entries",[])
-                      for v in entry.get("glosses",entry.get("meanings",[]))]
+                      for v in entry.get("glosses",[])]
             entries[word]={"exact":exact,"supported":data.get("supported",exact),
                            "compound":data.get("compound",False),"components":data.get("components",[]),
                            "translations":meanings[:12],
@@ -139,6 +140,9 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
                            "headword_codes":[x.get("target_code","") for x in data.get("entries",[])][:5],
                            "match_to_clue":sense_overlap(quiz.short_clue,meanings),
                            "source":"KRDict","reason":data.get("reason","")}
+            if exact and not any(entries[word]["headword_codes"]):
+                entries[word]["exact"]=entries[word]["supported"]=False
+                entries[word]["reason"]="missing_headword_code"
             if data.get("reason")=="key_missing":
                 dictionary_failure=entries[word]
                 if mode=='strict':report['blocked']=True
@@ -200,6 +204,8 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
         report['blocked']=blind.get('blocked',False)
         report['retry_after']=blind.get('retry_after',0)
     else:
+        if blind.get("topic_fit") is not True:
+            report["issues"].append("AI chưa xác nhận câu và các đáp án thuộc đúng chủ đề")
         if blind.get("ambiguous") or blind.get("conflicting_choices"):
             report["issues"].append("AI phát hiện câu hỏi mơ hồ hoặc nhiều đáp án")
         if blind.get("selected")!=quiz.correct:
@@ -212,17 +218,15 @@ def verify_quiz(quiz,store,generation_provider="",mode="strict",
             report["issues"].append("Dịch ngược chưa khớp cụm hỏi")
     strict_dict_ok=(answer.get("supported",answer["exact"]) and answer["translations"] and
                     answer["match_to_clue"]>=0.6)
-    ai_ok=(blind.get("available") and not blind.get("ambiguous") and
+    ai_ok=(blind.get("available") and blind.get("topic_fit") is True and not blind.get("ambiguous") and
            not blind.get("conflicting_choices") and
            blind.get("selected")==quiz.correct and
            report.get("reverse_overlap",0)>=0.55)
     unsafe=any("Đáp án nhiễu" in x for x in report["issues"])
-    if ai_ok and not unsafe and not detail_issues and (strict_dict_ok or mode=="assisted"):
-        # A phrase not covered by KRDict can be AI-assisted, but no false claim
-        # that the dictionary verified its exact lexical meaning.
+    if ai_ok and not unsafe and not detail_issues and strict_dict_ok:
+        # No AI-only or component-based exception to the headword requirement.
         report["outcome"]="verified"
-        report["tier"]=("dictionary_components+blind_ai" if any(item.get("compound") for item in entries.values())
-                        else "dictionary+blind_ai") if strict_dict_ok else "blind_ai_only"
+        report["tier"]="dictionary+blind_ai"
         report["issues"]=[i for i in report["issues"]
                           if not i.startswith("KRDict") and not i.startswith("Nghĩa KRDict")]
     else:

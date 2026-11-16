@@ -1,5 +1,6 @@
 """History retention, migration, portable backups and concurrent admission."""
 from concurrent.futures import ThreadPoolExecutor
+from qa_fixtures import grant_qa,report_for
 from contextlib import closing
 from dataclasses import replace
 import json
@@ -197,7 +198,7 @@ class ContentConsistencyTests(unittest.TestCase):
     def test_failed_metadata_and_late_encoder_callback_leave_no_orphan(self):
         for failure in ('metadata','encoder_callback'):
             with self.subTest(failure=failure),tempfile.TemporaryDirectory() as td:
-                service=Service(td);store=service.store;qid=store.insert_question(quiz());store.approve([qid])
+                service=Service(td);store=service.store;qid=store.insert_question(quiz());store.approve([qid]);grant_qa(store,[qid])
                 def render(questions,path,**kwargs):
                     path.parent.mkdir(parents=True,exist_ok=True)
                     path.write_bytes(b'incomplete result')

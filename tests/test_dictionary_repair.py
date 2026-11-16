@@ -40,7 +40,7 @@ def lookup(word,**kwargs):
 
 
 def reviewer(q,provider):
-    return {'available':True,'selected':q.correct,'back_translation':q.short_clue,
+    return {'topic_fit':True,'available':True,'selected':q.correct,'back_translation':q.short_clue,
             'ambiguous':False,'conflicting_choices':[]}
 
 
@@ -75,7 +75,7 @@ class RepairEngineTests(unittest.TestCase):
         source=replace(original(),correct='학교',question='Nước',clue='Nước',meaning='Nước')
         proposed=replace(source,correct='물',romanization='mul')
         def words(word,**kwargs):
-            return {'exact':True,'entries':[{'glosses':['nước'],'meanings':['nước']}]} if word=='물' else lookup(word)
+            return {'exact':True,'entries':[{'word':'물','target_code':'fixture-water','glosses':['nước'],'meanings':['nước']}]} if word=='물' else lookup(word)
         with patch('studio.repair.get_keys',return_value=['fake']):
             candidate,report,_=repair_quiz(source,Mock(),dictionary=Mock(lookup=Mock(side_effect=words)),
                 proposer=Mock(return_value=proposed),reviewer=reviewer)
@@ -111,7 +111,7 @@ class RepairEngineTests(unittest.TestCase):
         self.assertIsNone(candidate)
 
     def test_reverse_ai_rejection_keeps_proposal_unsaved(self):
-        candidate,_,errors=self.call(reviewer=lambda q,p:{'available':True,'selected':'말',
+        candidate,_,errors=self.call(reviewer=lambda q,p:{'topic_fit':True,'available':True,'selected':'말',
             'back_translation':'Ngựa','ambiguous':False,'conflicting_choices':[]})
         self.assertIsNone(candidate);self.assertTrue(errors)
 

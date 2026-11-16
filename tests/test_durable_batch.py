@@ -2,6 +2,7 @@
 real FFmpeg, HTTP and browser checks remain separate from 100-slot orchestration.
 """
 from dataclasses import replace
+from qa_fixtures import grant_qa,report_for
 from pathlib import Path
 import json
 import shutil
@@ -123,7 +124,7 @@ class DurableBatchTests(unittest.TestCase):
             def processor(task,progress):
                 with service.production_scope(task),patch('studio.service.fallback',side_effect=factory):
                     ids=service.generate(task['topic'],task['level'],1)['accepted']
-                    service.store.approve(ids)
+                    service.store.approve(ids);grant_qa(service.store,ids)
                     service.render_approved(ids,with_voice=False,progress=progress)
                 return {}
             result,_,_=run(service,jid,processor=processor)

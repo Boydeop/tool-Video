@@ -82,7 +82,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 <body>
 <div class="app">
 <aside class="sidebar">
- <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.5.1</small></div>
+ <div class="brand"><div class="brandmark">🇰🇷</div><strong>TIẾNG HÀN SO EASY</strong><small>VIDEO STUDIO · v1.6.0</small></div>
  <nav class="nav" aria-label="Điều hướng">
   <button data-nav="autopilot" class="active"><span class="num">1</span> Sản xuất</button>
   <button data-nav="questions"><span class="num">2</span> Kho video</button>
@@ -93,7 +93,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
  <div class="sidehelp"><b>Gợi ý bắt đầu</b><p>Thiết lập API một lần, chọn 1–100 video rồi bắt đầu. Tác vụ lỗi tự tạo lại; mở Kho video để xem kết quả. Không cần xử lý câu thừa.</p></div>
 </aside>
 <main class="content">
- <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.5.1</span></header>
+ <header class="top"><div><div class="overline">Tạo nội dung tiếng Hàn tự động</div><h1>Học tiếng Hàn, làm video thật dễ.</h1><p class="subtitle">Nhiều chủ đề → kiểm tra nội dung → MP4 Shorts có giọng đọc → đăng đa nền tảng.</p></div><span class="version">Bản v1.6.0</span></header>
  <div class="metrics">
   <div class="metric"><span class="name">Bản nháp đang dùng</span><strong id="statQuestions">0</strong></div>
   <div class="metric"><span class="name">Bản nháp sẵn sàng</span><strong id="statApproved">0</strong></div>
@@ -140,8 +140,8 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
       <div class="field compact" style="max-width:390px">
         <label for="autoQaMode">Tự sửa câu lỗi và kiểm chứng lại</label>
         <select id="autoQaMode">
-          <option value="strict" selected>🔒 KRDict + AI hỏi ngược (ưu tiên chính xác)</option>
-          <option value="assisted">⚖ AI hỏi ngược nếu từ điển không có cụm từ</option>
+          <option value="strict" selected>🔒 Bắt buộc cả 4 nguyên mục từ KRDict</option>
+
         </select>
       </div>
       <div class="note" style="align-self:center">Tự tạo và kiểm tra nội dung. Câu không đạt được bỏ để tạo lại; câu thử không xuất hiện trong Kho video hay bản nháp thủ công.</div>
@@ -202,11 +202,11 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
     <select id="questionFilter" aria-label="Lọc câu hỏi"><option value="ready" selected>Sẵn sàng làm video</option><option value="draft">Bản nháp cần xử lý</option><option value="rendered">Đã xuất video</option><option value="rejected">Đã từ chối</option><option value="all">Tất cả bản nháp</option><option value="trash">Thùng rác</option></select>
     <select id="batchFilter" aria-label="Lọc lô"><option value="all">Tất cả lô nội dung</option></select>
     <select id="selectApproved" aria-label="Chọn bản nháp"><option value="">Chọn câu…</option><option value="visible">Chọn đang hiển thị</option><option value="ready">Chọn câu sẵn sàng</option><option value="clear">Bỏ chọn</option></select>
-    <button class="btn small" id="approve" disabled>✓ Duyệt tay câu đã chọn</button>
+    <button class="btn small" id="approve" disabled>✓ Duyệt câu đã kiểm chứng</button>
     <button class="btn small" id="makeSelectedVideo" disabled>🎬 Làm video từ câu đã chọn</button>
    </div>
    <div class="actions" style="margin-bottom:12px">
-      <button class="btn small" id="repairSelected">Tự sửa bằng KRDict + AI</button>
+      <button class="btn small" id="repairSelected">Kiểm chứng & thay từ KRDict</button>
       <button class="btn outline small" id="trashSelected">Xóa bản nháp đã chọn</button>
       <button class="btn secondary small" id="restoreSelected">Khôi phục</button>
       <button class="btn outline small" id="emptyTrash">Xóa vĩnh viễn thùng rác</button>
@@ -590,11 +590,18 @@ $("generate").addEventListener("click",()=>createQuestions(false));
 $("daily").addEventListener("click",()=>createQuestions(true));
 function selectedApproved(){
  return state.questions.filter(q=>state.selection.has(q.id)&&
-           (q.status==="approved"||q.status==="auto_approved")).map(q=>q.id)
+           (q.status==="approved"||q.status==="auto_approved")&&hasDictionaryEvidence(q)).map(q=>q.id)
+}
+function hasDictionaryEvidence(q){
+ const r=q.qa_report||{},d=r.dictionary||{},judge=r.reviewer||{};
+ return r.version>=5&&r.mode==="strict"&&r.outcome==="verified"&&judge.available===true&&
+   judge.selected===q.correct&&judge.topic_fit===true&&judge.ambiguous===false&&
+   [q.correct,q.wrong1,q.wrong2,q.wrong3].every(word=>d[word]?.exact===true&&
+     d[word].translations?.length&&d[word].headword_codes?.some(Boolean));
 }
 function selectedForApproval(){
  return state.questions.filter(q=>state.selection.has(q.id)&&
-          ["draft","rejected","auto_approved"].includes(q.status)).map(q=>q.id);
+          ["draft","rejected","auto_approved"].includes(q.status)&&hasDictionaryEvidence(q)).map(q=>q.id);
 }
 function updateSelection(){
  $("autoStart").disabled=state.busy||state.activeRender;
@@ -672,6 +679,16 @@ function renderQuestions(){
      ({"dictionary+blind_ai":"KRDict + AI hỏi ngược",
        "dictionary_components+blind_ai":"Thành phần KRDict + AI kiểm tra cụm",
        "blind_ai_only":"AI hỏi ngược","needs_review":"Cần kiểm tra thêm"}[q.qa_report.tier]||q.qa_report.tier)));
+   if(q.qa_report?.version>=5){
+     const evidence=make("details");evidence.append(make("summary","Xem mục từ KRDict của 4 đáp án"));
+     for(const word of [q.correct,q.wrong1,q.wrong2,q.wrong3]){
+       const item=q.qa_report.dictionary?.[word]||{};
+       evidence.append(make("small",word+": "+(item.exact&&item.headword_codes?.some(Boolean)?
+         "mã "+item.headword_codes.filter(Boolean).join(", ")+" · "+(item.translations||[]).slice(0,3).join("; "):
+         "chưa có nguyên mục từ được xác nhận")));
+     }
+     status.append(evidence);
+   }
    if(q.qa_report?.repair?.changes){
      const changes=make("details");changes.append(make("summary","Đã tự sửa · xem trước/sau"));
      for(const change of q.qa_report.repair.changes)
@@ -707,7 +724,7 @@ function renderQuestions(){
      if(!result)return;
      $("repairStatus").textContent=result.history.length?
        result.history.map(row=>new Date(row.created_at).toLocaleString("vi-VN")+": "+
-         ANSWER_FIELDS.map(key=>row.before[key]!==row.after[key]?
+         ["question",...ANSWER_FIELDS].map(key=>row.before[key]!==row.after[key]?
             row.before[key]+" → "+row.after[key]:"").filter(Boolean).join("; ")).join(" | "):
        "Câu này chưa có lần tự sửa đã lưu.";
    });
@@ -1614,8 +1631,9 @@ async function watchRepair(id){
    if(["completed","failed"].includes(report.status)){
     await loadStatus();
     const lines=(report.results||[]).map(row=>{
-     const changes=(row.changes||[]).filter(change=>ANSWER_FIELDS.includes(change.field));
-     return changes.length?changes.map(change=>change.before+" → "+change.after).join("; "):
+     const changes=(row.changes||[]).filter(change=>ANSWER_FIELDS.includes(change.field)||
+       (row.replaced&&["question","clue"].includes(change.field)));
+     return changes.length?(row.replaced?"Thay câu cùng chủ đề: ":"")+changes.map(change=>change.before+" → "+change.after).join("; "):
        (row.repair_issues||row.issues||[]).join("; ");
     }).filter(Boolean);
     $("repairStatus").textContent=(report.phase||report.error)+". "+lines.join(" | ")+

@@ -25,7 +25,7 @@ def phrase_quiz():
         wrong2_romanization='keu',wrong2_meaning='Kẹo Giáng sinh',wrong3_romanization='keu',wrong3_meaning='Đồ trang trí Giáng sinh')
 
 def reviewer(q,p):
-    return {'available':True,'selected':q.correct,'back_translation':q.short_clue,
+    return {'topic_fit':True,'available':True,'selected':q.correct,'back_translation':q.short_clue,
             'ambiguous':False,'conflicting_choices':[]}
 
 class ClassifierTests(unittest.TestCase):
@@ -53,13 +53,13 @@ class PhraseEvidenceTests(unittest.TestCase):
         self.assertEqual(sense_overlap('Tất Giáng sinh',data['entries'][0]['glosses']),1)
         self.assertEqual(client.lookup.call_count,3)
 
-    def test_full_phrase_requires_blind_review_and_is_labelled_as_component_evidence(self):
+    def test_component_evidence_does_not_satisfy_exact_headword_policy(self):
         judge=Mock(side_effect=reviewer)
         result=verify_quiz(phrase_quiz(),Mock(),dictionary=self.client(),reviewer=judge)
-        self.assertEqual(result['outcome'],'verified',result['issues'])
-        self.assertEqual(result['tier'],'dictionary_components+blind_ai')
+        self.assertEqual(result['outcome'],'needs_review',result['issues'])
+        self.assertEqual(result['tier'],'needs_review')
         self.assertFalse(result['dictionary']['크리스마스 양말']['exact'])
-        judge.assert_called_once()
+        judge.assert_not_called()
 
     def test_missing_component_remains_unverified(self):
         q=replace(phrase_quiz(),correct='크리스마스 가짜단어')
@@ -68,10 +68,10 @@ class PhraseEvidenceTests(unittest.TestCase):
         self.assertEqual(result['outcome'],'needs_review');judge.assert_not_called()
 
     def test_all_components_cannot_override_ai_rejection(self):
-        judge=Mock(return_value={'available':True,'selected':'크리스마스 모자',
+        judge=Mock(return_value={'topic_fit':True,'available':True,'selected':'크리스마스 모자',
                                  'back_translation':'Mũ Giáng sinh','ambiguous':False})
         result=verify_quiz(phrase_quiz(),Mock(),dictionary=self.client(),reviewer=judge)
-        self.assertEqual(result['outcome'],'needs_review');judge.assert_called_once()
+        self.assertEqual(result['outcome'],'needs_review');judge.assert_not_called()
 
     def test_definition_only_is_not_component_evidence(self):
         def definitions(word,**kwargs):
@@ -96,17 +96,16 @@ class PhraseEvidenceTests(unittest.TestCase):
         q=replace(phrase_quiz(),wrong3='크리스마스 스타킹')
         result=verify_quiz(q,Mock(),dictionary=Mock(lookup=Mock(side_effect=synonym)),reviewer=Mock())
         self.assertEqual(result['outcome'],'needs_review')
-        self.assertTrue(any('Đáp án nhiễu' in issue for issue in result['issues']))
+        self.assertTrue(any('bằng chứng KRDict' in issue for issue in result['issues']))
 
-    def test_repair_accepts_grounded_phrase_and_preserves_natural_vietnamese_order(self):
+    def test_repair_rejects_component_only_phrase_without_whole_headword(self):
         source=replace(phrase_quiz(),correct='루돌프',romanization='rudolpeu')
         client=self.client()
         with patch('studio.repair.get_keys',return_value=['fake']):
             candidate,report,_=repair_quiz(source,Mock(),dictionary=client,
                 proposer=Mock(return_value=phrase_quiz()),reviewer=reviewer)
-        self.assertIsNotNone(candidate)
-        self.assertEqual(candidate.meaning,'Tất Giáng sinh')
-        self.assertEqual(report['tier'],'dictionary_components+blind_ai')
+        self.assertIsNone(candidate)
+        self.assertIsNone(report)
         self.assertTrue(any(call.kwargs.get('fresh') for call in client.lookup.call_args_list))
 
     def test_phrase_search_is_bounded_and_does_not_guess_syllable_splits(self):

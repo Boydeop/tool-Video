@@ -653,3 +653,15 @@ KRDict + AI hỏi ngược. Ưu tiên sửa nghĩa hiển thị thay vì đổi 
 không viết lại đáp án khi reviewer chỉ bị lỗi dịch vụ. Sửa nút sản xuất bị khóa
 sau tác vụ tự sửa. Gemini 503 vẫn cần dịch vụ phục hồi hoặc provider dự phòng
 đã cấu hình. Xem [ghi chú hotfix](HOTFIX_V151.md).
+
+## v1.6.0 · Bắt buộc nguyên mục từ KRDict và thử key khi Gemini 503
+
+Mọi chủ đề dùng cùng quy tắc: cả bốn đáp án phải có nguyên mục từ, mã mục từ
+và bản dịch Việt từ KRDict; không duyệt chỉ bằng ghép thành phần hoặc AI-only.
+Không có từ đúng nghĩa thì tìm câu thay thế trong cùng chủ đề, kiểm chứng lại
+và lưu lịch sử. Duyệt tay không bỏ qua yêu cầu trước khi xuất video.
+
+Gemini 503 thử lần lượt các key còn lại trong pool cho tạo câu/QA/sửa/SEO,
+hiển thị số key đang thử. Giữ giới hạn thời gian, Retry-After và nghỉ toàn
+provider khi 429. Câu cũ thiếu QA v5 cần kiểm chứng lại; video đã xuất giữ nguyên.
+Xem [quy tắc và kiểm chứng v1.6.0](QA_V160.md).

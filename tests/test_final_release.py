@@ -3,6 +3,7 @@
 All external providers are mocked. Never use live credentials in CI.
 """
 from datetime import datetime,timezone,timedelta
+from qa_fixtures import grant_qa,report_for
 from pathlib import Path
 import json
 import tempfile
@@ -191,7 +192,7 @@ class ShortProfileTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             service=Service(td)
             ident=service.store.insert_question(quiz(0))
-            service.store.approve([ident])
+            service.store.approve([ident]);grant_qa(service.store,[ident])
             def render(_items,path,**kwargs):
                 Path(path).parent.mkdir(parents=True,exist_ok=True)
                 Path(path).write_bytes(b"test")

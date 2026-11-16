@@ -48,8 +48,15 @@ def _tokens(value):
     return {v for v in words if v not in skips}
 
 
+def lookup_headword(client,word,*,fresh=False):
+    """Production QA accepts the whole headword only, never composed glosses."""
+    data=client.lookup(word,fresh=True) if fresh else client.lookup(word)
+    exact=data.get('exact') is True
+    return {**data,'exact':exact,'supported':exact,'compound':False,'components':[]}
+
+
 def lookup_evidence(client,word,*,fresh=False):
-    """Bounded phrase analysis; composed glosses still need blind AI review."""
+    """Legacy diagnostic analysis only; production QA uses lookup_headword."""
     cache={}
     def lookup(value,**_):
         check_budget()

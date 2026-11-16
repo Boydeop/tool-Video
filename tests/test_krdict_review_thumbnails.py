@@ -40,11 +40,11 @@ class FakeDictionary:
         definitions={"물":["Nước"],"맥주":["Bia"],"차":["Trà"],"우유":["Sữa"]}
         vals=definitions[word]
         if self.ambiguous and word=="맥주":vals=["Bia","Nước"]
-        return {"exact":True,"entries":[{"word":word,"meanings":vals,
+        return {"exact":True,"entries":[{"word":word,"meanings":vals,"glosses":vals,
                                           "target_code":"123","pos":"명사"}]}
 
 def reviewer(q,provider):
-    return {"available":True,"provider":"groq","different_provider":True,
+    return {'topic_fit':True,"available":True,"provider":"groq","different_provider":True,
             "selected":q.correct,"back_translation":q.short_clue,
             "ambiguous":False,"conflicting_choices":[],"reason":"OK"}
 
@@ -89,8 +89,8 @@ class QAReviewTests(unittest.TestCase):
             self.assertEqual(bad["outcome"],"needs_review")
             assisted=verify_quiz(quiz(),store,mode="assisted",
                                 dictionary=FakeDictionary(missing=True),reviewer=reviewer)
-            self.assertEqual(assisted["tier"],"blind_ai_only")
-            self.assertEqual(assisted["outcome"],"verified")
+            self.assertEqual(assisted["tier"],"needs_review")
+            self.assertEqual(assisted["outcome"],"needs_review")
             ambiguous=verify_quiz(quiz(),store,dictionary=FakeDictionary(ambiguous=True),
                                   reviewer=reviewer)
             self.assertEqual(ambiguous["outcome"],"needs_review")
@@ -98,7 +98,7 @@ class QAReviewTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             store=Store(Path(td)/"test.sqlite3")
             def wrong(q,p):
-                return {"available":True,"selected":"맥주","ambiguous":False,
+                return {'topic_fit':True,"available":True,"selected":"맥주","ambiguous":False,
                         "conflicting_choices":[],"back_translation":"Bia"}
             result=verify_quiz(quiz(),store,dictionary=FakeDictionary(),reviewer=wrong)
             self.assertIn("Hỏi ngược không chọn đáp án gốc",result["issues"])

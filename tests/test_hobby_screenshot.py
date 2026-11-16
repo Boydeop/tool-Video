@@ -30,7 +30,7 @@ def photos():
         wrong3_meaning='Ca hát',wrong3_romanization='norae hagi')
 
 def reviewer(q,p):
-    return {'available':True,'selected':q.correct,'back_translation':q.short_clue,
+    return {'topic_fit':True,'available':True,'selected':q.correct,'back_translation':q.short_clue,
             'ambiguous':False,'conflicting_choices':[]}
 
 class HobbyEvidenceTests(unittest.TestCase):
@@ -41,19 +41,19 @@ class HobbyEvidenceTests(unittest.TestCase):
         self.assertEqual([p['word'] for p in result['components']],['사진','찍다'])
         self.assertEqual(sense_overlap('Chụp ảnh',result['entries'][0]['glosses']),1)
 
-    def test_photo_options_pass_only_with_full_dictionary_and_blind_review(self):
+    def test_photo_components_do_not_replace_whole_dictionary_entries(self):
         result=verify_quiz(photos(),Mock(),dictionary=self.client(),reviewer=reviewer)
-        self.assertEqual(result['outcome'],'verified',result['issues'])
-        self.assertEqual(result['tier'],'dictionary_components+blind_ai')
+        self.assertEqual(result['outcome'],'needs_review',result['issues'])
+        self.assertEqual(result['tier'],'needs_review')
         self.assertEqual(verify_quiz(photos(),Mock(),dictionary=self.client(),
             reviewer=Mock(return_value={'available':False}))['outcome'],'needs_review')
 
-    def test_music_and_movie_nominal_labels_are_supported(self):
+    def test_music_and_movie_labels_need_their_own_headwords(self):
         q=replace(photos(),question='Nghe nhạc',clue='Nghe nhạc',correct='음악감상',
             wrong1='영화감상',wrong2='독서',wrong3='운동',meaning='Thưởng thức âm nhạc',
             wrong1_meaning='Xem phim',wrong2_meaning='Đọc sách',wrong3_meaning='Thể thao')
         result=verify_quiz(q,Mock(),dictionary=self.client(),reviewer=reviewer)
-        self.assertEqual(result['outcome'],'verified',result['issues'])
+        self.assertEqual(result['outcome'],'needs_review',result['issues'])
 
     def test_screenshot_bad_proposals_remain_rejected(self):
         for clue,gloss in [('Du lịch','việc đi dạo, việc đi tản bộ'),

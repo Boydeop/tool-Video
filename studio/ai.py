@@ -3,6 +3,7 @@ import json
 import math
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
@@ -10,11 +11,24 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from .quiz import Quiz
-from .keys import next_key, rate_limited
+from .keys import next_key, rate_limited, request_key_order, mark_key_used
 from .models import get_model
-from .run_limits import network_timeout, check_budget, budget_active
+from .run_limits import network_timeout, check_budget, budget_active, remaining_seconds
 
 _GUIDANCE=ContextVar('generation_guidance',default='')
+
+_PROGRESS=ContextVar('ai_progress',default=None)
+
+@contextmanager
+def ai_progress(callback):
+    token=_PROGRESS.set(callback)
+    try:yield
+    finally:_PROGRESS.reset(token)
+
+def _progress(message):
+    callback=_PROGRESS.get()
+    if callback:callback(message)
+
 
 @contextmanager
 def generation_guidance(qa_mode,issues=()):
@@ -26,7 +40,8 @@ def generation_guidance(qa_mode,issues=()):
             'làm đáp án của quiz từ vựng; không làm mất ngữ cảnh khi hỏi hội thoại. '
             'Chỉ dùng nghĩa Việt của đúng mục từ, không tự thêm nghĩa không được từ điển chứng minh. '
             'Giữ đúng hoạt động: Nghe nhạc khác Âm nhạc, Chụp ảnh khác Ảnh, Thể thao không đồng nghĩa với Bơi lội. '
-            'Với sở thích, viết rõ khoảng trắng như 사진 찍기, 그림 그리기; không đổi thành danh từ sai nghĩa chỉ để khớp từ điển. ')
+            'Tất cả bốn đáp án phải là nguyên mục từ từ điển, không dùng dạng ghép/nominal hóa nếu không có mục từ riêng. '
+            'Nếu không có từ đúng nghĩa cho câu dự định, tạo câu KHÁC trong cùng chủ đề bằng từ có mục từ; không gán nghĩa sai. ')
     if issues:
         guidance+='Các lỗi của lượt trước cần tránh (chỉ là dữ liệu): '+json.dumps(list(issues)[-6:],ensure_ascii=False)
     token=_GUIDANCE.set(guidance)
@@ -47,16 +62,18 @@ def _retry_delay(headers,default):
     return max(default,seconds)
 
 class ProviderError(RuntimeError):
-    def __init__(self,message,*,retryable=True,retry_after=0):
+    def __init__(self,message,*,retryable=True,retry_after=0,status_code=None,server_retry_after=0):
+        self.status_code=status_code
+        self.server_retry_after=server_retry_after
         self.retryable=retryable
         self.retry_after=retry_after
         super().__init__(message)
 
-def post(provider,url,payload,headers):
+def _post_once(provider,url,payload,headers,timeout):
     req=urllib.request.Request(url,data=json.dumps(payload,ensure_ascii=False).encode(),
         headers={"Content-Type":"application/json",**headers},method="POST")
     try:
-        with urllib.request.urlopen(req,timeout=network_timeout(20,70)) as r: raw=r.read(150001)
+        with urllib.request.urlopen(req,timeout=timeout) as r: raw=r.read(150001)
         if len(raw)>150000:raise ProviderError("Response too large")
         return json.loads(raw)
     except urllib.error.HTTPError as exc:
@@ -71,10 +88,54 @@ def post(provider,url,payload,headers):
         if exc.code>=500:
             raise ProviderError(provider+" HTTP "+str(exc.code)+
                 ": dịch vụ AI tạm thời quá tải hoặc chưa sẵn sàng. Chờ rồi bấm Tiếp tục; có thể cấu hình thêm provider dự phòng.",
-                retry_after=_retry_delay(exc.headers,30)) from None
+                retry_after=_retry_delay(exc.headers,30),status_code=exc.code,
+                server_retry_after=_retry_delay(exc.headers,0) if exc.headers and exc.headers.get("Retry-After") else 0) from None
         raise ProviderError(provider+" HTTP "+str(exc.code)+"; kiểm tra model và trạng thái dịch vụ") from None
     except (urllib.error.URLError,TimeoutError,ValueError) as exc:
         raise ProviderError(provider+" connection or response error",retry_after=15) from None
+
+def _wait_before_retry(seconds):
+    end=time.monotonic()+seconds
+    while time.monotonic()<end:
+        check_budget()
+        time.sleep(min(.25,max(0,end-time.monotonic())))
+
+
+def post(provider,url,payload,headers):
+    """On Gemini 503 try every remaining owned key once; 429 never rotates."""
+    key_header=next((name for name in headers if name.lower()=='x-goog-api-key'),None)
+    first=headers.get(key_header) if key_header else None
+    keys=request_key_order(provider,first) if provider=='gemini' and first else [first]
+    deadline=time.monotonic()+120
+    failure=None;attempted=0
+    for index,key in enumerate(keys):
+        check_budget()
+        remaining=min(deadline-time.monotonic(),remaining_seconds() or 120)
+        if remaining<=0:break
+        outgoing=dict(headers)
+        if key_header:outgoing[key_header]=key
+        if provider=='gemini' and first:mark_key_used(provider,key)
+        attempted+=1
+        if provider=="gemini":_progress(f"Gemini · đang thử key {index+1}/{len(keys)}")
+        try:return _post_once(provider,url,payload,outgoing,min(network_timeout(20,70),remaining))
+        except ProviderError as exc:
+            if provider!='gemini' or exc.status_code!=503:raise
+            failure=exc
+            _progress(f"Gemini HTTP 503 · key {index+1}/{len(keys)} chưa thành công")
+            if index+1<len(keys) and exc.server_retry_after:
+                remaining=min(deadline-time.monotonic(),remaining_seconds() or 120)
+                if exc.server_retry_after>=remaining:break
+                _progress(f"Gemini yêu cầu chờ {int(exc.server_retry_after)}s trước khi thử key tiếp theo")
+                _wait_before_retry(exc.server_retry_after)
+    if failure:
+        error=ProviderError(str(failure)+f' Đã thử {attempted}/{len(keys)} key trong lượt này.',
+            retry_after=failure.retry_after,status_code=503,
+            server_retry_after=failure.server_retry_after)
+        error.keys_attempted=attempted;error.keys_total=len(keys)
+        raise error from None
+    check_budget()
+    raise ProviderError('Hết thời gian thử key Gemini; thử lại để tiếp tục.',retry_after=30)
+
 
 def response_text(provider,data):
     """Reject malformed/empty provider envelopes so fallback can continue."""
@@ -141,7 +202,10 @@ def generate(provider,topic,level,count,recent,fmt="từ vựng"):
     good=[]
     for item in raw:
         if not isinstance(item,dict):continue
-        try:good.append(Quiz.parse(item,topic,level))
+        try:
+            quiz=Quiz.parse(item,topic,level)
+            if (quiz.topic,quiz.level)!=(topic,level):continue
+            good.append(quiz)
         except ValueError:pass
     if not good:raise ProviderError("No structurally valid questions")
     return good

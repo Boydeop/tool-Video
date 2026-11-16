@@ -42,7 +42,7 @@ class Plan:
                  engine=str(raw.get("voice_engine","auto")),
                  width=width,seo=raw.get("auto_seo") is True,
                  event_mode=str(raw.get("event_mode","random")),
-                 qa_mode=str(raw.get("qa_mode","strict")),
+                 qa_mode="strict" if raw.get("qa_mode","strict") in ("strict","assisted") else str(raw.get("qa_mode")),
                  max_attempts=max_attempts)
         if not 1<=plan.videos<=100 or not 1<=plan.per_video<=6:
             raise ValueError("Maximum 100 videos per run, 1-6 questions/video")
@@ -89,7 +89,7 @@ def run_pipeline(service,plan:Plan,update,on_result=None,cancel=None,topics=None
     to finish its current MP4 before the worker stops.
     """
     from .events import choose_production_topics
-    from .ai import generation_guidance
+    from .ai import generation_guidance,ai_progress
     from .run_limits import (topic_budget,check_budget,check_cancel,
                              BudgetExpired,RunCancelled)
     if topics is not None:
@@ -120,7 +120,7 @@ def run_pipeline(service,plan:Plan,update,on_result=None,cancel=None,topics=None
             # The budget bounds network generation + review, not frame render.
             # Previously 100-second sequential AI calls could accumulate to
             # more than 30 minutes without a stage update.
-            with topic_budget(210,cancel):
+            with topic_budget(210,cancel),ai_progress(lambda message:stage(message,.1)):
                 try:
                     for attempt in range(3):
                         check_budget()

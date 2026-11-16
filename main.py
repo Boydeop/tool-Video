@@ -37,7 +37,7 @@ def main():
     if args.command=="daily": result=service.daily(count=args.count)
     elif args.command=="generate": result=service.generate(args.topic,args.level,args.count)
     elif args.command=="approve":
-        service.store.approve(args.ids);result={"approved":args.ids}
+        service.approve_questions(args.ids);result={"approved":args.ids}
     elif args.command=="render":
         result={"video":service.render_approved(args.ids,args.theme,width=args.width,with_voice=args.voice)}
     elif args.command=="schedule":
